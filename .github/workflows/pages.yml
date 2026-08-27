@@ -1,0 +1,46 @@
+# Pages is configured with "GitHub Actions" as its source, which publishes nothing on its
+# own: it serves only what a workflow uploads. Without this file every URL is a 404, however
+# many commits land on main.
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Let a running deploy finish rather than cancelling it half way.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      # index.html is entirely self-contained: every slide image and every script is inlined,
+      # so the site is that one file. Publishing only it keeps the upload at ~22 MB instead of
+      # the ~330 MB the whole repository would cost on every push, and keeps the lecturers'
+      # original decks off the public website. To publish the repository as-is instead,
+      # replace the two cp lines with: cp -r . _site
+      - name: Assemble the site
+        run: |
+          mkdir -p _site
+          cp index.html _site/
+          cp .nojekyll _site/
+
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+      - id: deployment
+        uses: actions/deploy-pages@v4

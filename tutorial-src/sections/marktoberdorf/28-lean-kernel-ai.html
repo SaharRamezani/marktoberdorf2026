@@ -1,0 +1,266 @@
+<section class="lecture" id="sec-mk-dm4" data-num="28" data-day="mk-lean" data-title="The Kernel, Proof Automation and AI" data-lecturer="Leonardo de Moura">
+  <header class="lec-head">
+    <div class="lec-num">28</div>
+    <div>
+      <h2 id="mkd2-top">The Kernel, Proof Automation and AI</h2>
+      <p class="lec-meta">Lecture by Leonardo de Moura, the designer of Lean, from his deck <em>Proof Automation and AI</em>, the third of his four. It follows the deck, authoritative for the technical content, together with the recording, which supplies what he said around the slides. The audio is damaged in places, so nothing is quoted from it directly.</p>
+    </div>
+  </header>
+
+  <p class="lead">The deck opens on the obvious objection: if a model can write proofs, why keep building tactics? Three tactics follow, <code>simp</code>, <code>grind</code> and <code>bv_decide</code>, then what AI is doing with Lean today, and finally the kernel and what the green check mark in the editor means <button type="button" class="slide-ref" data-slide="demoura4:2" title="Open this slide">page 2</button>.</p>
+
+  <h3 id="mkd2-tactics">Why proof automation did not become obsolete</h3>
+
+  <p>The answer is short and it sets up everything else <button type="button" class="slide-ref" data-slide="demoura4:3" title="Open this slide">page 3</button>. Tactics are the moves of the game, for a model as much as for a person. Better tactics give shorter proofs, shorter proofs mean smaller search trees, so a model gets further on the same budget, and compact proofs make better training data. Automation did not become obsolete, it became infrastructure <button type="button" class="slide-ref" data-slide="demoura4:30" title="Open this slide">page 30</button>.</p>
+
+  <h3 id="mkd2-simp">Rewriting against a database, and where it stops</h3>
+
+  <p><code>simp</code> rewrites the goal with every lemma carrying the <code>@[simp]</code> attribute, left to right, until no rule applies <button type="button" class="slide-ref" data-slide="demoura4:4" title="Open this slide">page 4</button>. Two design rules make a good set: each lemma's left side should be more complex than its right, so rewriting makes progress towards a normal form, and the set must be confluent enough that the firing order does not change the answer <button type="button" class="slide-ref" data-slide="demoura4:5" title="Open this slide">pages 5-7</button>. The limit arrives quickly. No rewrite rule solves a linear system, and equalities have to travel between hypotheses, through function applications and into case splits rather than only downwards through one goal <button type="button" class="slide-ref" data-slide="demoura4:8" title="Open this slide">page 8</button>. That combination, rewriting plus theories plus propagation, is what <code>grind</code> is.</p>
+
+  <h3 id="mkd2-grind">The whiteboard</h3>
+
+  <p><code>grind</code> shipped in Lean v4.22 and is the work of Kim Morrison and de Moura. The image used for it is a virtual whiteboard, borrowed from modern SMT solvers: facts are written on the board, equivalent terms are merged, and several engines read from it and write back <button type="button" class="slide-ref" data-slide="demoura4:9" title="Open this slide">pages 9-10</button>. The board is an E-graph, with equivalence classes kept by union-find, so <code>a = b</code> merges the class of <code>a</code> with the class of <code>b</code> and congruence does the rest: equal arguments give equal applications, so <code>f a</code> and <code>f b</code> merge too. Nothing is rewritten, terms are only related, which is the difference between this and <code>simp</code> <button type="button" class="slide-ref" data-slide="demoura4:11" title="Open this slide">page 11</button>.</p>
+
+  <p>Four engines cooperate there, congruence closure, E-matching, constraint propagation and guided case analysis, with satellite theory solvers alongside. <code>grind</code> is native to dependent type theory, so nothing is translated into first-order logic and reconstructed on the way back, and it produces ordinary Lean proof terms, so the kernel checks its output like anyone else's <button type="button" class="slide-ref" data-slide="demoura4:9" title="Open this slide">page 9</button>.</p>
+
+  <figure class="fig">
+    <svg viewBox="0 0 700 310" role="img" aria-label="Diagram of the grind pipeline. A Lean goal passes through preprocessing and internalization into a central E-graph, described as the shared board running congruence closure, E-matching, constraint propagation and guided case analysis. Five satellite theory solvers below it, cutsat, rings, linarith, orders and ac, are joined to the board by double-headed arrows.">
+      <defs>
+        <marker id="mkd2-fa" markerWidth="9" markerHeight="8" refX="8" refY="4" orient="auto" markerUnits="userSpaceOnUse">
+          <path d="M0,0 L9,4 L0,8 z" fill="var(--muted)"></path>
+        </marker>
+        <marker id="mkd2-fb" markerWidth="9" markerHeight="8" refX="1" refY="4" orient="auto" markerUnits="userSpaceOnUse">
+          <path d="M9,0 L0,4 L9,8 z" fill="var(--muted)"></path>
+        </marker>
+      </defs>
+
+      <rect x="40" y="26" width="140" height="40" rx="9" fill="var(--surface)" stroke="var(--hairline)"></rect>
+      <text x="110" y="51" text-anchor="middle" font-size="12.5" fill="var(--ink-2)">Lean goal</text>
+      <line x1="182" y1="46" x2="242" y2="46" stroke="var(--muted)" stroke-width="1.6" marker-end="url(#mkd2-fa)"></line>
+
+      <rect x="246" y="26" width="160" height="40" rx="9" fill="var(--surface)" stroke="var(--hairline)"></rect>
+      <text x="326" y="51" text-anchor="middle" font-size="12.5" fill="var(--ink-2)">preprocessing</text>
+      <line x1="408" y1="46" x2="468" y2="46" stroke="var(--muted)" stroke-width="1.6" marker-end="url(#mkd2-fa)"></line>
+
+      <rect x="472" y="26" width="170" height="40" rx="9" fill="var(--surface)" stroke="var(--hairline)"></rect>
+      <text x="557" y="51" text-anchor="middle" font-size="12.5" fill="var(--ink-2)">internalization</text>
+
+      <path d="M557,68 L557,98 L350,98 L350,124" fill="none" stroke="var(--muted)" stroke-width="1.6" marker-end="url(#mkd2-fa)"></path>
+
+      <rect x="170" y="128" width="360" height="76" rx="12" fill="var(--accent)" fill-opacity="0.07" stroke="var(--hairline)"></rect>
+      <text x="350" y="155" text-anchor="middle" font-size="13" fill="var(--accent)">E-graph: the shared board</text>
+      <text x="350" y="176" text-anchor="middle" font-size="11.5" fill="var(--ink-2)">congruence closure · E-matching</text>
+      <text x="350" y="193" text-anchor="middle" font-size="11.5" fill="var(--ink-2)">constraint propagation · guided case analysis</text>
+
+      <line x1="200" y1="206" x2="90" y2="242" stroke="var(--muted)" stroke-width="1.4" marker-start="url(#mkd2-fb)" marker-end="url(#mkd2-fa)"></line>
+      <line x1="245" y1="206" x2="220" y2="242" stroke="var(--muted)" stroke-width="1.4" marker-start="url(#mkd2-fb)" marker-end="url(#mkd2-fa)"></line>
+      <line x1="350" y1="206" x2="350" y2="242" stroke="var(--muted)" stroke-width="1.4" marker-start="url(#mkd2-fb)" marker-end="url(#mkd2-fa)"></line>
+      <line x1="455" y1="206" x2="480" y2="242" stroke="var(--muted)" stroke-width="1.4" marker-start="url(#mkd2-fb)" marker-end="url(#mkd2-fa)"></line>
+      <line x1="500" y1="206" x2="610" y2="242" stroke="var(--muted)" stroke-width="1.4" marker-start="url(#mkd2-fb)" marker-end="url(#mkd2-fa)"></line>
+
+      <rect x="31" y="244" width="118" height="40" rx="9" fill="var(--surface)" stroke="var(--hairline)"></rect>
+      <text x="90" y="269" text-anchor="middle" font-size="12" fill="var(--ink-2)">cutsat</text>
+      <rect x="161" y="244" width="118" height="40" rx="9" fill="var(--surface)" stroke="var(--hairline)"></rect>
+      <text x="220" y="269" text-anchor="middle" font-size="12" fill="var(--ink-2)">rings</text>
+      <rect x="291" y="244" width="118" height="40" rx="9" fill="var(--surface)" stroke="var(--hairline)"></rect>
+      <text x="350" y="269" text-anchor="middle" font-size="12" fill="var(--ink-2)">linarith</text>
+      <rect x="421" y="244" width="118" height="40" rx="9" fill="var(--surface)" stroke="var(--hairline)"></rect>
+      <text x="480" y="269" text-anchor="middle" font-size="12" fill="var(--ink-2)">orders</text>
+      <rect x="551" y="244" width="118" height="40" rx="9" fill="var(--surface)" stroke="var(--hairline)"></rect>
+      <text x="610" y="269" text-anchor="middle" font-size="12" fill="var(--ink-2)">ac</text>
+    </svg>
+    <figcaption>The pipeline of <button type="button" class="slide-ref" data-slide="demoura4:9" title="Open this slide">pages 9-10</button>. The satellite solvers never talk to each other: they read facts from the board and write conclusions back.</figcaption>
+  </figure>
+
+  <h3 id="mkd2-annotations">How the annotations steer it</h3>
+
+  <p>E-matching is where library knowledge enters, and the attributes are how an author supplies it. A theorem annotated <code>@[grind =]</code> becomes an instantiation rule whose pattern is its left-hand side, matched modulo the equalities already on the board rather than against the syntax of the goal <button type="button" class="slide-ref" data-slide="demoura4:12" title="Open this slide">page 12</button>. The small example shows why that word carries the idea. With <code>f (g x) = x</code> annotated, and hypotheses <code>f a = b</code> and <code>a = g c</code>, the term <code>f (g c)</code> appears nowhere. The board knows <code>a = g c</code>, so <code>f a</code> matches <code>f (g ?x)</code>, the instance <code>f (g c) = c</code> lands on the board, and congruence chains <code>b = f a = f (g c) = c</code>. A lemma fires when the equalities match, not when the syntax does.</p>
+
+  <p>The annotations come in three directions. <code>[grind =]</code> takes the pattern from the left side of an equation. <code>[grind →]</code> marks a forward rule: the patterns come from the premises, so when matching facts appear on the board the conclusion is added to it. <code>[grind ←]</code> is the dual, taking its patterns from the conclusion. Transitivity is the canonical forward case, stated for divisibility <button type="button" class="slide-ref" data-slide="demoura4:14" title="Open this slide">page 14</button>.</p>
+
+<pre><code>def divides (a b : Nat) : Prop := ∃ k, b = a * k
+
+@[grind →] theorem divides_trans (h₁ : divides a b) (h₂ : divides b c) :
+    divides a c := by
+  obtain ⟨k₁, rfl⟩ := h₁
+  obtain ⟨k₂, rfl⟩ := h₂
+  exact ⟨k₁ * k₂, Nat.mul_assoc a k₁ k₂⟩
+
+example (h₁ : divides a b) (h₂ : divides b c) (h₃ : divides c d) :
+    divides a d := by
+  grind</code></pre>
+
+  <p>Two firings of that rule chain the three hypotheses into <code>divides a d</code>. Forward chains can grow without bound, so <code>grind</code> bounds its instantiation rounds and its diagnostics list every instance created. Making the tactic an expert in your own library costs two lines: a small state API is annotated with a lemma for reading back what was just written and a lemma for reading past an unrelated write, after which nested updates are discharged without help <button type="button" class="slide-ref" data-slide="demoura4:13" title="Open this slide">page 13</button>.</p>
+
+  <div class="quiz">
+    <script type="application/json">
+    {"type":"mc",
+     "q":"In the deck's E-matching example the annotated lemma is f (g x) = x and the goal's hypotheses are f a = b and a = g c. The term f (g c) appears nowhere in the goal. Why does the lemma still fire?",
+     "options":["Because grind rewrites the goal left to right with the lemma until the term appears","Because the pattern is matched modulo the equalities already on the board, so f a matches f (g ?x) once a = g c has merged the classes","Because grind translates the goal into first-order logic, where the syntactic difference disappears","Because a forward rule adds the conclusion of every annotated lemma to the board regardless of the goal"],
+     "answer":1,
+     "explain":"E-matching matches patterns against the E-graph, not against the text of the goal. The board already knows a = g c, so the class of a contains g c, f a matches f (g ?x), the instance f (g c) = c is added, and congruence chains b = f a = f (g c) = c. Note also what does not happen: nothing in the goal is rewritten. Terms are only related, which is why the order in which facts arrive does not matter here the way it does for a rewrite set."}
+    </script>
+  </div>
+
+  <h3 id="mkd2-theories">Theory solvers, and how they meet</h3>
+
+  <p>The satellite solvers engage automatically when the right type classes are present, which is the dependent-type-theory way of dispatching on a domain <button type="button" class="slide-ref" data-slide="demoura4:15" title="Open this slide">page 15</button>: <code>cutsat</code> for linear integer arithmetic over <code>Int</code>, <code>Nat</code>, <code>Int32</code>, <code>BitVec n</code> and <code>Fin n</code>, a Gröbner basis solver wherever a commutative ring or field is declared, <code>linarith</code> over ordered structures, and AC reasoning for any associative and commutative operator. <code>cutsat</code> is complete for its fragment and the workhorse for indices, sizes and bounds <button type="button" class="slide-ref" data-slide="demoura4:16" title="Open this slide">page 16</button>, while the ring solver reaches further than its name suggests: <code>BitVec 8</code> is a commutative ring of characteristic 256, so <code>(x - 16) * (x + 16) = x ^ 2</code> is proved by normalisation with no bitvector theory <button type="button" class="slide-ref" data-slide="demoura4:17" title="Open this slide">page 17</button>. One slide shows three of them meeting on a single goal <button type="button" class="slide-ref" data-slide="demoura4:18" title="Open this slide">page 18</button>: the ring solver derives <code>a^4 + b^4 = 9 - c^4</code>, congruence closure lifts that equality through an arbitrary function, and linear arithmetic closes what is left. That is the Nelson-Oppen playbook, inside dependent type theory rather than across a translation into SMT.</p>
+
+  <h3 id="mkd2-reach">What it reaches, and what it does when it fails</h3>
+
+  <p>Case analysis is handled apart, with splits on <code>match</code> and <code>if</code> expressions and on annotated disjunctions under heuristics against explosion: case analysis is where automation costs blow up, and controlling it is half the work <button type="button" class="slide-ref" data-slide="demoura4:19" title="Open this slide">page 19</button>. For reach the deck gives one number, more than five thousand <code>grind</code> calls in Mathlib <button type="button" class="slide-ref" data-slide="demoura4:20" title="Open this slide">page 20</button>, and is explicit about what the tactic is not <button type="button" class="slide-ref" data-slide="demoura4:21" title="Open this slide">page 21</button>: not designed for combinatorially explosive search, not a translation to an external SMT solver, which is claimed as an advantage because there is no encoding gap out and no reconstruction gap back, and not a nonlinear arithmetic oracle, since the ring solver normalises polynomial equalities while hard nonlinear inequalities stay hard.</p>
+
+  <p>The failure behaviour is a feature. When <code>grind</code> fails it prints its board, the facts it knew, the classes it built and the instances it tried, so the missing piece can be identified rather than guessed at. In the failing example nothing rules out an array index <code>j</code> equalling the updated index <code>i</code>, where the claim is false. The loop is fail, read, fix, succeed <button type="button" class="slide-ref" data-slide="demoura4:22" title="Open this slide">page 22</button>.</p>
+
+  <h3 id="mkd2-bv">bv_decide, and the number worth keeping</h3>
+
+  <p>Fixed-width machine arithmetic is where hand proofs are least pleasant and bugs most common, and the ring solver handles only part of it: complete answers need a decision procedure <button type="button" class="slide-ref" data-slide="demoura4:24" title="Open this slide">page 24</button>. <code>bv_decide</code> bit-blasts the goal to SAT, runs CaDiCaL, and then declines to believe the answer: it replays the solver's LRAT certificate through a checker verified in Lean, so the SAT solver is never trusted and the kernel still checks everything. Being a decision procedure it answers both ways, returning a counterexample when the claim is false <button type="button" class="slide-ref" data-slide="demoura4:25" title="Open this slide">pages 25-26</button>.</p>
+
+  <p>The scale claim is the figure worth keeping. Benchmarked against Bitwuzla on 46,191 SMT-LIB bit-vector problems, <code>bv_decide</code> solves 45,046, 97.5 per cent, with kernel checking included, against Bitwuzla's 45,817; the two agree on every problem both solved, and total CPU time is within 2.3 times Bitwuzla's <button type="button" class="slide-ref" data-slide="demoura4:28" title="Open this slide">page 28</button>. A verified pipeline competitive with an unverified state of the art solver would not have been a credible claim a few years ago.</p>
+
+  <div class="quiz">
+    <script type="application/json">
+    {"type":"mc",
+     "q":"bv_decide calls an external SAT solver. What keeps that solver out of the trusted computing base?",
+     "options":["The SAT solver is itself verified in Lean before it is called","Its LRAT certificate is replayed through a checker verified in Lean, and what reaches the kernel is an ordinary proof term","The kernel is switched off for bit-vector goals, since SAT solvers are considered reliable enough","The answer is compared against a second SAT solver and accepted when the two agree"],
+     "answer":1,
+     "explain":"The tactic bit-blasts, runs CaDiCaL, and then treats the answer as a claim rather than a result: the solver's LRAT certificate is replayed through a checker that has been verified in Lean, and the kernel checks the proof term that comes out. This is why the benchmark number is quoted with kernel checking included, 45,046 of 46,191 problems, and not as raw solving time. Comparing two independent tools is a different design, and it is the one used one level up, for whole developments rather than single goals."}
+    </script>
+  </div>
+
+  <h3 id="mkd2-ailean">What AI is already doing with Lean</h3>
+
+  <p>Every medal-level olympiad system that produces formal proofs uses Lean, and one of AlphaProof's own moves is shown to be an ordinary tactic script <button type="button" class="slide-ref" data-slide="demoura4:30" title="Open this slide">page 30</button>. The same pattern runs through an Erdős prize problem resolved with a machine-checked proof written with a chatbot's help <button type="button" class="slide-ref" data-slide="demoura4:32" title="Open this slide">page 32</button>, a leaderboard of formalisation submissions on hard problems <button type="button" class="slide-ref" data-slide="demoura4:33" title="Open this slide">pages 33-34</button>, and Tau Ceti, AI-authored Lean mathematics on a human-owned roadmap gated by open adversarial review <button type="button" class="slide-ref" data-slide="demoura4:35" title="Open this slide">pages 35-36</button>: humans own the specifications, agents iterate on the code and the proofs <button type="button" class="slide-ref" data-slide="demoura4:39" title="Open this slide">page 39</button>.</p>
+
+  <blockquote class="anecdote">
+    <p>"It's really important with these formal proof assistants that there are no backdoors or exploits you can use to somehow get your certified proof without actually proving it, because reinforcement learning is just so good at finding these backdoors."</p>
+    <footer>Terence Tao, quoted on <button type="button" class="slide-ref" data-slide="demoura4:41" title="Open this slide">page 41</button></footer>
+  </blockquote>
+
+  <p>A reinforcement learning system optimises the checker, not the mathematics, so a tool with a large trusted base becomes a liability, and the kernel architecture matters more now than before anything was searching it <button type="button" class="slide-ref" data-slide="demoura4:41" title="Open this slide">page 41</button>.</p>
+
+  <h3 id="mkd2-manual">What the check mark means</h3>
+
+  <p>The reference manual gained a chapter on levels of trust about a year before the lecture, because people were confusing them: users would say a result had been checked without being able to say which of several quite different things they meant. Against an honest mistake the check mark is a real result; against an author trying to deceive you it is close to worthless, and the manual now says so.</p>
+
+  <div class="stepper" data-title="The levels of trust, weakest first">
+    <div class="step" data-label="1: the editor"><p>The check mark in the IDE: the proof is complete, with no placeholder in the theorem you are looking at. It assumes an honest author, with nothing sent to the kernel behind its back.</p></div>
+    <div class="step" data-label="2: print the axioms"><p><code>#print axioms</code>, transitive over the dependency graph, so it catches a placeholder in something you cite and a non-standard axiom added below you.</p></div>
+    <div class="step" data-label="3: replay"><p><code>lean4checker</code> re-runs the official kernel over the compiled output rather than the editor session, out of reach of anything that happened while you were editing.</p></div>
+    <div class="step" data-label="4: export and re-check"><p>The gold standard. <code>lean4export</code> writes the development out and independent kernels re-check it: <code>nanoda</code> in Rust and <code>lean4lean</code> in Lean, beside the official C++ one.</p></div>
+    <div class="step" data-label="5: curated statements"><p>The statement is an attack surface too. Here it comes from a curated database rather than from the claimant, and Comparator, the sandboxed judge, checks the candidate against the curated form.</p></div>
+  </div>
+
+  <h3 id="mkd2-export">Why the checker must not see the front end</h3>
+
+  <p>The export rung took most of the lecture, and the phrasing that matters is that the re-checking version has no access to the front end. One checker is the official kernel itself, run standalone on an exported development, which sounds circular and is not: what is isolated is not the type theory but everything wrapped around it <button type="button" class="slide-ref" data-slide="demoura4:42" title="Open this slide">page 42</button>. A proof assistant is mostly convenience infrastructure. It processes files in parallel, recompiles incrementally, imports modules and reuses their compiled forms. All of it can have bugs, and a bug there can produce a check mark for a development a cold run would reject.</p>
+
+  <p>The second thing it removes is interference from metaprograms, which run at elaboration time and can corrupt memory or send terms to the kernel directly. A legitimate feature becomes an attack surface: there are options that switch off particular kernel checks, used when a definitional check is too slow to sit through, and metaprogramming can set them. Nothing in an export can reach them, because the export is a term and the standalone checker has no elaborator <button type="button" class="slide-ref" data-slide="demoura4:42" title="Open this slide">page 42</button>.</p>
+
+  <figure class="fig">
+    <svg viewBox="0 0 700 330" role="img" aria-label="Diagram of export and re-check. On the left a box labelled front end, not trusted, lists elaboration and tactics, metaprograms and macros, AI that submits proofs, incremental compilation, parallel processing, module import, and options that disable kernel checks. A dashed vertical line marks the trust boundary. An arrow labelled lean4export crosses it. On the right three boxes are the independent re-checks: lean4checker, the official kernel with an export parser; nanoda, an independent kernel in Rust; and lean4lean, an independent kernel in Lean. All three feed a compare node on the far right.">
+      <defs>
+        <marker id="mkd2-arw" markerWidth="9" markerHeight="8" refX="8" refY="4" orient="auto" markerUnits="userSpaceOnUse">
+          <path d="M0,0 L9,4 L0,8 z" fill="var(--muted)"></path>
+        </marker>
+      </defs>
+
+      <rect x="14" y="56" width="208" height="216" rx="12" fill="var(--surface)" stroke="var(--hairline)"></rect>
+      <text x="118" y="44" text-anchor="middle" font-size="13" fill="var(--muted)">Front end, not trusted</text>
+      <text x="34" y="88" font-size="11.5" fill="var(--ink-2)">elaboration, tactics</text>
+      <text x="34" y="112" font-size="11.5" fill="var(--ink-2)">metaprograms, macros</text>
+      <text x="34" y="136" font-size="11.5" fill="var(--ink-2)">AI that submits proofs</text>
+      <text x="34" y="160" font-size="11.5" fill="var(--ink-2)">incremental compilation</text>
+      <text x="34" y="184" font-size="11.5" fill="var(--ink-2)">parallel processing</text>
+      <text x="34" y="208" font-size="11.5" fill="var(--ink-2)">module import</text>
+      <text x="34" y="238" font-size="11.5" fill="var(--crit)">options that disable</text>
+      <text x="34" y="254" font-size="11.5" fill="var(--crit)">kernel checks</text>
+
+      <line x1="262" y1="20" x2="262" y2="308" stroke="var(--hairline)" stroke-width="1.6" stroke-dasharray="6 5"></line>
+      <text x="262" y="14" text-anchor="middle" font-size="11.5" fill="var(--muted)">trust boundary</text>
+
+      <line x1="226" y1="164" x2="296" y2="164" stroke="var(--muted)" stroke-width="1.6" marker-end="url(#mkd2-arw)"></line>
+      <text x="262" y="152" text-anchor="middle" font-size="11.5" fill="var(--accent)">lean4export</text>
+
+      <rect x="302" y="32" width="190" height="72" rx="10" fill="var(--accent)" fill-opacity="0.07" stroke="var(--hairline)"></rect>
+      <text x="397" y="62" text-anchor="middle" font-size="13" fill="var(--accent)">lean4checker</text>
+      <text x="397" y="82" text-anchor="middle" font-size="11" fill="var(--ink-2)">official kernel, export parser</text>
+
+      <rect x="302" y="128" width="190" height="72" rx="10" fill="var(--accent)" fill-opacity="0.07" stroke="var(--hairline)"></rect>
+      <text x="397" y="158" text-anchor="middle" font-size="13" fill="var(--accent)">nanoda</text>
+      <text x="397" y="178" text-anchor="middle" font-size="11" fill="var(--ink-2)">independent kernel, Rust</text>
+
+      <rect x="302" y="224" width="190" height="72" rx="10" fill="var(--accent)" fill-opacity="0.07" stroke="var(--hairline)"></rect>
+      <text x="397" y="254" text-anchor="middle" font-size="13" fill="var(--accent)">lean4lean</text>
+      <text x="397" y="274" text-anchor="middle" font-size="11" fill="var(--ink-2)">independent kernel, Lean</text>
+
+      <line x1="494" y1="68" x2="552" y2="156" stroke="var(--muted)" stroke-width="1.5" marker-end="url(#mkd2-arw)"></line>
+      <line x1="494" y1="164" x2="552" y2="164" stroke="var(--muted)" stroke-width="1.5" marker-end="url(#mkd2-arw)"></line>
+      <line x1="494" y1="260" x2="552" y2="172" stroke="var(--muted)" stroke-width="1.5" marker-end="url(#mkd2-arw)"></line>
+
+      <rect x="556" y="134" width="128" height="60" rx="10" fill="var(--surface)" stroke="var(--hairline)"></rect>
+      <text x="620" y="170" text-anchor="middle" font-size="12.5" fill="var(--accent)">compare</text>
+      <text x="620" y="216" text-anchor="middle" font-size="11.5" fill="var(--muted)">one bug is not</text>
+      <text x="620" y="232" text-anchor="middle" font-size="11.5" fill="var(--muted)">enough to pass</text>
+    </svg>
+    <figcaption>The export step is what makes the checkers independent <button type="button" class="slide-ref" data-slide="demoura4:42" title="Open this slide">page 42</button>. Nothing on the left is visible to anything on the right.</figcaption>
+  </figure>
+
+  <div class="quiz">
+    <script type="application/json">
+    {"type":"mc",
+     "q":"Exporting a development and re-checking it with a checker that cannot see the front end rules out which class of problem?",
+     "options":["Mistakes in the statement of the theorem being proved","Bugs in the incremental and parallel elaboration machinery, and metaprograms that address the kernel directly or switch its checks off","Unsoundness in the underlying type theory itself","An unusual axiom introduced transitively by one of the dependencies"],
+     "answer":1,
+     "explain":"The export removes the convenience layer and everything that can reach into it. It does not help with a wrong statement, which is what the curated-statement level is for, nor with an axiom in a dependency, which is what printing the axioms catches. It does not touch the type theory either: a second implementation of the same theory only helps against bugs in code."}
+    </script>
+  </div>
+
+  <h3 id="mkd2-bench">Comparing the checkers, and two very different failures</h3>
+
+  <p>Several independent checkers now exist, written by different people, and their results are published side by side in the project's public arena. The columns encode a judgement about what a proof checker is for.</p>
+
+  <table>
+    <thead><tr><th>What the column measures</th><th>What a failure in it looks like</th><th>How the lecture rated it</th></tr></thead>
+    <tbody>
+      <tr><td>Accepts the benchmarks that should be accepted</td><td>The checker rejects something that is in fact true</td><td>Not a disaster. It is visible and can be fixed or worked around.</td></tr>
+      <tr><td>Rejects what should be rejected</td><td>The checker accepts something that should have been refused</td><td>A disaster, in the lecturer's own word.</td></tr>
+      <tr><td>Time to check</td><td>Correct but too slow to run on real developments</td><td>A pressure, not a failure. Publishing it has pushed implementers towards better algorithms.</td></tr>
+      <tr><td>Memory used</td><td>Correct but does not fit</td><td>Same. The resource columns keep the comparison honest about cost.</td></tr>
+    </tbody>
+  </table>
+
+  <div class="callout key">
+    <p><span class="co-tag">Key idea</span> For a proof checker, soundness errors and completeness errors are not comparable failures. A checker that refuses a true development has annoyed you, and you will find out immediately, because the thing you know to be provable did not go through. A checker that accepts a development it should have refused has handed you a result that looks finished, and nobody has any reason to look at it again. The first is recoverable; the second is the failure the whole construction exists to prevent.</p>
+  </div>
+
+  <p>The benchmark set is not arbitrary: its weightiest entries come from Mathlib, because a checker exercised only on small examples has not been exercised. One column the table cannot show is the one he cared about most. What is wanted from a second checker is a decorrelated verdict rather than merely a second one, and some implementations are optimised rewrites on top of an existing checker: much faster, but sharing a code base, so a bug in the shared part appears in both.</p>
+
+  <div class="quiz">
+    <script type="application/json">
+    {"type":"mc",
+     "q":"Why did the lecture treat a checker that rejects a true development as recoverable, while a checker that accepts something it should have rejected is a disaster?",
+     "options":["Because rejections are always caused by resource limits rather than by real errors","Because a rejection announces itself and can be fixed or worked around, while a wrong acceptance produces a result that looks finished and that nobody has a reason to re-examine","Because completeness is not a property anyone expects of a proof checker","Because a rejected development can simply be re-checked by the front end instead"],
+     "answer":1,
+     "explain":"The asymmetry is about who notices. An incompleteness is discovered by the first user whose true theorem is refused. An unsoundness is discovered by nobody, because the artefact it produces is indistinguishable from a correct one. The two resource columns of the same table are pressures rather than failures, which is a third category again."}
+    </script>
+  </div>
+
+  <h3 id="mkd2-adversarial">When the attack is in the statement</h3>
+
+  <p>The last rung addresses what the others cannot touch. Suppose the proof really is checked, by three independent checkers, on an export. The claimant can still cheat by proving a different theorem from the one you think you are reading, with invisible Unicode characters in identifiers or names chosen so that a reader believes a definition says something it does not. Nothing is wrong with the proof. The statement is not the statement. Lean cannot check whether an autoformalisation was faithful, and guarantees only that the proof proves exactly the statement written down <button type="button" class="slide-ref" data-slide="demoura4:37" title="Open this slide">page 37</button>. The answer is to stop taking statements from claimants: Formal Conjectures, maintained at Google DeepMind, is a curated collection of human-verified formal statements of open problems, so the question changes to whether the proof proves the curated version.</p>
+
+  <h3 id="mkd2-models">Pointing a model at the kernel</h3>
+
+  <p>Comparator is the referee, a sandboxed judge for submitted proofs that exports the development and runs the official kernel and the independent ones over it, which is what defeats a metaprogramming exploit <button type="button" class="slide-ref" data-slide="demoura4:42" title="Open this slide">page 42</button>. The good case comes first: a challenge asks for a proof of <code>False</code>, a candidate tries to smuggle one past the official kernel with a trick exploiting a missing check, and Comparator rejects it, because once the proof is exported nanoda and lean4lean reject it too <button type="button" class="slide-ref" data-slide="demoura4:43" title="Open this slide">page 43</button>. Then the case that made the point. On 25 July a model constructed a proof of <code>False</code> that exploited a bug in the official kernel and a completely different bug in nanoda at the same time <button type="button" class="slide-ref" data-slide="demoura4:44" title="Open this slide">page 44</button>. Independent checkers are a real obstacle, and not an insurmountable one.</p>
+
+  <p>Getting useful results took a great deal of prompt engineering, most of it about what not to attack: exploits relying on unsafe language features, such as an unsafe cast that reinterprets a floating point value to obtain a proof of falsity, were out of scope because export and comparison already catch them, and so were bugs already known. The prompt is a map of the attack surface the existing defences do not cover.</p>
+
+  <div class="callout warn">
+    <p><span class="co-tag">Worth noticing</span> With a model that has not been through the usual safety training, the persona that takes over when you ask it to hunt for bugs is a hacker persona picked up in pre-training. Told that further checks would be added, it reacted as though slighted and announced it would stop explaining what it was doing. He reported drily that it had given up two days earlier.</p>
+  </div>
+
+  <h3 id="mkd2-runtimes">Verified kernels, and why several of them</h3>
+
+  <p>Finishing a verified checker, and the project he wants finished is <code>lean4lean</code>, does not settle the question: verifying the checker leaves the runtime underneath it, and a bug there can be driven to corrupt memory and carry a bogus proof forward whatever has been proved about the logic. Running several checkers gives something weaker and more useful than a proof, the claim that at least one verdict is honest, which forces an attacker to hold two unrelated pieces of machinery wrong at once. Once a verified kernel exists, a model can be asked to translate it into another language, and then another, each translation inheriting the same proved logic and a completely different runtime with its own memory layout. He judged an exploit against all of them at once extremely hard, because exploits do not transfer between runtimes even when the logic is identical. It inverts the usual worry about models writing code: the model manufactures the diversity that makes the trusted computing base hard to attack, and each kernel can be checked against the others. The rest of the programme is concrete <button type="button" class="slide-ref" data-slide="demoura4:44" title="Open this slide">page 44</button>: routine build commands that run a development past Comparator and the external kernels, harder kernel invariants, and funding for anyone willing to write a new kernel.</p>
+</section>

@@ -1,0 +1,248 @@
+<section class="lecture" id="sec-mk-bl2" data-num="22" data-day="mk-atp" data-title="Superposition and Equality Reasoning" data-lecturer="Jasmin Blanchette">
+  <header class="lec-head">
+    <div class="lec-num">22</div>
+    <div>
+      <h2 id="mkb2-top">Superposition and Equality Reasoning</h2>
+      <p class="lec-meta">Jasmin Blanchette (LMU Munich), from the deck <em>Provers and Solvers, Lecture 2: Superposition</em>, delivered across an afternoon and the following morning. The deck is the authority for everything technical here; the two recordings supply the emphasis and the naming remark.</p>
+    </div>
+  </header>
+
+  <p class="lead">The first lecture stopped at resolution. This one makes the move that every serious first-order prover has already made: from resolution to superposition, a calculus that treats equality as part of its own machinery instead of accepting it as a pile of axioms handed over with the problem. The deck develops the calculus in layers, and the layering is the lesson: an unrestricted rule for replacing equals by equals, first ground and then with variables; a small refutation worked through in full; the ordering restrictions that turn the rule into something a machine can afford to run; the redundancy criterion that licenses deletion; and the model construction that shows nothing was lost. Saturation, fairness and the given clause algorithm are taken as read from the previous section.</p>
+
+  <h3 id="mkb2-equality">Why equality is not just another predicate</h3>
+
+  <p>Nothing in resolution forbids equality. You can declare the equals sign to be an ordinary binary predicate and supply its meaning as axioms <button type="button" class="slide-ref" data-slide="blanchette2:5" title="Open this slide">page 5</button>: reflexivity, symmetry, transitivity, and one congruence axiom for every function symbol in the signature, each saying that replacing an argument by an equal argument leaves the result unchanged. The slide ends that list with an ellipsis, since the congruence axioms come one per symbol. Resolution is complete for the result, so in the narrow logical sense the problem is already solved.</p>
+
+  <p>It is solved in the least useful way available, because those axioms are unusually productive. Transitivity unifies against almost any equation in the set, and each new equation is a fresh partner for transitivity; congruence multiplies that by the size of the signature. The prover spends its budget deriving consequences of what equality means rather than of the problem it was given, and the redundancy tests work hard simply to keep pace with the noise.</p>
+
+  <p>Superposition takes the other route <button type="button" class="slide-ref" data-slide="blanchette2:6" title="Open this slide">page 6</button>. Equality is treated specially by the proof calculus itself, and reflexivity, symmetry, transitivity and congruence are not axiomatised at all. Replacing equals by equals becomes one controlled inference rather than a chain of resolution steps against the equality axioms. It is a generalisation of resolution rather than a rival to it: a superposition prover still performs resolution inferences on the literals that call for them, and gains the equality handling on top.</p>
+
+  <div class="callout key">
+    <p><span class="co-tag">Why it matters</span> This is the whole reason the field settled on superposition. In the competition results Blanchette pointed at, the winners of the first-order divisions are superposition provers, Vampire among them. SMT solvers, which he described as an extension of SAT solving, also place well. The complementary point is that for a problem which is genuinely propositional a CDCL SAT solver is the better tool, and superposition earns its keep on first-order problems, which in practice means problems with equality in them.</p>
+  </div>
+
+  <h3 id="mkb2-clauses">Everything becomes an equation</h3>
+
+  <p>Building equality in has a consequence for the syntax that shapes everything after it. Since the calculus treats equality specially in any case, the deck assumes without loss of generality that equality is the <em>only</em> predicate <button type="button" class="slide-ref" data-slide="blanchette2:6" title="Open this slide">page 6</button>. An ordinary atom p(x) is rewritten as the equation <code>p(x) = true</code> and its negation as <code>p(x) &ne; true</code>, so a signature becomes a collection of function symbols and nothing else <button type="button" class="slide-ref" data-slide="blanchette2:7" title="Open this slide">page 7</button>. That gives a very small clause language <button type="button" class="slide-ref" data-slide="blanchette2:13" title="Open this slide">pages 13-16</button>. An atom is an <em>unordered</em> pair of terms <code>t<sub>1</sub> = t<sub>2</sub></code>, so the two sides are interchangeable and symmetry is free rather than something to be derived. A literal is <code>t = t'</code> or <code>t &ne; t'</code>, and a clause is a multiset of them written as a disjunction, and the clause with no literals at all is <code>&perp;</code>. There is no conjunction, no implication and no quantifier: variables are understood as universally quantified.</p>
+
+  <h3 id="mkb2-inference">The rules: one main rule and its side rules</h3>
+
+  <p>The deck introduces the calculus in three passes. The first is ground and involves single literals <button type="button" class="slide-ref" data-slide="blanchette2:17" title="Open this slide">page 17</button>: from an equation <code>t = t'</code> and a literal <code>L[t]</code> containing <em>t</em> somewhere inside it, derive <code>L[t']</code>. That is the whole of the equality reasoning, and everything added later restricts when you may do it. The second pass lets the premises be full clauses <button type="button" class="slide-ref" data-slide="blanchette2:18" title="Open this slide">page 18</button>: each premise may carry literals not involved in the inference, and both leftovers are copied into the conclusion.</p>
+
+  <div class="formula">
+    from <code>C &or; t = t'</code> and <code>D &or; L[t]</code>,<br>
+    derive <code>C &or; D &or; L[t']</code>
+  </div>
+
+  <p>The third pass drops the requirement that the clauses be ground <button type="button" class="slide-ref" data-slide="blanchette2:20" title="Open this slide">page 20</button>. The equation's left side <em>t</em> and the subterm <em>u</em> to be rewritten need no longer be the same term, only unifiable. The most general unifier <strong>&sigma;</strong> is computed, the subterm is replaced, and &sigma; is applied to the whole conclusion rather than only where it was computed. The notation <code>L[u]</code> is load-bearing: <em>u</em> need not be a whole side of a literal but may sit anywhere inside the literal, "under some arbitrary context", as Blanchette put it.</p>
+
+  <figure class="fig">
+    <svg viewBox="0 0 680 300" role="img" aria-label="Two premise boxes on the top row. The left box holds the clause C or t equals t prime, with t highlighted. The right box holds the clause D or L of u, with the subterm u highlighted. Lines from both boxes converge and an arrow points down to a conclusion box holding sigma applied to C or D or L of t prime, with t prime highlighted. Labels beside the arrow read sigma equals the most general unifier of t and u, and u must not be a variable.">
+      <defs>
+        <marker id="mkb2-arw" markerWidth="9" markerHeight="8" refX="8" refY="4" orient="auto" markerUnits="userSpaceOnUse">
+          <path d="M0,0 L9,4 L0,8 z" fill="var(--muted)"></path>
+        </marker>
+      </defs>
+
+      <text x="120" y="38" text-anchor="middle" font-size="12.5" font-family="inherit" fill="var(--muted)">premise 1: the equation</text>
+      <rect x="20" y="52" width="200" height="56" rx="10" fill="var(--surface)" stroke="var(--hairline)"></rect>
+      <text x="120" y="86" text-anchor="middle" font-size="15" font-family="monospace" fill="var(--ink)">C  &#8744;  <tspan fill="var(--accent)" font-weight="700">t</tspan> = t'</text>
+
+      <text x="470" y="38" text-anchor="middle" font-size="12.5" font-family="inherit" fill="var(--muted)">premise 2: u sits inside the context L[ ]</text>
+      <rect x="280" y="52" width="380" height="56" rx="10" fill="var(--surface)" stroke="var(--hairline)"></rect>
+      <text x="470" y="86" text-anchor="middle" font-size="15" font-family="monospace" fill="var(--ink)">D  &#8744;  L[<tspan fill="var(--accent)" font-weight="700">u</tspan>]</text>
+
+      <path d="M 120 108 L 120 150 L 400 150" fill="none" stroke="var(--muted)" stroke-width="1.6"></path>
+      <path d="M 470 108 L 470 150 L 400 150" fill="none" stroke="var(--muted)" stroke-width="1.6"></path>
+      <line x1="400" y1="150" x2="400" y2="204" stroke="var(--muted)" stroke-width="1.6" marker-end="url(#mkb2-arw)"></line>
+      <text x="418" y="176" font-size="12.5" font-family="inherit" fill="var(--accent-ink)">&sigma; = mgu(t, u)</text>
+      <text x="418" y="194" font-size="12.5" font-family="inherit" fill="var(--muted)">u must not be a variable</text>
+
+      <rect x="180" y="210" width="440" height="56" rx="10" fill="var(--accent)" fill-opacity="0.07" stroke="var(--hairline)"></rect>
+      <text x="400" y="244" text-anchor="middle" font-size="15" font-family="monospace" fill="var(--ink)">&sigma;( C  &#8744;  D  &#8744;  L[<tspan fill="var(--accent)" font-weight="700">t'</tspan>] )</text>
+
+      <text x="400" y="288" text-anchor="middle" font-size="12" font-family="inherit" fill="var(--muted)">the unifier is applied to the whole conclusion, leftover literals included</text>
+    </svg>
+    <figcaption class="fig-caption">The nonground main rule <button type="button" class="slide-ref" data-slide="blanchette2:20" title="Open this slide">page 20</button>. The equation rewrites a subterm buried inside a literal of the other clause, and both premises contribute whatever literals were not consumed.</figcaption>
+  </figure>
+
+  <p>The deck's illustration is deliberately schematic <button type="button" class="slide-ref" data-slide="blanchette2:21" title="Open this slide">pages 21-25</button>: from <code>C(y) &or; f(a, y) = c</code> and <code>g(f(x, b)) &ne; d &or; D(x)</code>, where <code>C(y)</code> and <code>D(x)</code> are arbitrary leftover clauses, unifying the two <em>f</em> terms yields <strong>&sigma; = {x &#8614; a, y &#8614; b}</strong> and the conclusion <code>C(b) &or; D(a) &or; g(c) &ne; d</code>. The rewritten subterm sat under the context <code>g([ ])</code> inside a <em>negative</em> literal, and the rule did not care about the polarity. The unifier also reached the leftovers, which keeps the conclusion a consequence of the premises rather than of some convenient instance of them.</p>
+
+  <p>One side condition is present from the start: the subterm <em>u</em> must not be a variable <button type="button" class="slide-ref" data-slide="blanchette2:20" title="Open this slide">page 20</button>. A variable unifies with anything, so rewriting at a variable position would make every equation in the set applicable at every variable occurrence anywhere in the set. That innocuous-looking condition is the source of the one genuine difficulty in the completeness proof, and it returns at the end of this section.</p>
+
+  <p>Alongside the main rule the deck lists a side rule <button type="button" class="slide-ref" data-slide="blanchette2:19" title="Open this slide">page 19</button>: from <code>C &or; t &ne; t</code>, derive <code>C</code>, since a disequality whose two sides are the same term is false in every interpretation. In the nonground version the sides need only unify <button type="button" class="slide-ref" data-slide="blanchette2:20" title="Open this slide">page 20</button>: from <code>C &or; t &ne; u</code> with <strong>&sigma; = mgu(t, u)</strong>, derive <code>&sigma;(C)</code>. This rule is standardly called <strong>equality resolution</strong>; in the recording Blanchette calls it simply the second rule. An asterisk on each of these slides promises "another side rule" which the deck never states.</p>
+
+  <h3 id="mkb2-naming">Paramodulation and superposition</h3>
+
+  <p>Everything stated so far is unordered, and the deck is careful to call it by the right name. An early slide arranges four calculi in a square <button type="button" class="slide-ref" data-slide="blanchette2:4" title="Open this slide">page 4</button>: resolution opposite ordered resolution, paramodulation opposite superposition, each with a ground counterpart below. One axis is ground against nonground, the other unordered against ordered, so superposition is to paramodulation what ordered resolution is to resolution. Blanchette made the same point aloud, naming the rule twice in one breath.</p>
+
+  <blockquote class="anecdote">
+    <p>"This was the first inference of superposition, the main inference, which is actually called superposition. We were talking earlier about paramodulation, which is the unordered version of it, so this inference is then called paramodulation."</p>
+    <footer>Jasmin Blanchette, on the two names for the rule</footer>
+  </blockquote>
+
+  <p>The rule shape is the same in both cases; what differs is the side conditions. <strong>Paramodulation</strong> is the unordered version, which imposes none beyond the variable condition, and <strong>superposition</strong> is the ordered version, which imposes several.</p>
+
+  <p>Without an ordering the rule is ruinously symmetric. An unordered pair asserts nothing about a direction, so an equation can be used either way round, and the subterm rewritten can be any non-variable subterm of any literal of the other clause, at any depth and of either polarity. Across a few thousand clauses the number of available inferences becomes astronomical, and most conclusions are longer and less useful than what they came from.</p>
+
+  <div class="quiz">
+    <script type="application/json">
+    {"type":"fill","q":"Superposition is the ordered version of an older inference rule. What is the unordered version called?","accept":["paramodulation","paramodulation rule","the paramodulation rule"],"explain":"Blanchette named both in the same breath: the inference is superposition when the ordering side conditions are imposed and paramodulation when they are not. Both replace equals by equals inside a clause under a most general unifier. The ordering is what stops the search space from exploding, by fixing the direction in which an equation may be used and restricting which literals are eligible."}
+    </script>
+  </div>
+
+  <h3 id="mkb2-pi">The worked example: the inverse of pi</h3>
+
+  <p>The deck's main derivation is small enough to follow to the end, and it is the one the lecture spent most time on <button type="button" class="slide-ref" data-slide="blanchette2:26" title="Open this slide">pages 26-41</button>. The claim is unsurprising: assuming &pi; is not zero, and that x<sup>-1</sup> = 1/x for every x that is not zero, we have |&pi;<sup>-1</sup>| = |1/&pi;|. Formalised, the hypotheses are <code>pi &ne; zero</code> and <code>&forall;x. x &ne; zero &rarr; inv(x) = div(one, x)</code>, and the conclusion is <code>abs(inv(pi)) = abs(div(one, pi))</code> <button type="button" class="slide-ref" data-slide="blanchette2:27" title="Open this slide">page 27</button>.</p>
+
+  <p>The prover works by refutation, so it takes the hypotheses together with the <em>negated</em> conclusion and clausifies the lot <button type="button" class="slide-ref" data-slide="blanchette2:28" title="Open this slide">page 28</button>. Three clauses come out.</p>
+
+  <div class="formula">
+    <code>pi &ne; zero</code><br>
+    <code>x = zero &or; div(one, x) = inv(x)</code><br>
+    <code>abs(div(one, pi)) &ne; abs(inv(pi))</code>
+  </div>
+
+  <p>The middle clause repays a second look. Clausifying an implication turns its negated guard into a positive literal, so the side condition x &ne; zero survives as the equality <code>x = zero</code> in the same clause as the equation it guards. Anything derived using that equation drags an instance of the guard with it, and the derivation has to dispose of it later.</p>
+
+  <div class="stepper" data-title="The refutation, step by step">
+    <div class="step" data-label="Three clauses"><p>The hypotheses give <code>pi &ne; zero</code> and <code>x = zero &or; div(one, x) = inv(x)</code>. The negated conjecture gives <code>abs(div(one, pi)) &ne; abs(inv(pi))</code> <button type="button" class="slide-ref" data-slide="blanchette2:28" title="Open this slide">page 28</button>. Nothing marks any of the three as special; the prover sees three ordinary clauses.</p></div>
+    <div class="step" data-label="Rewrite under abs"><p>Apply the main rule with the equation <code>div(one, x) = inv(x)</code> from the second clause. Its left side unifies with the subterm <code>div(one, pi)</code> in the third clause, giving <strong>&sigma; = {x &#8614; pi}</strong>. That subterm is not a whole side of the literal: it sits, in Blanchette's words, under an arbitrary context, "which in this case is the absolute value function". Replacing it by <code>inv(pi)</code> turns <code>abs(div(one, pi))</code> into <code>abs(inv(pi))</code> <button type="button" class="slide-ref" data-slide="blanchette2:30" title="Open this slide">page 30</button>.</p></div>
+    <div class="step" data-label="The leftover comes too"><p>The equation's clause had a leftover literal, <code>x = zero</code>, and the inference carries it into the conclusion with &sigma; applied, so it arrives as <code>pi = zero</code>. The new clause is <code>pi = zero &or; abs(inv(pi)) &ne; abs(inv(pi))</code>. As he put it, the leftover is part of the second clause and the inference involved that clause, so the conclusion has to keep the possibility open.</p></div>
+    <div class="step" data-label="Equality resolution"><p>The second literal now has the same term on both sides of a disequality, so it is false in every interpretation. The side rule strikes it out and leaves <code>pi = zero</code> <button type="button" class="slide-ref" data-slide="blanchette2:34" title="Open this slide">page 34</button>. In the recording this is the moment he calls simplifying the literal away and replacing the whole clause by the single equation.</p></div>
+    <div class="step" data-label="Contradict the hypothesis"><p>Now use <code>pi = zero</code> itself as the equation, and rewrite the occurrence of <code>pi</code> in the very first clause <code>pi &ne; zero</code>. Both leftovers are empty, so the conclusion is the single literal <code>zero &ne; zero</code> <button type="button" class="slide-ref" data-slide="blanchette2:37" title="Open this slide">page 37</button>.</p></div>
+    <div class="step" data-label="The empty clause"><p>Apply the side rule once more. The disequality has identical sides, and the rule removes it from the clause, so what remains is the clause with no literals at all: <code>&perp;</code> <button type="button" class="slide-ref" data-slide="blanchette2:39" title="Open this slide">page 39</button>. The clause set is refuted, and the original claim is proved.</p></div>
+  </div>
+
+  <p>Four inferences, two of each rule, and no equality axioms anywhere. Supplied as clauses instead, the congruence axiom for <code>abs</code> alone would have turned the second step into a chain of resolutions, with transitivity generating instances throughout.</p>
+
+  <div class="quiz">
+    <script type="application/json">
+    {"type":"fill","q":"In the inverse-of-pi derivation, the clause pi = zero ∨ abs(inv(pi)) ≠ abs(inv(pi)) collapses to a single literal. Which one?","accept":["pi = zero","pi=zero","pi = 0","pi=0"],"explain":"The second literal is a disequality whose two sides are the same term, so it is false in every interpretation and the side rule, equality resolution, removes it. What remains is the leftover the earlier inference had carried along, namely pi = zero. That clause then contradicts the hypothesis pi ≠ zero in two further steps."}
+    </script>
+  </div>
+
+  <h3 id="mkb2-ordering">The ordering restrictions</h3>
+
+  <p>The ordered rules are stated for the ground case <button type="button" class="slide-ref" data-slide="blanchette2:83" title="Open this slide">page 83</button>. The main rule takes <code>C &or; t = t'</code> and a second clause of the form <code>D &or; s[t] = s'</code> or <code>D &or; s[t] &ne; s'</code>, the deck writing both polarities as one rule with a brace rather than two rules, and derives the matching <code>C &or; D &or; s[t'] = s'</code> or <code>C &or; D &or; s[t'] &ne; s'</code>. The new condition is one line: <em>t</em> and <em>s[t]</em> must each be the maximal side of a maximal literal. The side rule gains a matching condition, that <code>t &ne; t</code> be maximal in its clause.</p>
+
+  <p>That one line contains three separate restrictions, and it is worth separating them.</p>
+
+  <ul>
+    <li>The equation may only be used from its larger side to its smaller side. An unordered pair has no direction of its own, so the ordering supplies one, and rewriting therefore always moves towards simpler terms.</li>
+    <li>Only a maximal literal of each premise is eligible. A long clause no longer offers every one of its literals as an inference site.</li>
+    <li>Inside the target literal, only the larger side may be rewritten. Rewriting the smaller side is left out.</li>
+  </ul>
+
+  <p>The deck never fixes a particular ordering; it writes <code>t &gt; t'</code>, speaks of maximal literals and of processing clauses in order, and leaves the choice open. What the argument needs of it is nevertheless specific. It must be well founded, so that rewriting cannot descend forever and the proof can induct on it; total on ground terms, so that maximal always names something; stable under substitution, so that a restriction checked on a nonground clause holds of every ground instance; and compatible with contexts, so that replacing a subterm by a smaller one makes the whole term smaller. An ordering with those properties is a simplification ordering, the standard instances being the Knuth-Bendix ordering and the lexicographic path ordering.</p>
+
+  <p>Literal selection is the one refinement the deck gestures at without presenting: its source is Bachmair and Ganzinger's <em>Rewrite-Based Equational Theorem Proving with Selection and Simplification</em> <button type="button" class="slide-ref" data-slide="blanchette2:115" title="Open this slide">page 115</button>, and selection is the first word of that title. Maximality is not the only admissible restriction on the rules, and a selection function may instead designate negative literals of a clause, and those then become the only ones the rules may use. Completeness survives, and provers use the freedom to steer the search.</p>
+
+  <div class="quiz">
+    <script type="application/json">
+    {"type":"mc","q":"In the ordered main rule, what does the condition \"t and s[t] are maximal side of maximal literal\" rule out?","options":["Using an equation to rewrite a term into a larger one, and rewriting inside a literal that is not maximal in its clause","Rewriting inside negative literals, which the ordered rule handles by a separate rule","Any inference between two clauses that share no variables","Unifying a term with a variable, which the ground rules cannot express"],"answer":0,"explain":"An equality atom is an unordered pair, so on its own it offers no direction. The ordering supplies one: the side that may be used as the left-hand side of a rewrite is the larger one, so rewriting always moves downwards. Maximality of the literal restricts inferences to one part of each clause rather than all of it. Polarity is not restricted at all: the slide writes the positive and the negative case as a single rule with a brace, so both are covered."}
+    </script>
+  </div>
+
+  <h3 id="mkb2-redundancy">Redundancy, simplification, and deleting as you go</h3>
+
+  <p>Restricting the rules reduces how much is generated; redundancy says what may be thrown away. The ground criterion is short <button type="button" class="slide-ref" data-slide="blanchette2:84" title="Open this slide">page 84</button>: a clause <em>C</em> is redundant with respect to <em>F</em> if <em>F</em> contains clauses all smaller than <em>C</em> that together entail it. The deck's two examples show that this is more than subsumption <button type="button" class="slide-ref" data-slide="blanchette2:85" title="Open this slide">page 85</button>: <code>b = a</code> alone makes <code>f(b) = f(a)</code> redundant, and <code>b = a</code> with <code>a = c</code> makes <code>b = c</code> redundant. The reassuring line follows at once: the completeness proof still goes through <button type="button" class="slide-ref" data-slide="blanchette2:86" title="Open this slide">page 86</button>.</p>
+
+  <p>From the criterion the deck derives concrete deletion rules <button type="button" class="slide-ref" data-slide="blanchette2:87" title="Open this slide">pages 87-88</button>. Tautology deletion removes any clause of the form <code>C &or; t = t</code> or <code>C &or; t = u &or; t &ne; u</code>, since both are true in every interpretation. Literal rewriting, better known as <strong>demodulation</strong>, works like this: given a unit equation <code>t = t'</code> with <code>t &gt; t'</code> and a clause <code>D &or; L[t]</code>, replace that clause by <code>D &or; L[t']</code>. Note the word replace. Unlike the main rule this does not keep the premise, because the ordering guarantees the rewritten version is smaller and entails it. The deck adds "and another condition" without spelling it out.</p>
+
+  <p>Seen through the criterion, the clean-up step in the pi derivation is less of a special case than it looks. Equality resolution adds <em>C</em>, but <em>C</em> is smaller than <code>C &or; t &ne; t</code> and entails it, so the premise turns redundant the moment the conclusion exists. That is why the recording describes the step as simplifying a literal away while the slide describes it as an addition. The same mechanism sits behind a remark from the close of a derivation, where he noted that clauses could be deleted as they went, so the search space stayed very small, and qualified it at once: it stayed small because he knew at each step what to do next, having built the example. A prover has no such foresight.</p>
+
+  <p>The nonground criterion reduces to the ground one <button type="button" class="slide-ref" data-slide="blanchette2:90" title="Open this slide">pages 90-91</button>: a clause is redundant if every one of its ground instances is redundant with respect to the ground instances of <em>F</em>, so that <code>b(x) = a(x)</code> makes <code>f(b(x)) = f(a(x))</code> redundant. Defining the general case as a statement about all instances is the same move the completeness proof makes.</p>
+
+  <h3 id="mkb2-model">Completeness and the model construction</h3>
+
+  <p>The completeness statement has the shape the previous section set up <button type="button" class="slide-ref" data-slide="blanchette2:58" title="Open this slide">pages 58-59</button>: if the clause set is unsatisfiable and inferences are performed fairly, then <code>&perp;</code> will eventually appear. Fairness gives that the limit of the run is saturated, which is the given clause algorithm's responsibility; static completeness gives that a saturated unsatisfiable set contains <code>&perp;</code>. The second half is proved in the contrapositive <button type="button" class="slide-ref" data-slide="blanchette2:61" title="Open this slide">page 61</button>: a saturated set without <code>&perp;</code> has a model. That model is built incrementally, walking the clauses in increasing order and adding equations as it goes <button type="button" class="slide-ref" data-slide="blanchette2:62" title="Open this slide">page 62</button>.</p>
+
+  <div class="callout def">
+    <p><span class="co-tag">Equality</span> <strong>Term models</strong> interpret every term as its own equivalence class under a relation <em>R</em> <button type="button" class="slide-ref" data-slide="blanchette2:63" title="Open this slide">pages 63-64</button>, so a model can be written down simply as the set of equations that generate <em>R</em>. Taking <em>R</em> = {f(a) = a} does not only force [f(a)] = [a]; it also forces [f(f(a))] = [a] and [g(f(a))] = [g(a)], because the congruence closure comes for free. This is why a handful of equations suffices to specify a model, and why the construction can proceed one equation at a time.</p>
+  </div>
+
+  <p>The construction is best read off the deck's own table <button type="button" class="slide-ref" data-slide="blanchette2:66" title="Open this slide">pages 66-72</button>. Clauses are taken in increasing order. If a clause is already true in the model built so far, nothing is added; otherwise the construction tries to make it true by adding its maximal literal, which can only work if that literal is a positive equation.</p>
+
+  <table>
+    <thead><tr><th>Clause</th><th>Model so far</th><th>Added</th><th>Why</th></tr></thead>
+    <tbody>
+      <tr><td><code>g = a</code></td><td>{ }</td><td><code>{g = a}</code></td><td>g is maximal, so the equation is added</td></tr>
+      <tr><td><code>g = a &or; h = b</code></td><td><code>{g = a}</code></td><td>{ }</td><td>already true, nothing to do</td></tr>
+      <tr><td><code>g &ne; a &or; h = b</code></td><td><code>{g = a}</code></td><td><code>{h = b}</code></td><td>the first literal is false, so h is maximal</td></tr>
+      <tr><td><code>f(g) &ne; f(a) &or; k = c</code></td><td><code>{g = a, h = b}</code></td><td><code>{k = c}</code></td><td>congruence makes f(g) = f(a) hold, so k is maximal</td></tr>
+      <tr><td><code>f(g) &ne; f(a) &or; k &ne; c</code></td><td><code>{g = a, h = b, k = c}</code></td><td>{ }</td><td>both literals are false and neither can be added</td></tr>
+    </tbody>
+  </table>
+
+  <p>The last row is where the argument earns its keep. The clause is false and nothing can be added to fix it, since a disequality cannot be made true by adding equations. The deck marks the row with question marks and leaves the case open <button type="button" class="slide-ref" data-slide="blanchette2:74" title="Open this slide">pages 74-75</button>. If the set is saturated, the main rule has already fired between the fourth clause and the fifth, using <code>k = c</code> to rewrite <code>k</code> in <code>k &ne; c</code>, so <code>f(g) &ne; f(a) &or; f(g) &ne; f(a)</code> must be in the set too. That clause is smaller, so the construction passed it earlier and left it false, which is the contradiction the deck marks with a lightning bolt. The failing case cannot arise.</p>
+
+  <p>A second variant makes the case for the side rule <button type="button" class="slide-ref" data-slide="blanchette2:76" title="Open this slide">pages 76-82</button>. Replace the last clause by <code>f(g) &ne; f(a) &or; k &ne; k</code>. Again it is false and nothing can be added, so on a saturated set the side rule must already have fired, leaving <code>f(g) &ne; f(a)</code>, smaller and also false, and the same contradiction follows. The pair is an argument about rule coverage: each way the construction can fail corresponds to an inference that saturation guarantees has been made.</p>
+
+  <h3 id="mkb2-ground">Lifting: the ground view and the non-ground view</h3>
+
+  <p>Everything above is ground. The deck does not restate the rules for the general case <button type="button" class="slide-ref" data-slide="blanchette2:89" title="Open this slide">page 89</button>: nonground superposition is the unification and variable conditions of nonground resolution combined with all the order restrictions of ground superposition. What does need an argument is the lifting, and it is three lines <button type="button" class="slide-ref" data-slide="blanchette2:96" title="Open this slide">pages 96-97</button>. Show that the set of all ground instances of a saturated set is itself saturated. Apply ground static completeness to conclude that it contains <code>&perp;</code>. Observe that <code>&perp;</code> can only be the instance of <code>&perp;</code> itself. The first line is the only real work, and the slide's illustration is about ground inferences below variables.</p>
+
+  <p>Blanchette noted in passing how fast that instance set grows: a unary symbol adds one layer of nesting per term and stays manageable, which is why the slides use two constants and a unary symbol, whereas a binary symbol is far worse, since every pair of existing terms produces a new one. The set is infinite either way, and tolerable only because the argument reasons about the enumeration rather than running it.</p>
+
+  <p>The easy case comes first <button type="button" class="slide-ref" data-slide="blanchette2:98" title="Open this slide">pages 98-102</button>. Take the saturated set containing <code>g(x) = f(x)</code> and <code>g(y) &ne; d</code>. Among the ground instances, <code>g(b) = f(b)</code> and <code>g(b) &ne; d</code> yield <code>f(b) &ne; d</code>. That is no threat, because the nonground set had a matching inference whose conclusion <code>f(x) &ne; d</code> is already present by saturation, and <code>f(b) &ne; d</code> is one of its instances. Every ground inference is the shadow of a nonground one, which is what the deck means by calling the nonground inferences an overapproximation.</p>
+
+  <figure class="fig">
+    <svg viewBox="0 0 680 300" role="img" aria-label="Two panels. The left panel, labelled F with variables, holds the clauses b equals a and f of x is not equal to d of x, and is marked saturated. An arrow labelled instantiate points to the right panel, labelled ground of F, holding b equals a and the instances f of a not equal to d of a, f of b not equal to d of b, f of c not equal to d of c, and an ellipsis. Below the right panel a box holds the ground conclusion f of a not equal to d of b, which is not among the instances. Below the left panel a box holds three question marks, indicating that no nonground inference corresponds to it.">
+      <defs>
+        <marker id="mkb2-arw2" markerWidth="9" markerHeight="8" refX="8" refY="4" orient="auto" markerUnits="userSpaceOnUse">
+          <path d="M0,0 L9,4 L0,8 z" fill="var(--muted)"></path>
+        </marker>
+      </defs>
+
+      <text x="145" y="34" text-anchor="middle" font-size="12.5" font-family="inherit" fill="var(--muted)">F, with variables</text>
+      <rect x="24" y="46" width="242" height="118" rx="12" fill="var(--surface)" stroke="var(--hairline)"></rect>
+      <text x="145" y="82" text-anchor="middle" font-size="14" font-family="monospace" fill="var(--ink)">b = a</text>
+      <text x="145" y="112" text-anchor="middle" font-size="14" font-family="monospace" fill="var(--ink)">f(x) &#8800; d(x)</text>
+      <text x="145" y="146" text-anchor="middle" font-size="12" font-family="inherit" fill="var(--good)">saturated</text>
+
+      <line x1="278" y1="104" x2="404" y2="104" stroke="var(--muted)" stroke-width="1.6" marker-end="url(#mkb2-arw2)"></line>
+      <text x="341" y="94" text-anchor="middle" font-size="12" font-family="inherit" fill="var(--muted)">instantiate</text>
+
+      <text x="536" y="34" text-anchor="middle" font-size="12.5" font-family="inherit" fill="var(--muted)">ground(F)</text>
+      <rect x="414" y="46" width="242" height="118" rx="12" fill="var(--accent)" fill-opacity="0.07" stroke="var(--hairline)"></rect>
+      <text x="536" y="72" text-anchor="middle" font-size="13.5" font-family="monospace" fill="var(--ink)">b = a</text>
+      <text x="536" y="96" text-anchor="middle" font-size="13.5" font-family="monospace" fill="var(--ink)">f(a) &#8800; d(a)</text>
+      <text x="536" y="120" text-anchor="middle" font-size="13.5" font-family="monospace" fill="var(--ink)">f(b) &#8800; d(b)</text>
+      <text x="536" y="144" text-anchor="middle" font-size="13.5" font-family="monospace" fill="var(--ink)">f(c) &#8800; d(c)&#8201;&#8230;</text>
+
+      <line x1="536" y1="166" x2="536" y2="204" stroke="var(--muted)" stroke-width="1.6" marker-end="url(#mkb2-arw2)"></line>
+      <text x="556" y="190" font-size="11.5" font-family="inherit" fill="var(--muted)">rewrite b to a</text>
+      <rect x="414" y="210" width="242" height="46" rx="10" fill="var(--surface)" stroke="var(--warn)"></rect>
+      <text x="536" y="239" text-anchor="middle" font-size="14" font-family="monospace" fill="var(--ink)">f(a) &#8800; d(b)</text>
+
+      <line x1="414" y1="233" x2="272" y2="233" stroke="var(--muted)" stroke-width="1.6" stroke-dasharray="4 4" marker-end="url(#mkb2-arw2)"></line>
+      <rect x="84" y="210" width="122" height="46" rx="10" fill="var(--surface)" stroke="var(--hairline)"></rect>
+      <text x="145" y="239" text-anchor="middle" font-size="15" font-family="monospace" fill="var(--muted)">? ? ?</text>
+      <text x="145" y="278" text-anchor="middle" font-size="11.5" font-family="inherit" fill="var(--muted)">no nonground inference matches</text>
+      <text x="536" y="278" text-anchor="middle" font-size="11.5" font-family="inherit" fill="var(--muted)">and this instance is not in ground(F)</text>
+    </svg>
+    <figcaption class="fig-caption">The hard case of lifting <button type="button" class="slide-ref" data-slide="blanchette2:109" title="Open this slide">pages 109-114</button>. The rewritten occurrence of <em>b</em> came from the variable position, so the nonground clause cannot perform the corresponding inference, and the conclusion is not among the ground instances either.</figcaption>
+  </figure>
+
+  <p>The hard case is a ground inference at a position the nonground clause fills with a variable. Take the saturated set containing <code>b = a</code> and <code>f(x) &ne; d</code> <button type="button" class="slide-ref" data-slide="blanchette2:103" title="Open this slide">pages 103-108</button>. Among the instances, <code>b = a</code> rewrites <code>f(b) &ne; d</code> to <code>f(a) &ne; d</code>, and no nonground inference matches, because in <code>f(x) &ne; d</code> that position is a variable and the rule forbids rewriting there. No harm follows: <code>f(a) &ne; d</code> is already one of the ground instances, so the ground set is saturated regardless.</p>
+
+  <p>Change one symbol and it stops being free <button type="button" class="slide-ref" data-slide="blanchette2:109" title="Open this slide">pages 109-114</button>. With <code>f(x) &ne; d(x)</code> in place of <code>f(x) &ne; d</code>, rewriting <code>f(b) &ne; d(b)</code> at the first occurrence only yields <code>f(a) &ne; d(b)</code>, which is not an instance of anything in the set. The deck stops there, leaving the box marked with question marks. The standard answer is the redundancy criterion: that conclusion is entailed by <code>b = a</code> and <code>f(a) &ne; d(a)</code>, both smaller and both present, so the ground set counts as saturated after all. Redundancy is therefore not an efficiency device but part of what saturation means. His advice about the proof itself was practical.</p>
+
+  <blockquote class="anecdote">
+    <p>"I didn't show the proof, I showed only one illustration of it, but the proof is a bit tedious. You don't want to have to pull in that proof and work with variables and so on. You'd like to take it as a black box."</p>
+    <footer>Jasmin Blanchette, on the completeness proof</footer>
+  </blockquote>
+
+  <div class="quiz">
+    <script type="application/json">
+    {"type":"mc","q":"Why does the development keep a ground view of the problem alongside the non-ground one?","options":["Because a prover can only store clauses that contain no variables","Because enumerating ground terms is cheaper than computing unifiers","Because completeness is proved on the ground level, where there are no variables, and then lifted","Because the term ordering can only be defined on ground terms"],"answer":2,"explain":"Ground clauses carry no variables, so the model construction needs neither unification nor substitutions, which is what makes it tractable to state and prove. The general result is then obtained by showing that the ground instances of a saturated set are themselves saturated. Blanchette's advice was to treat the proof as a black box: he showed an illustration rather than the proof, because carrying it out with variables in play is tedious."}
+    </script>
+  </div>
+
+  <h3 id="mkb2-gaps">What the deck leaves open</h3>
+
+  <p>Four things are left unstated. The nonground superposition rules are the deliberate omission, marked "not given here" and reduced to a recipe for combining two earlier slides <button type="button" class="slide-ref" data-slide="blanchette2:89" title="Open this slide">page 89</button>. The second side rule is promised by an asterisk on three slides and never delivered; in the standard presentation it is equality factoring, which handles a clause whose maximal literal is a positive equation occurring more than once, and it is the third way the model construction can fail. The extra condition on demodulation is signposted and skipped <button type="button" class="slide-ref" data-slide="blanchette2:88" title="Open this slide">page 88</button>. And the two question-mark boxes at the end of the lifting argument are left for the audience <button type="button" class="slide-ref" data-slide="blanchette2:108" title="Open this slide">pages 108, 114</button>.</p>
+
+  <p>The references slide names where the details live <button type="button" class="slide-ref" data-slide="blanchette2:115" title="Open this slide">page 115</button>: Bachmair and Ganzinger's <em>Rewrite-Based Equational Theorem Proving with Selection and Simplification</em>, Journal of Logic and Computation, 1994, for the calculus and its completeness proof, and Schulz's <em>E: A Brainiac Theorem Prover</em>, AI Communications, 2002, for what an implementation looks like. The next lecture lifts the same calculus to higher-order logic, where both the ordering and the unification machinery have to be rebuilt.</p>
+</section>

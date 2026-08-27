@@ -1,0 +1,182 @@
+<section class="lecture" id="sec-mk-md1" data-num="27" data-day="mk-scale" data-title="Proof in Industry: What Sells and What Works" data-lecturer="Mike Dodds">
+  <header class="lec-head">
+    <div class="lec-num">27</div>
+    <div>
+      <h2 id="mkd3-top">Proof in Industry: What Sells and What Works</h2>
+      <p class="lec-meta">Lecture by Mike Dodds, from his deck <em>Doing Proof: Today, Tomorrow, Next Year</em>. This section covers the first two of its four parts, "Nine years of sales calls" and "Life in the habitable zone". Dodds spent nine years running formal methods contracts at Galois Inc., so part 1 reports what happens when you try to sell proof to people who have to pay for it, and part 2 reports the one large market that does buy it.</p>
+    </div>
+  </header>
+
+  <p class="lead">This is the counterweight to the rest of the school. Everywhere else the question is whether a property can be proved; here it is whether anybody will pay for the proof. Engineering organisations are approximately rational under their own incentives, so a project that makes sense in cost and benefit terms tends to happen, and one that does not, does not. Formal methods, Dodds claims, mostly live in the second category.</p>
+
+  <blockquote class="anecdote">
+    <p>"I think I was originally supposed to come in 2020, and something happened which led to the school being cancelled. So this is like six years delayed. And basically I got completely new opinions over that period."</p>
+    <footer>Mike Dodds, opening the lecture</footer>
+  </blockquote>
+
+  <h3 id="mkd3-landscape">The cost/benefit landscape</h3>
+
+  <p>The whole talk hangs on one picture. Put holistic cost on one axis, meaning time, money, people and every other resource, and holistic benefit on the other, meaning security, reliability and economic value. Somewhere there is a client-specific break-even line: above it projects make sense, below it they do not <button type="button" class="slide-ref" data-slide="dodds:11" title="Open this slide">slides 11-15</button>.</p>
+
+  <p>The claim that follows is the uncomfortable one. Many potential formal methods projects are perfectly possible and sit below the line anyway: the project can be done, it just does not pencil out <button type="button" class="slide-ref" data-slide="dodds:17" title="Open this slide">slide 17</button>. Nothing about the mathematics is wrong; the customer has better uses for the money. Part 1 gives five reasons, stated as blunt slogans on a recurring slide: quick beats correct, cheap beats expensive, correctness does not matter much, specifications do not exist, and usability is overrated <button type="button" class="slide-ref" data-slide="dodds:19" title="Open this slide">slide 19</button>.</p>
+
+  <figure class="fig">
+    <svg viewBox="0 0 660 320" role="img" aria-label="A cost versus benefit plane. Benefit runs up the vertical axis, cost along the horizontal. A diagonal break-even line separates an upper-left region where projects make sense from a lower-right region where they do not. A small shaded wedge near the origin is labelled the habitable zone. A curve showing the shape of a proof project starts flat and low and rises steeply only at high cost, so most of it lies below the break-even line.">
+      <defs>
+        <marker id="mkd3-arw" markerWidth="9" markerHeight="8" refX="8" refY="4" orient="auto" markerUnits="userSpaceOnUse">
+          <path d="M0,0 L9,4 L0,8 z" fill="var(--muted)"></path>
+        </marker>
+      </defs>
+      <line x1="70" y1="270" x2="620" y2="270" stroke="var(--muted)" stroke-width="1.6" marker-end="url(#mkd3-arw)"></line>
+      <line x1="70" y1="270" x2="70" y2="30" stroke="var(--muted)" stroke-width="1.6" marker-end="url(#mkd3-arw)"></line>
+      <text x="600" y="292" text-anchor="end" font-size="12.5" fill="var(--muted)">Holistic cost: time, money, people</text>
+      <text x="78" y="26" font-size="12.5" fill="var(--muted)">Holistic benefit: security, reliability, value</text>
+
+      <line x1="70" y1="270" x2="600" y2="60" stroke="var(--ink-2)" stroke-width="1.6" stroke-dasharray="7 5"></line>
+      <text x="470" y="96" font-size="12.5" fill="var(--ink-2)">client-specific break-even line</text>
+      <text x="190" y="96" font-size="13" fill="var(--muted)">these projects make sense</text>
+      <text x="330" y="238" font-size="13" fill="var(--muted)">these projects do not</text>
+
+      <path d="M 70 270 L 150 238 L 70 238 z" fill="var(--accent)" fill-opacity="0.16" stroke="var(--accent)" stroke-width="1.2"></path>
+      <text x="158" y="243" font-size="12" fill="var(--accent)">the habitable zone</text>
+
+      <path d="M 70 266 C 250 262, 380 254, 470 200 C 520 168, 545 110, 556 56" fill="none" stroke="var(--crit)" stroke-width="2"></path>
+      <text x="520" y="196" text-anchor="end" font-size="12" fill="var(--crit)">what a proof project costs:</text>
+      <text x="520" y="212" text-anchor="end" font-size="12" fill="var(--crit)">definitions, then lemmas, then the theorem</text>
+    </svg>
+    <figcaption>The plane of <button type="button" class="slide-ref" data-slide="dodds:11" title="Open this slide">slides 11-18</button>, the shape of a proof project from <button type="button" class="slide-ref" data-slide="dodds:21" title="Open this slide">slide 21</button>, and the habitable zone of <button type="button" class="slide-ref" data-slide="dodds:57" title="Open this slide">slide 57</button>. Benefit arrives at the end, so the curve spends most of its length where the work does not pay for itself.</figcaption>
+  </figure>
+
+  <h3 id="mkd3-curve">Quick beats correct, and cheap beats expensive</h3>
+
+  <p>A proof project has a bad cost/benefit curve, and the badness is structural. First the definitions, then some lemmas, then the main theorem <button type="button" class="slide-ref" data-slide="dodds:21" title="Open this slide">slide 21</button>. The benefit is real and often high, but it lands at the very end, so stopping halfway means paying most of the cost for almost none of the value. Dodds renders the resulting sales conversation as a two-line joke: the client asks what value they get in x months for y dollars, and the honest answer is roughly 4x months and 8y dollars <button type="button" class="slide-ref" data-slide="dodds:22" title="Open this slide">slides 22-24</button>.</p>
+
+  <p>Write-test-debug has the opposite shape, a low early cost buying real improvement immediately, with only the higher levels of assurance becoming difficult or impossible <button type="button" class="slide-ref" data-slide="dodds:27" title="Open this slide">slide 27</button>. Clients want that second shape, so project 1 can be judged before project 2 is commissioned <button type="button" class="slide-ref" data-slide="dodds:25" title="Open this slide">slides 25-26</button>.</p>
+
+  <p>The second slogan follows. There is a ladder of assurance techniques ordered by increasing effort and confidence: code review and documentation, testing, CI/CD, fuzzing and property-based testing, modelling and model checking, symbolic testing, and only then program proof and correct-by-construction development <button type="button" class="slide-ref" data-slide="dodds:29" title="Open this slide">slide 29</button>. The observation that decides most projects is that very many systems do not do the cheap things at the top of that ladder <button type="button" class="slide-ref" data-slide="dodds:30" title="Open this slide">slide 30</button>. Between writing more tests and doing a formal method, cheap and predictable beats expensive and risky <button type="button" class="slide-ref" data-slide="dodds:31" title="Open this slide">slides 31-32</button>. He put the dependency bluntly in the room: if the CI process is poor and nobody does code review, adding a formal method on top is very hard.</p>
+
+  <p>Two coherent positions remain, and he is satisfied with neither. Gold plating says formal methods come after conventional techniques: he thinks this is right, thinks it describes most current projects, and points out that it limits how many can ever pencil out, because the cheap techniques have already harvested the available benefit. It also shrinks the market to organisations paranoid enough to have done everything else first <button type="button" class="slide-ref" data-slide="dodds:33" title="Open this slide">slide 33</button>. YOLO says formal methods can replace conventional techniques, which would be better and is mostly not true today, with exceptions such as the Tiros and Zelkova services at AWS <button type="button" class="slide-ref" data-slide="dodds:34" title="Open this slide">slide 34</button>. There a pattern-based analysis of network reachability was swapped out in place for an SMT solver, and he stresses why it worked: the problem was confined enough that you could say with confidence what the replacement had to do.</p>
+
+  <h3 id="mkd3-correctness">Correctness does not matter (much)</h3>
+
+  <p>At some margin correctness matters, but the margin is further out than researchers assume. Large systems are built as overlapping imperfect controls rather than as one correct artefact: a server catches fire and a backup takes over, a data centre fails and the region absorbs it. Imperfection is priced into the design, so the marginal value of fewer bugs can be near zero, often even for high assurance systems <button type="button" class="slide-ref" data-slide="dodds:36" title="Open this slide">slide 36</button>. What may matter more is shipping features and fixes faster, being able to hire people who can do the work at all, paying down technical debt, and reducing other costs. He made one trade concrete in the room: you do not want to be unable to ship a security fix because the proof is not finished. The sharpest point is the conditional: a correctness technology that makes any of those harder is competing against them <button type="button" class="slide-ref" data-slide="dodds:37" title="Open this slide">slide 37</button>.</p>
+
+  <blockquote class="anecdote">
+    <p>"If we had a moderate-cost tool that would make [system] 2x more reliable and secure, would that be valuable to your business?"</p>
+    <p>"No."</p>
+    <p>"What if we could make regulatory compliance testing 10% cheaper?"</p>
+    <p>"Yes, that would save us $Xm per year."</p>
+    <footer>A Galois colleague and a leadership person at a high assurance developer, as Dodds reports the exchange on <button type="button" class="slide-ref" data-slide="dodds:38" title="Open this slide">slides 38-41</button></footer>
+  </blockquote>
+
+  <p>His analysis of the first answer: the existing process works, they believe they are already ahead of competitors, and they do not win or lose sales on reliability. The second turns on business structure. Without compliance testing they cannot sell at all, and that testing is expensive, highly manual, slow, inflexible and hard to staff <button type="button" class="slide-ref" data-slide="dodds:39" title="Open this slide">slides 39-41</button>. The buyer was never indifferent to formal reasoning; they were indifferent to the benefit it was sold on. He called the discovery mind-boggling: he had understood his own work as making things more reliable, and talking to the people who actually build systems turned that around.</p>
+
+  <div class="quiz">
+    <script type="application/json">
+    {"type":"mc","q":"Dodds' high assurance client said no to a tool making their system twice as reliable, then yes to one making compliance testing 10% cheaper. What does he draw from the pair?","options":["The client did not understand what formal verification could offer them","Reliability is worthless to high assurance developers","The benefit formal methods are usually sold on was not one this buyer could bank, while a cost the buyer could not avoid was","Compliance testing is a better target for proof than reliability in every industry"],"answer":2,"explain":"The client already believed their reliability process was competitive and did not win sales on it, so extra reliability had close to zero marginal value. Compliance testing, by contrast, was unavoidable, expensive and manual, and gated their ability to sell at all. Same technology, same client, and the pitch works only when it is aimed at a cost the buyer cannot escape."}
+    </script>
+  </div>
+
+  <h3 id="mkd3-specs">Specifications do not exist</h3>
+
+  <p>An ideal formal specification is mathematically clean, stable over time, agreed by the users of the system, and easy to reason about <button type="button" class="slide-ref" data-slide="dodds:43" title="Open this slide">slide 43</button>. Every famous success fits that ideal exactly: HACL*, seL4, CompCert, cloud services at AWS and Meta, hardware at Intel. The reality behind the list is that these systems are unusually easy to specify, and that even slightly harder-to-specify things become very hard to deal with <button type="button" class="slide-ref" data-slide="dodds:44" title="Open this slide">slide 44</button>.</p>
+
+  <p>What real projects hand you is the list on the next slide: prose standards, RFCs and papers, PowerPoint decks (very common), the code itself, reference implementations, inline comments, test cases, user stories, requirements documents, regulatory rules, and notes on coffee-shop napkins <button type="button" class="slide-ref" data-slide="dodds:45" title="Open this slide">slide 45</button>. Asked for a specification, a client offers a two-slide deck or a seven-thousand page semi-structured prose document, sometimes both <button type="button" class="slide-ref" data-slide="dodds:48" title="Open this slide">slide 48</button>. Report a divergence and the reply is either that it does not matter or that they changed it six months ago <button type="button" class="slide-ref" data-slide="dodds:50" title="Open this slide">slide 50</button>.</p>
+
+  <p>The extended example is PDF. Galois formalised the format in their data description language Daedalus, tested it against millions of real files, and worked with the PDF Association. The result was still not a specification in the sense a proof needs: non-descriptive, in differing from what real parsers do, and non-normative, in not characterising which behaviours are bugs <button type="button" class="slide-ref" data-slide="dodds:46" title="Open this slide">slide 46</button>.</p>
+
+  <h3 id="mkd3-usability">Usability is overrated</h3>
+
+  <p>Here he argues against a position widely held in his own field: that formal methods tools have bad usability, that this is a dominant reason they are not used, and therefore that making them usable would make them used <button type="button" class="slide-ref" data-slide="dodds:52" title="Open this slide">slide 52</button>. His counterexample is that tools with bad usability get used constantly, including Unix, LLMs, gdb and essentially every debugging tool in existence. They are used because they are beneficial in easy-to-quantify ways <button type="button" class="slide-ref" data-slide="dodds:53" title="Open this slide">slide 53</button>.</p>
+
+  <div class="callout key">
+    <p><span class="co-tag">Key idea</span> Cost and benefit apply to <strong>organisations, not engineers</strong>. The question is whether an organisation can achieve a beneficial goal at a proportionate cost, and the corollary is uncomfortable: if a tool is not used, it is probably just not beneficial enough at its current cost <button type="button" class="slide-ref" data-slide="dodds:54" title="Open this slide">slide 54</button>. Usability is a real cost, and improving it genuinely makes projects cheaper, but it moves a project a short distance along one axis <button type="button" class="slide-ref" data-slide="dodds:55" title="Open this slide">slide 55</button>.</p>
+  </div>
+
+  <h3 id="mkd3-zone">Life in the habitable zone</h3>
+
+  <p>Part 2 names the state of the field around 2024: a tiny habitable zone hugging the origin, where current proof technologies clear the line <button type="button" class="slide-ref" data-slide="dodds:57" title="Open this slide">slide 57</button>. The rest of it tours one place inside that zone.</p>
+
+  <p>Galois he describes as a contract research shop, an R&amp;D temp agency, about 110 people, employee-owned, focused on security and reliability technology, with clients across DARPA, the DoD and some commercial work <button type="button" class="slide-ref" data-slide="dodds:62" title="Open this slide">slide 62</button>. DARPA HACMS produced formally verified drone controllers on the seL4 microkernel, demonstrated by an unmanned helicopter resisting a red team attack in flight; the current DARPA PROVERS programme is a multi-million dollar effort on usability of testing and proof tools for cyber-physical systems <button type="button" class="slide-ref" data-slide="dodds:63" title="Open this slide">slide 63</button>.</p>
+
+  <h3 id="mkd3-crypto">Why cryptography sits inside the zone</h3>
+
+  <p>The benefit side for cryptographic primitives is unusually large: billions of users times millions of calls per day, security-critical in nearly every dimension, and gnarly optimised code that is hard to audit by hand, with Heartbleed as the reminder of what a vulnerability costs <button type="button" class="slide-ref" data-slide="dodds:66" title="Open this slide">slides 66-67</button>. The cost side is favourable for reasons unrelated to proof technology: a few libraries cover nearly all usage, the code is highly encapsulated, and it changes very slowly. Verify it once and everybody has verified cryptographic code.</p>
+
+  <p>The threat model has two halves. The code may crash through C or LLVM undefined behaviour such as an out-of-bounds write, attacking the host's memory safety; or it may not implement the algorithm, computing AES-GCM wrongly on some input, which lets an attacker decrypt messages in transit <button type="button" class="slide-ref" data-slide="dodds:68" title="Open this slide">slide 68</button>. The target is AWS-LC, whose ancestry runs from OpenSSL, giant and old with too many legacy flags, through Google's deliberately boring subset BoringSSL, to AWS's fork and the aws-lc-verification proofs <button type="button" class="slide-ref" data-slide="dodds:69" title="Open this slide">slide 69</button>.</p>
+
+  <div class="callout key">
+    <p><span class="co-tag">Key idea</span> <strong>Conservation of difficulty:</strong> software that was difficult to write will be difficult to verify <button type="button" class="slide-ref" data-slide="dodds:94" title="Open this slide">slide 94</button>. Cryptography is easy to verify in the ways that come from its interfaces, since inputs are bounded so loops unroll, data structures are static with restricted pointers, interfaces are fixed with agreed specifications in RFCs, and the code is stable <button type="button" class="slide-ref" data-slide="dodds:93" title="Open this slide">slide 93</button>. It is hard in the ways that come from its implementation: heavily optimised, using specialised x86 instructions, in places generated by Perl scripts, relying on facts about mathematics for soundness, and breaking abstraction boundaries by pipelining and unrolling <button type="button" class="slide-ref" data-slide="dodds:95" title="Open this slide">slide 95</button>.</p>
+  </div>
+
+  <p>So the gap between textbook algorithm and shipped code is a chain of steps, each driven by a use case, a platform, a legacy consideration or an optimisation, and each step requires a theorem <button type="button" class="slide-ref" data-slide="dodds:96" title="Open this slide">slide 96</button>. Changing the code would be easier, and Galois mostly does not, on purpose: the goal is to verify what everybody already uses, and engineers may trust that code more, since it has been tested and fuzzed, has thousands of hours in production, may hold a FIPS certification, which he calls a huge deal, and a verified replacement may have no support story <button type="button" class="slide-ref" data-slide="dodds:99" title="Open this slide">slide 99</button>.</p>
+
+  <h3 id="mkd3-saw">Equivalence proofs, and how SAW does them</h3>
+
+  <p>The proofs are equivalence proofs: a complex program agrees with a simple one, the simple one being a reference implementation or specification <button type="button" class="slide-ref" data-slide="dodds:71" title="Open this slide">slide 71</button>. He is happy to call this fancy testing. Testing asserts that on this input the program does not crash and matches the expected result; verification asserts the same with a universal quantifier in front <button type="button" class="slide-ref" data-slide="dodds:72" title="Open this slide">slide 72</button>.</p>
+
+  <p>For HMAC the simple side is RFC 2104, English prose that no solver can consume, so it is transcribed into Cryptol, whose HMAC definition is a handful of lines and close enough to the prose for cryptographers to audit <button type="button" class="slide-ref" data-slide="dodds:75" title="Open this slide">slides 75-77</button>. The AWS-LC results cover HMAC with SHA-384, SHA-2 384 and 512, AES-GCM 256, AES-KW and AES-KWP 256, ECDSA with P-384 and SHA-384, and ECDH with P-384; for s2n TLS, the DRBG, HMAC and the TLS 1.2 state machine; and for blst, all operations, though there only absence of crashes <button type="button" class="slide-ref" data-slide="dodds:78" title="Open this slide">slide 78</button>.</p>
+
+  <figure class="fig">
+    <svg viewBox="0 0 660 250" role="img" aria-label="The SAW pipeline. On the upper path a program in LLVM, Rust, Java or C passes through symbolic execution to a program term. On the lower path a Cryptol specification passes through symbolic execution to a spec term. Both terms feed an equivalence check performed by an SMT solver whose output is yes, no, or timeout. A note above the upper path records that symbolic execution also proves the program does not crash.">
+      <defs>
+        <marker id="mkd3-ar2" markerWidth="9" markerHeight="8" refX="8" refY="4" orient="auto" markerUnits="userSpaceOnUse">
+          <path d="M0,0 L9,4 L0,8 z" fill="var(--muted)"></path>
+        </marker>
+      </defs>
+      <text x="330" y="24" text-anchor="middle" font-size="12" fill="var(--crit)">symbolic execution also proves the program does not crash</text>
+
+      <rect x="18" y="46" width="132" height="52" rx="10" fill="var(--surface)" stroke="var(--hairline)"></rect>
+      <text x="84" y="68" text-anchor="middle" font-size="12.5" fill="var(--ink)">Program</text>
+      <text x="84" y="86" text-anchor="middle" font-size="11.5" fill="var(--muted)">LLVM / Rust / Java / C</text>
+      <line x1="152" y1="72" x2="196" y2="72" stroke="var(--muted)" stroke-width="1.5" marker-end="url(#mkd3-ar2)"></line>
+      <rect x="198" y="46" width="126" height="52" rx="10" fill="var(--surface)" stroke="var(--hairline)"></rect>
+      <text x="261" y="77" text-anchor="middle" font-size="12.5" fill="var(--ink)">symbolic execution</text>
+      <line x1="326" y1="72" x2="370" y2="72" stroke="var(--muted)" stroke-width="1.5" marker-end="url(#mkd3-ar2)"></line>
+      <rect x="372" y="46" width="104" height="52" rx="10" fill="var(--accent)" fill-opacity="0.10" stroke="var(--hairline)"></rect>
+      <text x="424" y="77" text-anchor="middle" font-size="12.5" fill="var(--ink)">program term</text>
+
+      <rect x="18" y="152" width="132" height="52" rx="10" fill="var(--surface)" stroke="var(--hairline)"></rect>
+      <text x="84" y="174" text-anchor="middle" font-size="12.5" fill="var(--ink)">Specification</text>
+      <text x="84" y="192" text-anchor="middle" font-size="11.5" fill="var(--muted)">Cryptol</text>
+      <line x1="152" y1="178" x2="196" y2="178" stroke="var(--muted)" stroke-width="1.5" marker-end="url(#mkd3-ar2)"></line>
+      <rect x="198" y="152" width="126" height="52" rx="10" fill="var(--surface)" stroke="var(--hairline)"></rect>
+      <text x="261" y="183" text-anchor="middle" font-size="12.5" fill="var(--ink)">symbolic execution</text>
+      <line x1="326" y1="178" x2="370" y2="178" stroke="var(--muted)" stroke-width="1.5" marker-end="url(#mkd3-ar2)"></line>
+      <rect x="372" y="152" width="104" height="52" rx="10" fill="var(--accent)" fill-opacity="0.10" stroke="var(--hairline)"></rect>
+      <text x="424" y="183" text-anchor="middle" font-size="12.5" fill="var(--ink)">spec term</text>
+
+      <path d="M 478 72 C 520 72, 520 110, 540 118" fill="none" stroke="var(--muted)" stroke-width="1.5"></path>
+      <path d="M 478 178 C 520 178, 520 140, 540 132" fill="none" stroke="var(--muted)" stroke-width="1.5"></path>
+      <text x="512" y="130" text-anchor="middle" font-size="16" fill="var(--accent)">&#8776;</text>
+      <rect x="540" y="98" width="104" height="54" rx="10" fill="var(--surface)" stroke="var(--hairline)"></rect>
+      <text x="592" y="120" text-anchor="middle" font-size="12" fill="var(--ink)">SMT solver</text>
+      <text x="592" y="138" text-anchor="middle" font-size="11.5" fill="var(--muted)">yes / no / timeout</text>
+    </svg>
+    <figcaption>SAW as Dodds draws it on <button type="button" class="slide-ref" data-slide="dodds:81" title="Open this slide">slide 81</button>: both sides are symbolically executed into terms in one representation, and their equivalence goes to a solver. The third answer, after yes and no, is a timeout.</figcaption>
+  </figure>
+
+  <p>SAW, the Software Analysis Workbench, has about twenty years of history and supports LLVM (so C and Rust), Java, x86 and ARM <button type="button" class="slide-ref" data-slide="dodds:80" title="Open this slide">slide 80</button>. Symbolic execution replaces concrete values with symbolic ones, so an addition becomes a term and branches merge into an if-then-else term at the join <button type="button" class="slide-ref" data-slide="dodds:82" title="Open this slide">slides 82-89</button>. His trade-off list is candid: precise, modular, suited to bounded intricate things, easy to map onto SMT; but non-scalable, awkward with loops and memory, hard to combine with tactics, and more a collection of modules than a clean tool <button type="button" class="slide-ref" data-slide="dodds:90" title="Open this slide">slide 90</button>.</p>
+
+  <h3 id="mkd3-pragmatics">Proof engineering pragmatics</h3>
+
+  <p>Three levers control difficulty <button type="button" class="slide-ref" data-slide="dodds:97" title="Open this slide">slide 97</button>. The first is changing the code, which is startlingly powerful, because very similar programs can have dramatically different verification characteristics: obvious equivalences may rest on deep theorems, and solvers are nondeterministic, so small perturbations can make a goal unsolvable <button type="button" class="slide-ref" data-slide="dodds:98" title="Open this slide">slide 98</button>. The second is rewriting with uninterpreted functions: prove a sub-equivalence between a specification function and a subterm, rewrite the implementation to use it, then treat it as uninterpreted while proving the whole <button type="button" class="slide-ref" data-slide="dodds:101" title="Open this slide">slides 101-105</button>.</p>
+
+  <p>The third is compositional reasoning: during symbolic execution a called function is replaced by its specification, saving time and yielding simpler formulas <button type="button" class="slide-ref" data-slide="dodds:109" title="Open this slide">slide 109</button>. The cost is that internal functions need specifications of their own, including of their state, that those may be too specific to reuse, and that one function may need several for different call sites <button type="button" class="slide-ref" data-slide="dodds:112" title="Open this slide">slide 112</button>. His example contrasts a monolithic cryptographic function with the same primitive split into init, update and final, whose intermediate state must be described before anything composes <button type="button" class="slide-ref" data-slide="dodds:113" title="Open this slide">slide 113</button>.</p>
+
+  <div class="callout key">
+    <p><span class="co-tag">Key idea</span> Integration is part of the cost. The Galois proofs run in CI/CD on every commit, which is what keeps them cheap enough to keep, and which imposes two constraints: they must finish inside a time and memory budget, and because a failed proof blocks deployment, someone has to fix it quickly <button type="button" class="slide-ref" data-slide="dodds:114" title="Open this slide">slide 114</button>.</p>
+  </div>
+
+  <div class="quiz">
+    <script type="application/json">
+    {"type":"mc","q":"By Dodds' account, what makes cryptographic libraries a rare economic fit for proof rather than merely a technically tractable one?","options":["Cryptographic code is small and simple, so proofs are quick to construct","A handful of stable, encapsulated libraries serve billions of users, so one proof effort is amortised across nearly all usage and rarely needs redoing","Cryptographers write their code in Cryptol, so no specification work is required","Regulators require formal proofs of cryptographic primitives"],"answer":1,"explain":"The technical properties help, since bounded inputs and static data structures suit SAW. But the economics come from concentration and stability: a small number of libraries cover nearly all usage, the code is highly encapsulated and changes slowly, and the interfaces have precise agreed specifications in RFCs. That is what lets one proof effort pay for itself, and it is precisely what most software does not offer. The code itself is anything but simple: it is some of the most heavily optimised in existence."}
+    </script>
+  </div>
+
+  <h3 id="mkd3-edge">What pushes a problem out of the zone</h3>
+
+  <p>Read together, the two parts give a checklist, best stated in the negative. A problem leaves the zone when the benefit is diffuse or already priced in, when the cheap techniques have not been exhausted, when the specification exists only as prose or code, when the interface changes faster than a proof can be maintained, or when the proof cannot run inside the existing workflow. Cryptography clears all of these, which makes it lucky rather than typical.</p>
+
+  <p>Part 2 closes with the same diagram and one change: a second curve, labelled AI-assisted proofs, reaching break-even at far lower cost, captioned "the world is changed" <button type="button" class="slide-ref" data-slide="dodds:117" title="Open this slide">slide 117</button>. He also jokes that hand-verified cryptography may soon be something you tell your bored grandchildren about <button type="button" class="slide-ref" data-slide="dodds:116" title="Open this slide">slide 116</button>. He framed his own response against the room: everyone at a school like this is cautious and clever, so his deliberate strategy is what he called aggressive stupidity, pushing the tools as hard as possible in order to fail quickly and find where the boundary actually is. That is also how he described running a small focused research organisation, where the advantage of being in charge is being able to say yes to the project everyone else would decline. Whether the curve is real is the subject of the second half of the talk.</p>
+</section>

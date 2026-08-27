@@ -1,0 +1,281 @@
+<section class="lecture" id="sec-mk-f4" data-num="4" data-day="mk-dv" data-title="A Verified Alpha-Beta Game Player" data-lecturer="Jean-Christophe Filliatre">
+  <header class="lec-head">
+    <div class="lec-num">4</div>
+    <div>
+      <h2 id="mkf4-top">A Verified Alpha-Beta Game Player</h2>
+      <p class="lec-meta">Jean-Christophe Filli&acirc;tre, CNRS. Deck: The Why and How of Deductive Program Verification, lecture 4.</p>
+    </div>
+  </header>
+
+  <p class="lead">The first three lectures used Why3 to reason about programs. This one uses Why3 to write one. The example is the search engine of a two-player game, alpha-beta pruning, of the kind a machine would use to play Othello against a human. The code is about fifteen lines. The interesting part is the contract, because alpha-beta does not compute the min-max value of a position, and a specification that claims it does cannot be proved. Working out what is true instead, and why the top-level function is nevertheless exact, is the whole of this lecture.</p>
+
+  <h3 id="mkf4-language">Why3 as the implementation language</h3>
+
+  <p>The deck opens with a remark rather than a definition: if you need a verified piece of software, it is much easier to implement it in a programming language that was designed with verification in mind, and Why3 can be used this way. <button type="button" class="slide-ref" data-slide="filliatre4:2" title="Open this slide">slide 2</button> In the earlier lectures WhyML mostly served as a vehicle for the weakest precondition calculus, a place to write annotated programs so that verification conditions could be generated from them. Here the direction is reversed. The program is written in WhyML because that is the language it is going to live in, it is proved there, and executable code is produced from it afterwards.</p>
+
+  <p>The concrete goal for the day is a two-player game, human against computer, where the machine side runs a verified alpha-beta pruning search. Othello is the game the deck names. <button type="button" class="slide-ref" data-slide="filliatre4:3" title="Open this slide">slide 3</button></p>
+
+  <h3 id="mkf4-game">The game, and the tree</h3>
+
+  <p>The model is deliberately thin. Two players, A and B, move in turn. For each game position, either the game is over, or there is a finite number of legal moves. <button type="button" class="slide-ref" data-slide="filliatre4:4" title="Open this slide">slide 4</button> Iterating that description gives a tree: the root is the current position, the children of a node are the positions reachable by one legal move, the levels alternate between A to move and B to move, and the leaves are finished games, won by A, won by B, or drawn. <button type="button" class="slide-ref" data-slide="filliatre4:5" title="Open this slide">slide 5</button></p>
+
+  <p>If that tree is finite and not too big, tic-tac-toe being the standard example, every position can be evaluated exactly as winning, losing or drawn, and an optimal strategy follows. For a realistic game this is out of reach. So the descent is stopped at some point and the position reached there is evaluated heuristically. <button type="button" class="slide-ref" data-slide="filliatre4:6" title="Open this slide">slide 6</button> Everything that follows is about searching the truncated tree efficiently, not about the quality of the heuristic, which stays a parameter of the development.</p>
+
+  <h3 id="mkf4-minmax">Min-max, and the negamax reformulation</h3>
+
+  <p>Fix all values as seen by player A. Then A maximises and assumes that B minimises, so the value of an internal node is the maximum of its children's values on A's turn and the minimum of them on B's turn, with the heuristic supplying the leaves. That is the min-max algorithm. <button type="button" class="slide-ref" data-slide="filliatre4:7" title="Open this slide">slide 7</button></p>
+
+  <p>Alternating between two operations is a nuisance in code and worse in a proof, so the deck adopts the usual reformulation. Evaluate every position from the point of view of the player who is about to move, and assume that the other player's evaluation of the same position is the negation of ours. The two levels then look identical: the value of a node is the maximum, over its children, of the negation of the child's value. Only <code>max</code> is needed, and the picture from the previous slide reappears with alternating signs. <button type="button" class="slide-ref" data-slide="filliatre4:12" title="Open this slide">slide 12</button> This convention is called negamax, and the deck marks this slide as the point where it moves to a live demonstration.</p>
+
+  <div class="quiz">
+    <script type="application/json">
+    {"type":"fill","q":"What is the name of the convention in which every position is evaluated from the point of view of the player about to move, so that the search uses max at every level instead of alternating max and min?","accept":["negamax","nega-max","nega max"],"answers":["negamax","nega-max","nega max"],
+     "explain":"Negamax. It relies on the game being zero sum: the other player's evaluation of a position is exactly the negation of ours, so minimising over children of the negated values is the same as maximising over the negations."}
+    </script>
+  </div>
+
+  <h3 id="mkf4-window">Pruning: the interval that makes work unnecessary</h3>
+
+  <p>Looking at a min-max tree, some subtrees clearly cannot influence the answer at the root, and the deck marks them in red on the slide immediately after the min-max picture. <button type="button" class="slide-ref" data-slide="filliatre4:8" title="Open this slide">slide 8</button> Alpha-beta turns that observation into an algorithm. The principle in one line: maintain an interval [&alpha;, &beta;] outside which there is no need to compute the value of the position. <button type="button" class="slide-ref" data-slide="filliatre4:9" title="Open this slide">slide 9</button> The deck credits the classical analysis to Donald E. Knuth and Ronald W. Moore, "An analysis of alpha-beta pruning", Artificial Intelligence 6(4), 1975.</p>
+
+  <p>Read the two bounds as promises already extracted from work done elsewhere. &alpha; is the best value the side to move has already secured somewhere else in the tree, so any line worth less than &alpha; will simply not be chosen. &beta; is the best the opponent can already hold us to higher up, so any line worth more than &beta; will be avoided by the opponent before we ever get to play it. In both cases the exact value is irrelevant to the decision at the root, and computing it would be wasted effort.</p>
+
+  <figure class="fig">
+    <svg viewBox="0 0 660 300" role="img" aria-label="A three level game tree. The root is a maximising node with three children that are minimising nodes. After the first child returns 3, the second child returns a value of at most 2 from its first leaf, so its remaining leaf is never examined.">
+      <line x1="330" y1="48" x2="130" y2="102" stroke="var(--hairline)"/>
+      <line x1="330" y1="48" x2="330" y2="102" stroke="var(--hairline)"/>
+      <line x1="330" y1="48" x2="530" y2="102" stroke="var(--hairline)"/>
+
+      <line x1="130" y1="138" x2="75" y2="197" stroke="var(--hairline)"/>
+      <line x1="130" y1="138" x2="185" y2="197" stroke="var(--hairline)"/>
+      <line x1="330" y1="138" x2="275" y2="197" stroke="var(--hairline)"/>
+      <line x1="330" y1="138" x2="385" y2="197" stroke="var(--muted)" stroke-dasharray="5 4"/>
+      <line x1="530" y1="138" x2="475" y2="197" stroke="var(--hairline)"/>
+      <line x1="530" y1="138" x2="585" y2="197" stroke="var(--hairline)"/>
+
+      <circle cx="330" cy="30" r="18" fill="var(--surface)" stroke="var(--accent)"/>
+      <text x="330" y="35" text-anchor="middle" font-size="13" fill="currentColor">4</text>
+
+      <circle cx="130" cy="120" r="18" fill="var(--surface)" stroke="var(--accent)"/>
+      <text x="130" y="125" text-anchor="middle" font-size="13" fill="currentColor">3</text>
+      <circle cx="330" cy="120" r="18" fill="var(--surface)" stroke="var(--warn)"/>
+      <text x="330" y="125" text-anchor="middle" font-size="12" fill="currentColor">&#8804;2</text>
+      <circle cx="530" cy="120" r="18" fill="var(--surface)" stroke="var(--accent)"/>
+      <text x="530" y="125" text-anchor="middle" font-size="13" fill="currentColor">4</text>
+
+      <circle cx="75" cy="215" r="18" fill="var(--surface)" stroke="var(--hairline)"/>
+      <text x="75" y="220" text-anchor="middle" font-size="13" fill="currentColor">3</text>
+      <circle cx="185" cy="215" r="18" fill="var(--surface)" stroke="var(--hairline)"/>
+      <text x="185" y="220" text-anchor="middle" font-size="13" fill="currentColor">5</text>
+      <circle cx="275" cy="215" r="18" fill="var(--surface)" stroke="var(--hairline)"/>
+      <text x="275" y="220" text-anchor="middle" font-size="13" fill="currentColor">2</text>
+      <circle cx="385" cy="215" r="18" fill="var(--surface)" stroke="var(--muted)" stroke-dasharray="5 4"/>
+      <text x="385" y="220" text-anchor="middle" font-size="13" fill="var(--muted)">8</text>
+      <circle cx="475" cy="215" r="18" fill="var(--surface)" stroke="var(--hairline)"/>
+      <text x="475" y="220" text-anchor="middle" font-size="13" fill="currentColor">4</text>
+      <circle cx="585" cy="215" r="18" fill="var(--surface)" stroke="var(--hairline)"/>
+      <text x="585" y="220" text-anchor="middle" font-size="13" fill="currentColor">6</text>
+
+      <text x="20" y="34" font-size="11" fill="var(--muted)">max</text>
+      <text x="20" y="124" font-size="11" fill="var(--muted)">min</text>
+      <text x="20" y="219" font-size="11" fill="var(--muted)">leaves</text>
+
+      <text x="362" y="26" font-size="11" fill="var(--accent)">&#945; = 3 after the first child</text>
+      <text x="385" y="252" text-anchor="middle" font-size="11" fill="var(--muted)">never examined</text>
+      <text x="330" y="285" text-anchor="middle" font-size="12" fill="var(--muted)">the middle child is already worth at most 2, so it cannot beat the 3 we hold</text>
+    </svg>
+    <figcaption class="fig-caption">One pruned branch. The root value 4 is correct even though the leaf worth 8 was never read. After the pruning example.</figcaption>
+  </figure>
+
+  <p>The picture also makes the danger visible. The value reported for the middle child, whatever the implementation happens to return there, is not its min-max value. It is only known to be no better than 3. That inaccuracy is not a defect to be fixed; it is precisely what was bought by skipping the leaf worth 8.</p>
+
+  <h3 id="mkf4-model">Modelling the problem in Why3</h3>
+
+  <p>The development takes the game itself as a parameter. A type of positions is declared with no structure at all, the sentinel value <code>inf</code> is declared as a positive constant, and the heuristic is declared as a function whose only stated property is that it stays within the sentinel bounds. <button type="button" class="slide-ref" data-slide="filliatre4:13" title="Open this slide">slide 13</button></p>
+
+<pre><code>type position
+
+val constant inf: int
+  ensures { 0 &lt; result }
+
+val function eval_position (_: position) : (v: int)
+  ensures { -inf &lt;= v &lt;= inf }</code></pre>
+
+  <div class="callout warn">
+    <span class="co-tag">Careful</span>
+    <p>These are <code>val</code> declarations, that is contracts with no body, and lecture 3 established that such a declaration is logically an axiom: the weakest precondition calculus adds the postcondition to the context at every call site without anyone having proved it. That is the right choice here, since the point is to verify the search and not the game, but it draws the boundary of the proof. If the heuristic ever returns a value outside the range it promises, the theorem below no longer applies to the running program.</p>
+  </div>
+
+  <p>The tree is an ordinary algebraic type, a position together with the list of the sub-games reachable from it, and the specification is the min-max evaluation written directly over it. <button type="button" class="slide-ref" data-slide="filliatre4:14" title="Open this slide">slide 14</button></p>
+
+<pre><code>type game = Node position (list game)
+
+let rec function eval (g: game) : int
+= match g with
+  | Node p Nil -&gt; eval_position p
+  | Node _ gl  -&gt; eval_list gl
+  end
+with function eval_list (gl: list game) : int
+= match gl with
+  | Nil        -&gt; -inf
+  | Cons g gl  -&gt; max (- eval g) (eval_list gl)
+  end</code></pre>
+
+  <p>Three things about this pair are worth pausing on. First, it is written with <code>let rec function</code>, the technique from lecture 3: a terminating pure program that Why3 promotes to a logical symbol, so the specification rests on a definition rather than on axioms. Second, the negation in <code>max (- eval g) (eval_list gl)</code> is the negamax convention, and it is the only place where the zero-sum assumption enters. Third, <code>eval_list Nil</code> is <code>-inf</code>, the neutral element of <code>max</code> over the range in play, so a node with no children is the worst possible outcome for the side to move.</p>
+
+  <div class="callout def">
+    <span class="co-tag">Worth noticing</span>
+    <p><code>game</code> is an inductive type, so every value of it is a <em>finite</em> tree. The truncation of the search, the "we stop our descent at some point" from the earlier slide, is therefore built into the data rather than enforced by a depth counter inside the algorithm. Termination of both <code>eval</code> and the search comes for free from structural descent, and neither the specification nor the code carries a depth argument.</p>
+  </div>
+
+  <p>The goal is then stated in one line: the search should return the min-max value of the tree it is given. <button type="button" class="slide-ref" data-slide="filliatre4:15" title="Open this slide">slide 15</button></p>
+
+<pre><code>let alpha_beta (g: game) : (v: int)
+  ensures { v = eval g }
+= ...</code></pre>
+
+  <h3 id="mkf4-code">The code</h3>
+
+  <p>The implementation is a pair of mutually recursive functions, one for a game and one for a list of games, both carrying the current window as two extra arguments. <button type="button" class="slide-ref" data-slide="filliatre4:16" title="Open this slide">slide 16</button></p>
+
+<pre><code>let rec alpha_beta_g (a b: int) (g: game) : (v: int)
+= match g with
+  | Node p Nil -&gt; eval_position p
+  | Node _ gl  -&gt; alpha_beta_l a b gl
+  end
+with alpha_beta_l (a b: int) (gl: list game) : (v: int)
+= match gl with
+  | Nil -&gt;
+      a
+  | Cons g gl -&gt;
+      let a = max a (- alpha_beta_g (-b) (-a) g) in
+      if a &gt;= b then a else alpha_beta_l a b gl
+  end
+
+let alpha_beta (g: game) : (v: int)
+= alpha_beta_g (-inf) inf g</code></pre>
+
+  <p>Four details carry the algorithm. The recursive call on a child passes the window <code>(-b, -a)</code>, negated and swapped, because the child's values are the negations of ours: our floor is the child's ceiling. The result of that call is negated on return. The <code>let a = max a ...</code> rebinds <code>a</code> locally, so each child that improves on the current best raises the floor for the children still to come, which is why move ordering matters so much in practice. And <code>if a &gt;= b then a</code> is the cutoff: the function returns immediately, and the rest of the list is never traversed.</p>
+
+  <p>The recursion is structural, <code>alpha_beta_g</code> descending into the children of a node and <code>alpha_beta_l</code> moving along a strictly shorter list, so the slides carry no <code>variant</code> clause. This is the same structural descent that justified <code>eval</code>, and it is what makes the algorithm terminate whatever the heuristic does.</p>
+
+  <h3 id="mkf4-spec">The contract that is actually true</h3>
+
+  <div class="callout warn">
+    <span class="co-tag">Careful</span>
+    <p>The obvious move is to give the recursive worker the same postcondition as the entry point, <code>ensures { v = eval g }</code>. That specification is false, and it is false for exactly the reason alpha-beta is fast. When the running value reaches <code>b</code>, the function returns without looking at the remaining children, so it cannot possibly report the maximum over subtrees it never visited. Symmetrically, when every child is worth less than <code>a</code>, the function returns <code>a</code>, a floor supplied by the caller that has nothing to do with the value of this position. Pruning and exactness are two names for the same trade: work may be skipped precisely when the exact answer is not needed.</p>
+  </div>
+
+  <p>What is true is a case analysis on where the true value sits relative to the window. <button type="button" class="slide-ref" data-slide="filliatre4:17" title="Open this slide">slide 17</button></p>
+
+<pre><code>let rec alpha_beta_g (a b: int) (g: game) : (v: int)
+  requires { -inf &lt;= a &lt; b &lt;= inf }
+  ensures  { -inf &lt;= v &lt;= inf }
+  ensures  { eval g &lt; a -&gt; v &lt;= a }
+  ensures  { a &lt;= eval g &lt;= b -&gt; v = eval g }
+  ensures  { b &lt; eval g -&gt; v &gt;= b }</code></pre>
+
+  <figure class="fig">
+    <svg viewBox="0 0 660 240" role="img" aria-label="A number line split by alpha and beta into three bands. If the true value is below alpha the result is capped at alpha; if it lies between alpha and beta the result is exact; if it is above beta the result is at least beta.">
+      <text x="330" y="16" text-anchor="middle" font-size="12" fill="var(--muted)">where the true value eval g lies</text>
+
+      <rect x="60" y="26" width="170" height="52" rx="8" fill="var(--surface)" stroke="var(--hairline)"/>
+      <text x="145" y="48" text-anchor="middle" font-size="12" fill="currentColor">eval g &lt; &#945;</text>
+      <text x="145" y="66" text-anchor="middle" font-size="11" fill="var(--muted)">below the floor</text>
+
+      <rect x="230" y="26" width="200" height="52" rx="8" fill="var(--surface)" stroke="var(--good)"/>
+      <text x="330" y="48" text-anchor="middle" font-size="12" fill="currentColor">&#945; &#8804; eval g &#8804; &#946;</text>
+      <text x="330" y="66" text-anchor="middle" font-size="11" fill="var(--muted)">inside the window</text>
+
+      <rect x="430" y="26" width="170" height="52" rx="8" fill="var(--surface)" stroke="var(--hairline)"/>
+      <text x="515" y="48" text-anchor="middle" font-size="12" fill="currentColor">&#946; &lt; eval g</text>
+      <text x="515" y="66" text-anchor="middle" font-size="11" fill="var(--muted)">above the ceiling</text>
+
+      <line x1="50" y1="100" x2="610" y2="100" stroke="var(--hairline)"/>
+      <line x1="230" y1="92" x2="230" y2="108" stroke="var(--accent)"/>
+      <line x1="430" y1="92" x2="430" y2="108" stroke="var(--accent)"/>
+      <text x="230" y="124" text-anchor="middle" font-size="12" fill="var(--accent)">&#945;</text>
+      <text x="430" y="124" text-anchor="middle" font-size="12" fill="var(--accent)">&#946;</text>
+
+      <text x="330" y="152" text-anchor="middle" font-size="12" fill="var(--muted)">what the returned value v is guaranteed to satisfy</text>
+
+      <rect x="60" y="162" width="170" height="52" rx="8" fill="var(--surface)" stroke="var(--warn)"/>
+      <text x="145" y="184" text-anchor="middle" font-size="12" fill="currentColor">v &#8804; &#945;</text>
+      <text x="145" y="202" text-anchor="middle" font-size="11" fill="var(--muted)">capped, not the true value</text>
+
+      <rect x="230" y="162" width="200" height="52" rx="8" fill="var(--surface)" stroke="var(--good)"/>
+      <text x="330" y="184" text-anchor="middle" font-size="12" fill="currentColor">v = eval g</text>
+      <text x="330" y="202" text-anchor="middle" font-size="11" fill="var(--muted)">exact</text>
+
+      <rect x="430" y="162" width="170" height="52" rx="8" fill="var(--surface)" stroke="var(--warn)"/>
+      <text x="515" y="184" text-anchor="middle" font-size="12" fill="currentColor">v &#8805; &#946;</text>
+      <text x="515" y="202" text-anchor="middle" font-size="11" fill="var(--muted)">cut off, not the true value</text>
+
+      <text x="330" y="234" text-anchor="middle" font-size="11" fill="var(--muted)">the root is called with &#945; = -inf and &#946; = inf, so every value falls in the middle band</text>
+    </svg>
+    <figcaption class="fig-caption">Only the middle band is exact. After the function contract slides.</figcaption>
+  </figure>
+
+  <p>The companion contract for the list function says the same thing in the shape that the recursion needs, with the clipping at <code>a</code> made explicit. <button type="button" class="slide-ref" data-slide="filliatre4:18" title="Open this slide">slide 18</button></p>
+
+<pre><code>with alpha_beta_l (a b: int) (gl: list game) : (v: int)
+  requires { -inf &lt;= a &lt; b &lt;= inf }
+  ensures  { a &lt;= v &lt;= inf }
+  ensures  { if eval_list gl &lt;= b
+             then v = max a (eval_list gl) else b &lt;= v }</code></pre>
+
+  <p>Note how much stronger this is than a bare bound. Below the ceiling the result is not merely close to the truth, it is <code>max a (eval_list gl)</code> exactly, the true value clipped from below at the incoming floor. That precision is what lets the caller reconstruct the exact value when the floor happens to be low enough, which is what happens at the root.</p>
+
+  <div class="stepper" data-title="Following the window through one call">
+    <div class="step" data-label="What the bounds mean"><p>The precondition is <code>-inf &lt;= a &lt; b &lt;= inf</code>: a genuine, non-empty window inside the range the heuristic can produce. The caller is saying that any value at or below <code>a</code> is already beaten elsewhere, and any value at or above <code>b</code> is already refuted by the opponent higher up. Both are promises about the rest of the tree, not about this subtree.</p></div>
+    <div class="step" data-label="Negate and swap"><p>The child is searched with <code>alpha_beta_g (-b) (-a) g</code>. In negamax the child reports from the opposing point of view, so our floor becomes its ceiling and our ceiling becomes its floor. The precondition transfers: from <code>-inf &lt;= a &lt; b &lt;= inf</code> it follows that <code>-inf &lt;= -b &lt; -a &lt;= inf</code>, so the recursive call is legal.</p></div>
+    <div class="step" data-label="Raise the floor"><p><code>let a = max a (- alpha_beta_g (-b) (-a) g)</code> rebinds <code>a</code> for the remainder of this list. Each child that beats the current best raises the floor for the children still to come, which is why the windows narrow as the traversal proceeds and why examining strong moves first prunes more.</p></div>
+    <div class="step" data-label="The cutoff"><p><code>if a &gt;= b then a</code> returns immediately, abandoning the rest of the list. From this line onward the returned number is only a lower bound. This single test is the entire optimisation, and it is also the entire reason the naive postcondition fails.</p></div>
+    <div class="step" data-label="A failing-high instance"><p>Take <code>a = 3</code>, <code>b = 4</code>, and a first child worth 10 to us, that is with <code>eval g = -10</code>. It is searched with window <code>(-4, -3)</code>. Since <code>-10 &lt; -4</code>, the first clause applies and the call need only return some <code>w &lt;= -4</code>. Negating, <code>-w &gt;= 4</code>, so the new <code>a</code> is at least 4, the test <code>a &gt;= b</code> fires, and we return. If the second child had been worth 100, then <code>eval_list gl = 100</code> and the returned value is nowhere near it. All the contract claims is <code>b &lt;= v</code>, and that is all a caller may use.</p></div>
+    <div class="step" data-label="A failing-low instance"><p>Take <code>a = 3</code>, <code>b = 4</code> again, with two children worth 0 and 1 to us. Each is searched with window <code>(-4, -3)</code>, each true value lies above the ceiling <code>-3</code>, so each call returns some <code>w &gt;= -3</code> and each <code>-w</code> is at most 3. The floor never moves, no cutoff fires, and the <code>Nil</code> case returns 3. Here <code>eval_list gl = 1 &lt;= b</code>, so the contract demands <code>v = max a (eval_list gl) = max 3 1 = 3</code>, which is what happened. The answer is correct and is still not the min-max value.</p></div>
+    <div class="step" data-label="Why the root is exact"><p>The entry point calls <code>alpha_beta_g (-inf) inf g</code>. The precondition holds because <code>inf</code> is positive. Every value the heuristic produces lies in <code>[-inf, inf]</code>, and a short induction over <code>eval</code> and <code>eval_list</code> carries that range to every node. So <code>a &lt;= eval g &lt;= b</code> holds at the root, the middle clause fires, and <code>v = eval g</code>. The theorem announced earlier, that alpha-beta computes the same value as min-max at the root, is the middle clause instantiated at the widest possible window.</p></div>
+  </div>
+
+  <div class="callout key">
+    <span class="co-tag">Key idea</span>
+    <p>The exactness clause is stated on a <em>closed</em> interval, <code>a &lt;= eval g &lt;= b -&gt; v = eval g</code>, and that is not cosmetic. Written with strict inequalities it would not cover a position whose value happens to be exactly <code>-inf</code> or <code>inf</code>, and the root call, which uses precisely those two bounds, would fall outside the exact case. The top-level postcondition <code>v = eval g</code> would then be unprovable even though the algorithm is correct. <button type="button" class="slide-ref" data-slide="filliatre4:11" title="Open this slide">slide 11</button></p>
+  </div>
+
+  <div class="quiz">
+    <script type="application/json">
+    {"type":"mc","q":"Why can the recursive function alpha_beta_g not be given the postcondition ensures { v = eval g }?","options":["Because eval is a logical function and cannot appear in a postcondition of a program function","Because the cutoff returns before the remaining children have been examined, so the result is only a bound when the true value lies outside the window","Because integer overflow could make the equality fail for large heuristic values","Because eval is defined by mutual recursion and Why3 cannot unfold mutually recursive definitions"],"answer":1,
+     "explain":"When a >= b fires, the rest of the list is never traversed, so the function cannot know the maximum over subtrees it did not visit. Symmetrically, when all children fall below a, the returned value is a itself. Exactness is only claimed inside the window, and that restriction is exactly what pays for the pruning."}
+    </script>
+  </div>
+
+  <div class="quiz">
+    <script type="application/json">
+    {"type":"mc","q":"Given the three-clause contract, how does the top-level postcondition v = eval g follow?","options":["From a separate lemma function proved by induction on the depth of the tree","From the requires clause, which already forces v = eval g","Because the root is called with a = -inf and b = inf, and every position value lies in that range, so the exactness clause applies","Because at the root no pruning can occur, since alpha and beta have not yet been updated"],"answer":2,
+     "explain":"The heuristic is declared to return a value in [-inf, inf], and that range propagates through eval and eval_list, so a <= eval g <= b holds at the root with a = -inf and b = inf. The middle clause then gives v = eval g. Pruning does occur inside the search; it simply cannot affect the value reported at the root."}
+    </script>
+  </div>
+
+  <details class="reveal">
+    <summary>Why this development needs no ghost code</summary>
+    <p>Lecture 3 introduced ghost variables and lemma functions for cases where the specification needs information the code does not carry, or where a property needs an induction that SMT solvers will not perform. Neither is required here, and the reason is instructive. The information the specification needs, namely the min-max value, is available as the logical function <code>eval</code>, itself defined as a terminating pure program in the style of that lecture, so no ghost witness has to be threaded through the code. The induction is supplied by the recursion of the algorithm itself: because the contract is stated as three implications rather than one equality, the inductive hypothesis at each recursive call is already in the exact shape the caller needs. Getting the contract right removed the need for any proof scaffolding.</p>
+  </details>
+
+  <h3 id="mkf4-extract">From a proved module to a program you can play</h3>
+
+  <p>Once the module is verified, the Why3 code is translated to OCaml automatically, with a command of the form <code>why3 extract -D ocaml64 alpha_beta.AlphaBeta</code>. The extracted search is then linked with ordinary, unverified OCaml: the rules of Othello, the generation of legal moves, the heuristic evaluation, and the user interface. The whole thing can be compiled further to JavaScript so that the game runs in a browser. <button type="button" class="slide-ref" data-slide="filliatre4:19" title="Open this slide">slide 19</button></p>
+
+  <p>This division is worth stating plainly, because it is what a verified component actually buys. What is proved is that the search returns the min-max value of the tree it was handed, under the negamax convention and the declared bound on the heuristic. What is not proved is that the tree correctly represents Othello, or that the heuristic is any good. The abstract <code>type position</code> and the <code>val</code> declarations from earlier mark that boundary exactly, and the extraction step is where the unverified side gets plugged in.</p>
+
+  <p>The same recipe scales beyond a teaching example. The Why3 site points to two larger case studies the deck names: a nontrivial subset of the algorithms of GMP, the GNU multiple precision library, verified with Why3 and then translated to C, by Guillaume Melquiond and Rapha&euml;l Rieu-Helft in 2020; and a checker for a railway information system, verified with Why3 and then translated to OCaml, by Boyer, Canva, Manighetti and March&eacute; in 2025. <button type="button" class="slide-ref" data-slide="filliatre4:20" title="Open this slide">slide 20</button></p>
+
+  <h3 id="mkf4-close">What deductive verification consists of</h3>
+
+  <p>The deck closes by widening the view from this one example to the enterprise behind it. Deductive verification means <em>designing</em> several things at once: programming languages, with their semantics and type systems; specification languages, with their logic; and libraries, both the programming libraries a user writes code against and the logical theories a user writes specifications against. <button type="button" class="slide-ref" data-slide="filliatre4:22" title="Open this slide">slide 22</button> It also means <em>implementing</em> compilers, logical transformations, and, in the deck's own phrase, a lot of plumbing. <button type="button" class="slide-ref" data-slide="filliatre4:23" title="Open this slide">slide 23</button> The last slide of the series is a single line: it is a lot of fun. <button type="button" class="slide-ref" data-slide="filliatre4:24" title="Open this slide">slide 24</button></p>
+
+  <p>The alpha-beta example makes that list concrete. The type system and effect discipline decided that <code>eval</code> could be promoted to a logical symbol. The specification language allowed the three-clause contract to be written at all, which is where the real work of this lecture happened. The logical theories supplied lists, integers and <code>max</code>. The verification condition generator turned the fifteen lines of code into proof obligations, transformations passed them to SMT solvers, and the compiler carried the result out to OCaml and then to JavaScript. A short program, and most of the toolchain used at once.</p>
+
+  <div class="callout key">
+    <span class="co-tag">Key idea</span>
+    <p>The lesson of this lecture is not about games. It is that the hard part of verifying an optimised algorithm is usually finding the statement that the optimisation actually satisfies. The specification you first write down, here "alpha-beta returns the min-max value", tends to be the property of the unoptimised version. The optimised version satisfies something weaker, and the weakening is precisely the licence to skip work. Once that weaker statement is written correctly, and once it is strong enough to instantiate back to the original claim at the top-level call, the proof itself is routine.</p>
+  </div>
+</section>

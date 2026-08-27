@@ -1,0 +1,391 @@
+<section class="lecture" id="sec-mk-11" data-num="11" data-day="mk-test" data-title="Scenario-Based Testing" data-lecturer="Alexander Pretschner">
+  <header class="lec-head">
+    <div class="lec-num">11</div>
+    <div>
+      <h2 id="mk11-top">Scenario-Based Testing of Autonomous Driving Systems</h2>
+      <p class="lec-meta">Lecture by Alexander Pretschner (Technical University of Munich, fortiss, bidt). Companion slides: <em>Scenario-based Testing</em>, the second of two decks.</p>
+    </div>
+  </header>
+
+  <p class="lead">The first deck built up defect-based testing for ordinary software. This one asks what changes when the system under test is a car. Three things change at once: the system is a controller in a closed loop with a physical world, so an input is not something you can fix and replay; the components that interpret the world are learned, so there is no specification to test against; and the input space is enormous while the number of runs you can afford is small. The storyline has two halves: generate good system test cases from a catalogue of scenario types, by turning each type into a search problem over its parameters, and then ask where the catalogue comes from, by deriving parameterized scenarios from recorded drives. <button type="button" class="slide-ref" data-slide="pretschner2:1" title="Open this slide">slide 1</button></p>
+
+  <h3 id="mk11-loop">A closed loop, not a program you can replay <button type="button" class="slide-ref" data-slide="pretschner2:2" title="Open this slide">slides 2-5</button></h3>
+
+  <p>The starting picture is the standard control loop. The controller receives the difference between a desired value r(t) and the sensor measurement of the actual value, that is the error e(t), and computes an actuator value u(t) from it. The plant, meaning the physical part, maps u(t) to the actual value y(t) while an environmental disturbance d(t) also acts on it. The sensor observes y(t) and feeds its measurement back. In the deck's air conditioning example, the error is the difference between desired and measured room temperature, and the actuator value is how far the valve for the cooling liquid opens. The failure model behind this view is from Holling and Pretschner, <em>Failure Models for Testing Continuous Controllers</em> (2016).</p>
+
+  <figure class="fig">
+    <svg viewBox="0 0 700 230" role="img" aria-label="Block diagram of a closed control loop: desired value and measured value are compared to give the error, the controller produces an actuator value, the plant produces the actual output under a disturbance, and the sensor feeds a measurement back">
+      <defs>
+        <marker id="mk11-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+          <path d="M0,0 L10,5 L0,10 z" fill="currentColor" stroke="none"/>
+        </marker>
+      </defs>
+      <g fill="none" stroke="currentColor" stroke-width="1.6" marker-end="url(#mk11-arrow)">
+        <line x1="22" y1="80" x2="66" y2="80"/>
+        <line x1="108" y1="80" x2="134" y2="80"/>
+        <line x1="264" y1="80" x2="324" y2="80"/>
+        <line x1="454" y1="80" x2="616" y2="80"/>
+        <line x1="392" y1="20" x2="392" y2="48"/>
+        <path d="M540,80 L540,174 L456,174"/>
+        <path d="M326,174 L88,174 L88,100"/>
+      </g>
+      <circle cx="88" cy="80" r="18" fill="var(--surface)" stroke="currentColor" stroke-width="1.6"/>
+      <circle cx="540" cy="80" r="3.5" fill="currentColor"/>
+      <g fill="var(--surface)" stroke="currentColor" stroke-width="1.6">
+        <rect x="134" y="52" width="130" height="56" rx="8"/>
+        <rect x="324" y="52" width="130" height="56" rx="8"/>
+        <rect x="326" y="148" width="130" height="52" rx="8"/>
+      </g>
+      <g fill="currentColor" font-size="14" text-anchor="middle">
+        <text x="199" y="86">Controller</text>
+        <text x="389" y="86">Plant</text>
+        <text x="391" y="180">Sensor</text>
+      </g>
+      <g fill="currentColor" font-size="12">
+        <text x="24" y="70">r(t) desired</text>
+        <text x="112" y="70">e(t) error</text>
+        <text x="272" y="70">u(t) actuator</text>
+        <text x="466" y="70">y(t) actual</text>
+        <text x="400" y="30">d(t) disturbance</text>
+        <text x="150" y="166">measured y(t)</text>
+        <text x="66" y="64">+</text>
+        <text x="100" y="108">&minus;</text>
+      </g>
+    </svg>
+    <figcaption class="fig-caption">The loop a driving function lives in. What the sensors see next depends on what the controller did just before, so an input is never fixed independently of the system under test. After slide 2.</figcaption>
+  </figure>
+
+  <p>Because physics is in the loop, the tests run in a simulation environment. The deck orders the X-in-the-loop setups by how much of the real system takes part: model-in-the-loop runs a model of the system, software-in-the-loop the actual software, hardware-in-the-loop adds real parts such as the mechanical steering, and vehicle-in-the-loop puts the whole car in. The point of the ladder is to raise realism step by step.</p>
+
+  <h3 id="mk11-untestable">Testing a system that has no specification <button type="button" class="slide-ref" data-slide="pretschner2:6" title="Open this slide">slide 6</button></h3>
+
+  <p>The next problem is the oracle. For components built by machine learning there is, by the method used to build them, no specification: training data plays the role that a requirements document plays elsewhere. The specification has to be reverse engineered, and the deck reverse engineers it from behaviour in traffic scenarios: no crash, and follow the traffic rules including the informal ones. Everything that follows makes those two informal sentences precise enough for a machine to search for counterexamples.</p>
+
+  <h3 id="mk11-noreuse">Why there are no regression tests for closed-loop systems <button type="button" class="slide-ref" data-slide="pretschner2:8" title="Open this slide">slide 8</button></h3>
+
+  <p>This is the deck's most striking claim, and it is worth taking slowly. In ordinary software a regression test is a recorded input plus an expected output. You replay it after every change, and if the output moves you know something broke. The replay works because the input is independent of the program: the program cannot influence what it is fed.</p>
+
+  <p>In a closed loop that independence disappears. Suppose the test asks whether the ego vehicle e keeps a sufficient distance to the surrounding cars while it changes lane. Version e1 performs the lane change and violates the distance to car c1, so the test fails and the system is corrected. Version e2 is run on the same recorded scenario and does not even change lane there. The test now passes, but for the wrong reason: it no longer exercises the behaviour it was written for. The recorded trajectories of the other cars were reactions to what e1 did, so replaying them against e2 produces a situation that is consistent only by accident.</p>
+
+  <div class="callout warn">
+    <span class="co-tag">Careful</span>
+    <p>One concrete test case can be good for one system and bad for another, so re-use of concrete scenarios is essentially random. That is the conclusion of Hauer, Pretschner and Holzmüller, <em>Re-Using Concrete Test Scenarios Generally Is a Bad Idea</em> (IEEE IV 2020). Test cases therefore have to be generated again for every new version of a subsystem.</p>
+  </div>
+
+  <div class="quiz">
+    <script type="application/json">
+    {"type":"mc","q":"Why does a recorded concrete driving scenario make a poor regression test for the next version of the ego software?","options":["Recorded data files are too large to keep in a CI system","The recorded trajectories of the other cars were reactions to the old ego behaviour, so a changed ego may face a different situation and the test may stop exercising anything","Simulators are nondeterministic, so no test can ever be repeated","The safe operating envelope is redefined with every release"],"answer":1,
+     "explain":"The loop is the reason. The input is not independent of the system under test, so replaying it against a modified ego can silently turn a sharp test into an empty one, as in the lane change example where the corrected version no longer changes lane at all."}
+    </script>
+  </div>
+
+  <h3 id="mk11-good">What counts as a good test case here <button type="button" class="slide-ref" data-slide="pretschner2:9" title="Open this slide">slides 9-12</button></h3>
+
+  <p>A test is an input plus an expected output plus the infrastructure conditions needed to run it, and the expected output is the part that needs a specification. The criterion from the first lecture stays: a good test case reveals potential faulty behaviour with good cost effectiveness. Translated with the notion of a safe operating envelope, which the deck aligns to Koopman's <em>Challenges in Autonomous Vehicle Testing and Validation</em> (2016), a good test scenario is one in which a correct system approaches the limits of the envelope and a faulty system violates them. A scenario in which every plausible system stays comfortably inside teaches nothing, and neither does one in which every system crashes.</p>
+
+  <p>Why not sample at random? Testing usually partitions the input domain and samples from each block, and depending on how failing inputs are distributed, random testing does better, worse or the same. The value of partitioning lies entirely in choosing the blocks in a risk-based manner, from a defect hypothesis together with harm and likelihood. Scenario types are those blocks. They are chosen not because a defect is suspected in each of them, but because they occur frequently in traffic, which is a risk argument; the extreme instances inside a block, which the search will hunt for, are limit tests and therefore defect-based. Keeping the blocks explicit also serves the traceability that regulation demands.</p>
+
+  <h3 id="mk11-scenarios">Scenario types, operational design domains and logical scenarios <button type="button" class="slide-ref" data-slide="pretschner2:13" title="Open this slide">slides 13-14</button></h3>
+
+  <p>The deck gives the small pictures of traffic situations a formal reading. Env is the environment, a function from time to the (x, y) positions of each of the n non-player characters, meaning the other vehicles and the people around the car. Bhv is the ego vehicle's own behaviour over time. A functionality such as lane following is defined only for some environments; that subset is the operational design domain, and it gives rise to a desired target behaviour.</p>
+
+  <div class="formula">
+    Env : &#8477; &rarr; (&#8477; &times; &#8477;)<sup>n</sup> &nbsp;&nbsp; Bhv : &#8477; &rarr; &#8477; &times; &#8477; &nbsp;&nbsp; ODD &sube; Env &nbsp;&nbsp; Trg &sube; Bhv
+  </div>
+
+  <div class="callout def">
+    <span class="co-tag">Definition</span>
+    <p>A <strong>logical scenario</strong>, also called a specification scenario, is the specification of a function ODD &rarr; Trg, including the ranges of all possible parameters in the ODD. <strong>Scenario-based testing</strong> then means, first, to partition Env into several ODDs, and second, to partition the ODD of a given driving function and to search inside each block for the limit values that produce a crash or come close to one. The terminology follows Bagschik, <em>Szenarien für Entwicklung, Absicherung und Test von automatisierten Fahrzeugen</em> (2017).</p>
+  </div>
+
+  <div class="quiz">
+    <script type="application/json">
+    {"type":"fill","q":"What is the name of the set of environments for which a given driving function is defined, and whose parameter ranges become the search space?","accept":["odd","operational design domain","the operational design domain"],
+     "explain":"The operational design domain, ODD, is a subset of Env. A logical scenario specifies a function from the ODD to the target behaviour, together with the ranges of all parameters in that ODD."}
+    </script>
+  </div>
+
+  <h3 id="mk11-search">The search formulation <button type="button" class="slide-ref" data-slide="pretschner2:15" title="Open this slide">slides 15-17</button></h3>
+
+  <p>Once a scenario type is written down with parameter ranges, a concrete test case is a point in a box of numbers. The running example is a lane change on a three lane road, a simplified ten dimensional space of test cases. Two things are true of that space: not every point in it is a test case of the desired form, because a random parameter vector may produce a run in which nobody changes lane, and not every point of the desired form is a good test case, because most of them are harmless.</p>
+
+  <figure class="fig">
+    <svg viewBox="0 0 700 250" role="img" aria-label="A three lane road. The ego car moves from the right lane onto the middle lane while another car moves onto the middle lane from the left lane, ahead of a third car. Speeds, the initial longitudinal gap and the resulting distance are marked as parameters">
+      <defs>
+        <marker id="mk11-arrow2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" fill="currentColor" stroke="none"/>
+        </marker>
+      </defs>
+      <g stroke="var(--hairline)" stroke-width="2" fill="none">
+        <line x1="20" y1="60" x2="680" y2="60"/>
+        <line x1="20" y1="195" x2="680" y2="195"/>
+      </g>
+      <g stroke="var(--hairline)" stroke-width="1.4" stroke-dasharray="14 12" fill="none">
+        <line x1="20" y1="105" x2="680" y2="105"/>
+        <line x1="20" y1="150" x2="680" y2="150"/>
+      </g>
+      <g fill="none" stroke="var(--muted)" stroke-width="1.4" stroke-dasharray="5 4">
+        <rect x="80" y="160" width="54" height="26" rx="5"/>
+        <rect x="330" y="70" width="54" height="26" rx="5"/>
+      </g>
+      <g fill="var(--surface)" stroke="var(--accent)" stroke-width="2">
+        <rect x="230" y="115" width="54" height="26" rx="5"/>
+        <rect x="430" y="115" width="54" height="26" rx="5"/>
+      </g>
+      <rect x="580" y="115" width="54" height="26" rx="5" fill="var(--surface)" stroke="currentColor" stroke-width="2"/>
+      <g fill="none" stroke="var(--accent)" stroke-width="1.8" marker-end="url(#mk11-arrow2)">
+        <path d="M136,168 C170,166 196,142 224,133"/>
+        <path d="M386,92 C404,100 406,116 424,124"/>
+      </g>
+      <g fill="none" stroke="currentColor" stroke-width="1.2" marker-start="url(#mk11-arrow2)" marker-end="url(#mk11-arrow2)">
+        <line x1="288" y1="104" x2="426" y2="104"/>
+        <line x1="136" y1="216" x2="328" y2="216"/>
+      </g>
+      <g fill="currentColor" font-size="13" text-anchor="middle">
+        <text x="257" y="133">e</text>
+        <text x="457" y="133">c</text>
+        <text x="607" y="133">c1</text>
+        <text x="357" y="98">d(t)</text>
+        <text x="232" y="210">initial gap &Delta;x</text>
+      </g>
+      <g fill="var(--muted)" font-size="13" text-anchor="middle">
+        <text x="107" y="177">e</text>
+        <text x="357" y="87">c</text>
+      </g>
+      <g fill="currentColor" font-size="12">
+        <text x="26" y="180">v(e)</text>
+        <text x="396" y="66">v(c), a(c)</text>
+        <text x="24" y="240">Dashed outlines: starting positions. Solid: the moment the envelope is checked.</text>
+      </g>
+    </svg>
+    <figcaption class="fig-caption">A parameterized lane change. The search variables are the initial speeds, the initial longitudinal gap, the accelerations and the times at which each car starts to move onto the middle lane. The quantity the search pushes downwards is d(t), the distance that has to stay inside the safe operating envelope. Drawn after the lane change scenario of slides 15 and 25-26.</figcaption>
+  </figure>
+
+  <p>Both observations are handled by writing test generation as an optimization problem, in which good simply means optimal. For the lane change the deck states the objectives as a conjunction: a lane change of e behind c, a simultaneous lane change of c, a lane change of c behind e, and on top of these the search for an envelope violation. The first group makes sure the run really is an instance of the intended scenario type; the last one makes it a limit test. The contribution claimed here is the methodology together with a set of fitness function templates, from Hauer, Pretschner and Holzmüller, <em>Fitness Functions for Testing Automated and Autonomous Driving Systems</em> (SAFECOMP 2019). <button type="button" class="slide-ref" data-slide="pretschner2:25" title="Open this slide">slide 25</button></p>
+
+  <p>The deck shows both outcomes on one scenario. In the unsafe run the ego car is responsible for the collision because it did not brake fast enough, and the allowed braking distance is violated by 3.49 m. In the safe run it needed 0.37 m less braking distance than allowed. Both results are one signed number on the same scale, and that number is what makes a search possible at all.</p>
+
+  <div class="stepper" data-title="One iteration of search-based test generation">
+    <div class="step" data-label="Fix the scenario type"><p>Take one logical scenario from the catalogue, for instance the lane change on a three lane road. Its parameter ranges define the search space, a box of about ten dimensions here.</p></div>
+    <div class="step" data-label="Pick a candidate"><p>A point in that box is a concrete scenario: initial positions, initial speeds, accelerations and the times at which the other cars start their manoeuvres. Nothing about the ego trajectory is fixed.</p></div>
+    <div class="step" data-label="Simulate"><p>Run the system under test in the loop with that world, at whatever level of realism the setup offers. The ego trajectory comes out of the system; it is not stored in the test case.</p></div>
+    <div class="step" data-label="Score the run"><p>Evaluate the objectives on the resulting signals. One part asks whether the run really is an instance of the scenario type, for example whether both cars changed lane in the intended order. The other measures how far the run is from leaving the safe operating envelope, as a signed margin.</p></div>
+    <div class="step" data-label="Steer the search"><p>The optimizer keeps the better candidates and derives new parameter vectors from them. Because the margin is a number and not a yes or no answer, the search can see which candidate came closer and move that way.</p></div>
+    <div class="step" data-label="Stop and report"><p>Stop at a violation or when the budget runs out. A violation reveals a problem in the car. No violation after a serious search is also useful, since the tests were aimed at potential defects.</p></div>
+  </div>
+
+  <h3 id="mk11-heuristics">The optimizer, and what heuristic search does not promise</h3>
+
+  <p>The stepper says the optimizer keeps the better candidates and derives new ones from them, which leaves open what does the deriving. In the lecture it is ordinary heuristic search, and three families were named. Hill climbing is the simplest: hold one candidate, look at the values next to it, move to a neighbour that scores slightly better, and repeat until nothing nearby improves. A genetic algorithm keeps a population rather than a single point. Every candidate is executed, meaning the scenario is simulated and its robustness or its actual distance to the other car is measured, the better ones are selected, modified and re-run, and the process repeats for a number of generations fixed by the budget rather than by any stopping criterion. Simulated annealing sits between the two, occasionally accepting a worse candidate so that the search can climb out of a hollow it has fallen into.</p>
+
+  <p>What matters here is not the mechanics of the three, which are standard, but the price. None of them guarantees anything. Hill climbing returns a local optimum at best; the other two return whatever the budget allowed them to reach. There is no statement of the form: after this many simulations, no envelope violation exists in this scenario type. This was put squarely on the debit side of testing, and it compounds an existing debt. Testing was already incomplete because it samples the input space, and now the sampling itself is steered by a procedure that promises nothing about what it did not visit. There is a practical ceiling too: the dimensionality of the search space has to be cut down to what university hardware can run, while an automotive company can afford larger problems.</p>
+
+  <div class="callout key">
+    <span class="co-tag">Key idea</span>
+    <p>A test case is good if it provokes a failure, and it is also good if it merely comes close to one. The near miss is not a wasted run. The safe outcome reported earlier, 0.37 m of braking distance left over, found no fault, but it did establish that the system was operating with almost nothing in reserve under the hardest conditions the search could construct. That is a statement about potential defects, which is what risk-based testing is after, rather than a statement about defects already present.</p>
+  </div>
+
+  <div class="quiz">
+    <script type="application/json">
+    {"type":"mc","q":"What does the lecture concede about the heuristic searches used to generate scenarios?","options":["They find the global optimum, but slowly","None of them guarantees anything: a local optimum is the best that can be claimed, so no run certifies that a scenario type is free of violations","They only work in software-in-the-loop setups","They need the fitness function to be differentiable"],"answer":1,
+     "explain":"Hill climbing, genetic algorithms and simulated annealing are heuristics. They return a local optimum at best, so the absence of a violation after a search is evidence that the tests were aimed well, not proof that nothing is there."}
+    </script>
+  </div>
+
+  <h3 id="mk11-fitness">Fitness function templates</h3>
+
+  <p>Turning the essence of a scenario type into an objective function is the part the deck calls non-trivial, so it offers templates. The foundation is one sentence, that system behaviour must not exceed a safety threshold, and the templates cover the shapes of constraint that scenario descriptions keep reusing.</p>
+
+  <div class="tabs">
+    <div class="tab" data-label="1: envelope"><p>Testing the safe operating envelope. The requirement is that the ego must not leave it, and the search goal is the negation: find parameters that make the ego leave it. This template carries the pass or fail verdict. <button type="button" class="slide-ref" data-slide="pretschner2:20" title="Open this slide">slide 20</button></p></div>
+    <div class="tab" data-label="2: location"><p>Qualitative goals of the form: a value at a time has to be within a certain range. Template 2a says the ego car should be in between the other cars, template 2b that another car should be in front of the ego car. These describe the situation that must arise for the run to count as an instance of the scenario type, not a failure. <button type="button" class="slide-ref" data-slide="pretschner2:21" title="Open this slide">slides 21-23</button></p></div>
+    <div class="tab" data-label="3: timing"><p>Timing constraints, for example that both cars should change onto the middle lane simultaneously. Without one, the optimizer would satisfy the location constraints in some order that has nothing to do with the intended traffic situation. <button type="button" class="slide-ref" data-slide="pretschner2:24" title="Open this slide">slide 24</button></p></div>
+    <div class="tab" data-label="Combining them"><p>Several templates apply to one scenario, so their values must be combined. A single-objective optimizer folds them into one number; a multi-objective optimizer keeps them apart, as the vector of the four goals of the lane change example. <button type="button" class="slide-ref" data-slide="pretschner2:25" title="Open this slide">slide 25</button></p></div>
+  </div>
+
+  <p>The recipe generalizes. For intersections the goal becomes a left turn of the ego before another car, combined with a search for an envelope violation in the longitudinal and the lateral direction, following Kolb, Hauer and Pretschner (ITSC 2021). Two pitfalls are named: there is at least one search problem per scenario type, so the cost depends strongly on how finely the catalogue is cut, and one separate search problem per safety criterion, since searching for a longitudinal and a lateral violation at once is called explicitly not useful. <button type="button" class="slide-ref" data-slide="pretschner2:54" title="Open this slide">slide 54</button></p>
+
+  <div class="quiz">
+    <script type="application/json">
+    {"type":"mc","q":"Why does the deck insist on a separate search problem for each safety criterion, instead of one search for a longitudinal and a lateral violation at once?","options":["Simulators cannot compute lateral distances","A single combined score lets the optimizer trade one criterion against the other, so it can end up optimising neither of them sharply","Lateral violations are not safety relevant","Multi-objective optimizers cannot handle more than one goal"],"answer":1,
+     "explain":"The rule is one search problem per scenario type and one per safety criterion. Folding two different failure criteria into one objective gives the search a direction that satisfies neither of them properly."}
+    </script>
+  </div>
+
+  <h3 id="mk11-reuse2">Revisiting re-use: three systems, three worst cases <button type="button" class="slide-ref" data-slide="pretschner2:60" title="Open this slide">slides 60-64</button></h3>
+
+  <p>The claim that re-use does not work is backed by an experiment on a real trajectory planner, an approach developed at Volvo Cars and described by Nilsson, <em>Lane Change Maneuvers for Automated Vehicles</em> (2017).</p>
+
+  <div class="algo" data-title="The planner under test">
+    <ol>
+      <li>Predict the positions of the other cars.</li>
+      <li>Determine the safety corridor, that is the safe operating envelope, using safeDistEstimation = max{&epsilon;, &tau; &middot; v}, so a fixed floor &epsilon; together with a term that grows with speed.</li>
+      <li>Compute an optimal trajectory inside that corridor by minimising a weighted cost.</li>
+    </ol>
+  </div>
+
+  <p>Three variants were tested, each time by searching for a collision with vehicle c1. System A is the baseline. System B is A with a larger required safety distance in the planner. System C is B with a reduced proportional gain of the PID controller, a change meant to make the control smoother. The search found a safety distance violation for A, because the planner did not keep enough distance. On B it found none, so the system was assumed correct. On C it found a violation again, for a completely different reason: the tracking is now too slow. A change made for comfort reintroduced a safety problem one layer below the one that had been fixed.</p>
+
+  <p>Each system produced its own worst case scenario, including the parameters of the other cars, and these three concrete scenarios were then run against all three systems. The numbers are signed margins, and a negative value means the safety distance was violated.</p>
+
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th>Scenario generated for</th><th>run on System A</th><th>run on System B</th><th>run on System C</th></tr>
+      </thead>
+      <tbody>
+        <tr><th>Scenario A</th><td><span class="pill crit">-14.001</span></td><td><span class="pill good">5.604</span></td><td><span class="pill crit">-3.065</span></td></tr>
+        <tr><th>Scenario B</th><td><span class="pill good">2.595</span></td><td><span class="pill good">2.812</span></td><td><span class="pill crit">-3.037</span></td></tr>
+        <tr><th>Scenario C</th><td><span class="pill good">20.153</span></td><td><span class="pill good">20.484</span></td><td><span class="pill crit">-4.238</span></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>Read the rows. Scenario A, the worst case found for the faulty baseline, is devastating there and still harmful on C, but on B it leaves a comfortable margin. Scenario C leaves more than 20 units of margin on A and B, so as a test for those systems it is close to worthless, even though A is known to be faulty. Worst case scenarios are system specific. <button type="button" class="slide-ref" data-slide="pretschner2:65" title="Open this slide">slide 65</button></p>
+
+  <p>Regenerating everything for every commit is too expensive for continuous integration, so the deck offers a way out based on a simple intuition: the best test for the new version will differ from the best test for the old one, but probably not by much. The best test case of the previous version therefore becomes the initial seed of the heuristic search instead of a random seed, with a reported reduction of roughly 70% in effort (Kolb and Pretschner, submitted 2024). Note what this preserves: the old test case is re-used as a starting point for a search, never as a verdict. <button type="button" class="slide-ref" data-slide="pretschner2:66" title="Open this slide">slide 66</button></p>
+
+  <h3 id="mk11-stl">Signal temporal logic as the specification language <button type="button" class="slide-ref" data-slide="pretschner2:28" title="Open this slide">slides 28-31</button></h3>
+
+  <p>Fitness function templates run into limits once requirements get richer. Comparing timed events requires stacking several templates, only specific time points can be evaluated rather than a signal as a whole, comfort and efficiency are hard to express, and actual traffic laws are hard to encode. The deck's example of a rule that resists them is the German regulation for stop signs: a driver must stop and give way; must not stop up to 10 metres in front of the sign if that would conceal it; and, if there is no stop line, must stop where the view of the other road is unobstructed.</p>
+
+  <p>Signal temporal logic (STL) is introduced as a language that can state such rules. It is a logic over time-series data with the usual operators and, or and not, plus operators that talk about time: eventually (F, written ◇), always (G, written □) and until (U), with implication derived as usual.</p>
+
+  <div class="formula">
+    φ ::= &#8868; &nbsp;|&nbsp; μ &ge; 0 &nbsp;|&nbsp; &not;φ &nbsp;|&nbsp; φ<sub>1</sub> &and; φ<sub>2</sub> &nbsp;|&nbsp; φ<sub>1</sub> U<sub>[a,b]</sub> φ<sub>2</sub><br>
+    φ<sub>1</sub> &or; φ<sub>2</sub> = &not;(&not;φ<sub>1</sub> &and; &not;φ<sub>2</sub>) &nbsp;&nbsp; ◇<sub>[a,b]</sub> φ = &#8868; U<sub>[a,b]</sub> φ &nbsp;&nbsp; □<sub>[a,b]</sub> φ = &not;◇<sub>[a,b]</sub> &not;φ &nbsp;&nbsp; φ<sub>1</sub> &rArr; φ<sub>2</sub> = &not;φ<sub>1</sub> &or; φ<sub>2</sub>
+  </div>
+
+  <p>The core of the semantics is the predicate case: a signal s at time t satisfies μ &ge; 0 when μ applied to the value of the signal at that time is greater than zero, so non-positive values indicate a violation. The formula ◇<sub>[a,b]</sub> φ holds at t when φ holds at some time in the interval [t+a, t+b], and □<sub>[a,b]</sub> φ holds at t when φ holds throughout it. The window slides with t, which the deck shows by evaluating one formula at two times on the same signal: ◇<sub>[1,3]</sub>(x &gt; 2.5) is false at t = 0 and true at t = 3. Until is the primitive the other two come from: φ<sub>1</sub> U<sub>[a,b]</sub> φ<sub>2</sub> holds at t when there is a time t' in [t+a, t+b] at which φ<sub>2</sub> holds, and φ<sub>1</sub> holds at every time from t up to t'. <button type="button" class="slide-ref" data-slide="pretschner2:32" title="Open this slide">slides 32-36</button></p>
+
+  <p>Nesting is where the expressiveness comes from. For a temperature that must rise above 50 degrees within the next 10 seconds and then stay above 50 for at least 5 seconds, the deck writes ◇<sub>[0,10]</sub>(□<sub>[0,5]</sub>(T(t) &gt; 50)). The same pattern, an eventually wrapped around an always, is what the stop sign needs.</p>
+
+  <div class="formula">
+    f<sub>1</sub> = (signAhead.type == stop) &rArr; ◇<sub>[0,2]</sub>(□<sub>[0,3]</sub>(speed == 0) &and; stoplineAhead)<br>
+    f<sub>2</sub> = (signAhead.type == stop &and; signAhead.distance &le; 10 &and; concealedByEgo) &rArr; speed &gt; 0<br>
+    f<sub>3</sub> = (signAhead.type == stop &and; &not;stoplineAhead.exists) &rArr; ◇<sub>[0,2]</sub>(□<sub>[0,3]</sub>(speed == 0) &and; intersectionAhead)<br>
+    f<sub>final</sub> = □(f<sub>1</sub> &and; f<sub>2</sub> &and; f<sub>3</sub>)
+  </div>
+
+  <p>Each legal sentence becomes one implication, and the whole rule is the always of their conjunction, so it must hold at every moment of the drive. The three second window inside f<sub>1</sub> and f<sub>3</sub> reflects the recommendation to stand still for three seconds, and f<sub>2</sub> reads: if a stop sign is closer than 10 metres and the ego would conceal it, the ego must be moving. A second example encodes the yellow light rule, that a car whose remaining braking distance is too short should cross the intersection, parameterized by the reaction time t<sub>r</sub> and the deceleration a. <button type="button" class="slide-ref" data-slide="pretschner2:37" title="Open this slide">slides 37-39</button></p>
+
+  <h3 id="mk11-robustness">Quantitative robustness, the bridge to search <button type="button" class="slide-ref" data-slide="pretschner2:40" title="Open this slide">slides 40-47</button></h3>
+
+  <p>So far STL only says whether a signal violates a formula. An optimizer needs more: it has to compare two runs and know which came closer to the boundary. That is what the robustness value provides. A formula evaluated on a signal returns a real number whose sign is the verdict and whose magnitude is the margin, for instance how close the run came to the speed limit. Of two candidates with robustness R1 &gt; R2, it is R2 that gets kept and mutated to find more critical tests.</p>
+
+  <blockquote class="anecdote">
+    <p>If you are supposed to drive 60 kilometres per hour and you drive 61, that is not that bad. It is worse if you are driving 100 in a 30 zone. We somehow want to distinguish between the different severities of violations, and this is where robustness comes into play.</p>
+    <footer>Alexander Pretschner, motivating the quantitative semantics</footer>
+  </blockquote>
+
+  <p>That is the whole argument for leaving the boolean world behind. A yes or no verdict puts both of those drivers in the same bucket, labelled violated, and discards exactly the information a search needs in order to know which way to move. The quantitative semantics keeps it. Instead of asking whether a formula holds on a trace, it asks to what extent the formula holds, and answers with a real number: the sign still carries the classical verdict, so nothing is lost, and the magnitude supplies the gradient.</p>
+
+  <div class="callout key">
+    <span class="co-tag">Key idea</span>
+    <p>Robustness is defined by recursion over the formula, and each connective becomes an arithmetic operation. The predicate contributes the raw signed quantity, negation flips the sign, conjunction takes the minimum, disjunction the maximum, always the minimum over the time window and eventually the maximum over it. This is what turns a specification into a fitness function. <button type="button" class="slide-ref" data-slide="pretschner2:41" title="Open this slide">slides 41-42</button></p>
+  </div>
+
+  <div class="formula">
+    ρ(s, t, μ &ge; 0) = μ(s(t)) &nbsp;&nbsp;&nbsp; ρ(s, t, &not;φ) = &minus;ρ(s, t, φ)<br>
+    ρ(s, t, φ<sub>1</sub> &and; φ<sub>2</sub>) = min(ρ(s, t, φ<sub>1</sub>), ρ(s, t, φ<sub>2</sub>)) &nbsp;&nbsp;&nbsp; ρ(s, t, φ<sub>1</sub> &or; φ<sub>2</sub>) = max(ρ(s, t, φ<sub>1</sub>), ρ(s, t, φ<sub>2</sub>))<br>
+    ρ(s, t, ◇<sub>[a,b]</sub> φ) = max<sub>t' &isin; [t+a, t+b]</sub> ρ(s, t', φ) &nbsp;&nbsp;&nbsp; ρ(s, t, □<sub>[a,b]</sub> φ) = min<sub>t' &isin; [t+a, t+b]</sub> ρ(s, t', φ)<br>
+    ρ(s, t, φ<sub>1</sub> &rArr; φ<sub>2</sub>) = max(&minus;ρ(s, t, φ<sub>1</sub>), ρ(s, t, φ<sub>2</sub>))
+  </div>
+
+  <p>Two remarks make this less mysterious than it looks. The first is that the base case is pure convention. Nothing in the mathematics forces μ &ge; 0 to be the satisfied side; the sign of the underlying function could have been read the other way round, and the lecture is explicit that this is a stipulation and nothing more. Once it is fixed, every other line is forced. Negation must flip the sign, because a robustness value is a signed real and negating a formula negates how well it is met. The second remark is that the minima and maxima above are the finite-trace reading of an infimum and a supremum. The general definition takes inf and sup over the time window, which matters if you treat time as dense; for the finite, sampled traces a simulation actually produces, the two coincide and you may read every rule as a plain minimum or maximum over the sample points.</p>
+
+  <details class="reveal">
+    <summary>Reading the rules, and one word of caution on until</summary>
+    <p>A conjunction is only as robust as its weakest part, which is why min is right: a run that satisfies one clause by a wide margin and another by a hair is close to failing. An always over a window is a conjunction over all its time points, so it is a minimum too, and an eventually is a disjunction over the window, so it is a maximum. Implication follows from its definition as a disjunction with a negated left side. For until, the robustness takes the best time point at which φ<sub>2</sub> becomes robustly true, limited by how robustly φ<sub>1</sub> held before it. The printed rule on the slide repeats φ<sub>2</sub> in the inner minimum, which does not match the other operators, so read that inner term as the robustness of φ<sub>1</sub>.</p>
+  </details>
+
+  <figure class="fig">
+    <svg viewBox="0 0 680 260" role="img" aria-label="Robustness plotted against time. One curve dips below the zero line to minus 3.49 and the shaded area marks the violation; a second curve stays just above zero with a minimum of plus 0.37">
+      <g stroke="var(--hairline)" stroke-width="1.4" fill="none">
+        <line x1="60" y1="24" x2="60" y2="214"/>
+        <line x1="60" y1="214" x2="650" y2="214"/>
+      </g>
+      <line x1="60" y1="120" x2="650" y2="120" stroke="currentColor" stroke-width="1.4" stroke-dasharray="6 5"/>
+      <path d="M232,120 C280,142 300,180 332,180 C372,180 402,146 430,120 Z" fill="var(--crit)" opacity="0.18"/>
+      <path d="M60,80 C140,86 192,104 232,120 C280,142 300,180 332,180 C372,180 402,146 430,120 C480,96 560,90 640,96" fill="none" stroke="var(--crit)" stroke-width="2.4"/>
+      <path d="M60,70 C160,74 244,98 332,112 C420,100 546,80 640,72" fill="none" stroke="var(--good)" stroke-width="2.2" stroke-dasharray="8 6"/>
+      <circle cx="332" cy="180" r="4" fill="var(--crit)"/>
+      <circle cx="332" cy="112" r="4" fill="var(--good)"/>
+      <g fill="currentColor" font-size="12">
+        <text x="64" y="114">ρ = 0</text>
+        <text x="342" y="196">unsafe run: &minus;3.49 m</text>
+        <text x="342" y="106">safe run: +0.37 m</text>
+        <text x="600" y="232">time</text>
+        <text x="24" y="52">ρ</text>
+        <text x="66" y="40">satisfied</text>
+        <text x="66" y="240">violated</text>
+      </g>
+    </svg>
+    <figcaption class="fig-caption">The robustness of a requirement over one simulated run. Above the dashed line the requirement holds and the value says by how much; once the curve crosses zero the requirement is violated, and the depth of the dip says how badly. The two marked values are the outcomes the deck reports for the same scenario on an unsafe and a safe system. Drawn after slides 16, 17 and 40.</figcaption>
+  </figure>
+
+  <div class="quiz">
+    <script type="application/json">
+    {"type":"fill","q":"In the quantitative semantics of STL, the robustness of a conjunction is the ... of the robustness values of its two parts.","accept":["min","minimum","the minimum","min()"],
+     "explain":"Conjunction takes the minimum and disjunction the maximum. A run is only as robust as its weakest satisfied clause, and always, being a conjunction over a time window, is therefore a minimum over that window."}
+    </script>
+  </div>
+
+  <p>The definition has an obvious limitation, and he raised it as soon as he had finished deriving it: the number it returns is anchored at a single moment in time. Whatever the formula, the recursion eventually bottoms out in one worst sample, and everything that happened around that sample is discarded. He made the point with two traces drawn against the same reference line, where the requirement is that the signal must not fall below it. The first dips once, sharply, and touches minus one. The second sits below the line for a long stretch, and its worst point is also minus one. By any engineering standard those two runs are not equally bad, but the robustness value cannot separate them: both score minus one.</p>
+
+  <p>That phenomenon is called pointwise masking, and it is the clearest of the three weaknesses the deck names, since always is a minimum and a minimum forgets duration. The other two are the loss of information once signals leave the range of interest, and input signals masking output signals. The fixes are alternative definitions: generalized mean robustness (Mehdipour, Vasile and Belta, IEEE Transactions on Automatic Control, 2025), and duration robustness with duration-severity robustness, which combine the severity and the length of a violation (Finkeldei, Wolf, Weghorn, Pretschner and Althoff, ITSC 2025).</p>
+
+  <div class="quiz">
+    <script type="application/json">
+    {"type":"mc","q":"Two runs violate the same requirement and both reach exactly the same worst value, but one stays in violation for 0.1 seconds and the other for 10 seconds. What does standard STL robustness report?","options":["A worse value for the longer violation","The same value for both, because the always operator takes a minimum over the window and ignores duration","No value at all, since the formula is violated","A worse value for the shorter violation, since it is more sudden"],"answer":1,
+     "explain":"This is pointwise masking. The minimum over the window is the same in both runs, so the two are indistinguishable, which is why the deck introduces duration and duration-severity robustness."}
+    </script>
+  </div>
+
+  <p>The summary is balanced. STL gives a formal way to specify spatio-temporal relations between continuous signals, and robustness turns those formulas into fitness functions. But there is not one notion of robustness, there are many, and the choice encodes a judgement: is violating a rule once as bad as violating it over a long period? Which measure to pick is therefore context specific. It cannot be settled up front and there is no universally correct answer, only measures that are more or less adequate to the situation being tested, so the choice has to be made and defended per requirement. The same machinery also serves to evaluate large amounts of recorded driving data and to state motion planning goals such as □(◇(reach a gas station)).</p>
+
+  <h3 id="mk11-completeness">Completeness, and completeness of what <button type="button" class="slide-ref" data-slide="pretschner2:48" title="Open this slide">slides 48-49</button></h3>
+
+  <p>Two things are now settled: tests must be regenerated per version, and given a scenario type we know how to derive good instances of it, by translating the essence of the type into an optimization problem and searching for envelope violations. The open question is whether the list of scenario types is complete.</p>
+
+  <p>The deck refuses to treat that as one question and splits it into six: completeness of the scenario types with respect to reality; of the tests with respect to one scenario type; of the scenario types with respect to recorded data, marked as a purely statistical argument, following Hauer, Schmidt, Holzmüller and Pretschner, <em>Did We Test All Scenarios for Automated and Autonomous Driving Systems?</em> (ITSC 2019); of clustered data with respect to expert-defined scenario types; of the scenario types with respect to granularity, since a coarse catalogue is complete more easily and says less; and of the data with respect to reality.</p>
+
+  <div class="callout key">
+    <span class="co-tag">Key idea</span>
+    <p>Only some of these are answerable. A statistical statement about recorded drives is a statement about the sample, not about the world: it can say how likely it is that the next drive contains a scenario type not seen before, but it cannot certify that reality holds no surprises. The last item, completeness of the data with respect to reality, has no formal answer at all.</p>
+  </div>
+
+  <p>This is where recorded drives earn their place. They are useless as concrete regression tests, as the first half of the deck argued, but they are good for building the catalogue: clustering transforms recorded drives into scenario types, and the resulting clusters are compared with the hand-crafted scenario types written by experts. A cluster with no counterpart in the catalogue is a situation the experts did not think of, and a catalogue entry with no cluster behind it is either rare or wrongly imagined. The meaning of a cluster matters as much as the count: it is usable as a scenario type only if a human can say which traffic situation it stands for, which is also what regulation requires.</p>
+
+  <h3 id="mk11-uav">Why drones are harder than cars <button type="button" class="slide-ref" data-slide="pretschner2:55" title="Open this slide">slide 55</button></h3>
+
+  <p>Everything up to this point assumed that a catalogue of scenario types exists and that the only open question is whether it is complete. For highway driving that assumption is defensible. Domain experts have agreed on a set of roughly fifty scenario types considered the relevant ones, plus a few special situations, and everyone involved has an intuitive picture of what a cut-in or a lane change is. The catalogue gives the input space a structure the search can exploit, because each type arrives with its own parameters and its own idea of what makes an instance interesting.</p>
+
+  <p>For an unmanned aerial vehicle none of that exists. Regulation is thinner, expert agreement is absent, and the honest answer to the question of what the relevant scenario types are for a drone is that nobody knows. There is empty space, and there may be a tree. The parameterization therefore has to be built one level lower, out of geometry. You generate a set of obstacles distributed in space, decide for each whether it is static, a tree, a flag pole or a building, or dynamic, another drone or a bird, and decide how many of each there are. Which of those combinations is critical is not known in advance, which is exactly why it is handed to the search. The safety property survives the move even though the catalogue does not: you may not know what minimum separation a regulator would demand of a drone, but hitting an obstacle is unambiguously something you would deem problematic, so there is still an envelope to aim at.</p>
+
+  <p>The system under test is an autopilot in the plain sense: you give it a target coordinate and it flies there with obstacle avoidance, going around whatever it detects. The results reported for PX4 are not flattering, with hundreds of severe situations found by these methods. Two observations from the drone work generalize beyond drones. The first is about combination. A drone has a small number of well-defined failure modes, and injecting them one at a time already exposes problems; combining the geometric scenario types with those failure modes pairwise multiplies the number of situations in which the object detection module is caught out. The second is about what counts as a finding. The most instructive outcome shown was not a crash. The drone was supposed to hold an altitude and pass between obstacles, and instead it dove down through a gap and climbed back up on the other side. Nothing was hit, so a crash-only oracle would have recorded a pass, yet the path is plainly questionable. That is the same argument as the safe operating envelope, one level up: the interesting verdict is usually about margin and intent, not about impact.</p>
+
+  <div class="quiz">
+    <script type="application/json">
+    {"type":"mc","q":"Why is a catalogue of scenario types harder to come by for a drone than for a car on a highway?","options":["Drone simulators cannot represent obstacles","Highway driving has an agreed catalogue of roughly fifty relevant scenario types, whereas nobody knows what the relevant types are for a drone, so obstacle geometries have to be generated instead","Drones have no safe operating envelope","Drone flight is already fully specified by regulation"],"answer":1,
+     "explain":"The agreed highway catalogue gives the search space structure. For an unmanned aerial vehicle the types are unknown, so the parameterization drops to the level of geometry: how many obstacles, placed where, and whether each is static, such as a tree or a pole, or dynamic, such as another drone or a bird."}
+    </script>
+  </div>
+
+  <h3 id="mk11-security">Generating attacks instead of accidents <button type="button" class="slide-ref" data-slide="pretschner2:56" title="Open this slide">slides 56-59</button></h3>
+
+  <p>The last example points the same generation machinery at security rather than safety, and it is worth reading in terms of what the attacker controls and which assumption breaks. The driving function is lane keeping, and its inputs are the lane marking and the steering wheel angle, both read off the vehicle bus. At least in the vehicle generation used here, the signals on that bus are neither encrypted nor signed, for the usual reasons in embedded systems, so anything on the bus can be modified. That is the assumption that breaks, and it is an assumption about the bus, not a defect in the driving function.</p>
+
+  <p>The warm-up is crude. Inject a wrong steering wheel angle and the car is steered off course, first in software-in-the-loop and then on a real car. The objection to that experiment came immediately, and the lecture raised it before the room could: an intrusion detection system that watches the physical process spots something that blatant at once. A steering wheel that appears to jump ninety degrees to the right is not a subtle event.</p>
+
+  <p>So the follow-up experiment put an intrusion detection system into the setup and asked the search for an injection the detector would not flag, by shaping the trace of the injected signal rather than by increasing its size. What makes that possible is a property of the system being attacked rather than a weakness in any particular detector. A lane keeping function is never still. Because a car never travels perfectly straight, the function issues continuous small corrections, a little to the left, a little to the right, and the detector has to accept that traffic as normal. Small malicious corrections are therefore hard to tell from ordinary ones. The attack the search settled on is to pretend the steering wheel was not moved at all: the reported angle stays constant while the wheel actually moves, so the function overcorrects and the car begins to oscillate. The point stressed in the deck is that this was found by a machine and not by a human.</p>
+
+  <p>Two caveats were attached on the spot. A person in the car eventually notices, because the car starts moving in a slow snake and a driver realises something is wrong even though the detector never fires, so the attack buys time rather than invisibility. And evaluating intrusion detection systems of this kind was described as a nightmare, because there is no agreed benchmark to evaluate them against. The strongest available claim is that this detector did not catch this generated attack, which says something about one pairing rather than measuring detector quality in general. That is the same epistemic position as the rest of the lecture: the method yields sharp, specific evidence, and declines to promise more than it has.</p>
+
+  <h3 id="mk11-discussion">Discussion and conclusions <button type="button" class="slide-ref" data-slide="pretschner2:50" title="Open this slide">slide 50</button></h3>
+
+  <p>The closing list is partly a summary and partly a set of open problems. Virtual testing is mandatory for these systems. Scenarios define spatial and temporal constraints, encoded either directly in fitness function templates or as STL formulas whose robustness is the fitness, so the quality of a test is expressed as the optimization goal itself. There is in general no re-use and no regression testing, so tests are regenerated, which is expensive, and the effort can be cut by clever seeding. Completeness of the scenario types stays open, and two topics were left out entirely: the gap between simulation and reality, and scalability.</p>
+
+  <p>One warning belongs to the search itself. Heuristic search gives no global optimum, and the difference is not academic: testing the PX4 autopilot for drones with different combinations of optimizers produced outcomes as different as crash and no crash for the same system. One algorithm cannot be trusted, and there is no best combination to fall back on either. The tool is StellaUAV, from Schmidt and Pretschner (ISSRE 2022, pages 37-48). <button type="button" class="slide-ref" data-slide="pretschner2:55" title="Open this slide">slide 55</button></p>
+
+</section>

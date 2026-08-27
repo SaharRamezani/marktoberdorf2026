@@ -1,0 +1,344 @@
+<section class="lecture" id="sec-mk-5" data-num="5" data-day="mk-chc" data-title="Constrained Horn Clauses" data-lecturer="Orna Grumberg">
+  <header class="lec-head">
+    <div class="lec-num">5</div>
+    <div>
+      <h2 id="mk5-top">Constrained Horn Clauses: Turning "Find the Invariant" into a Satisfiability Question</h2>
+      <p class="lec-meta">Lecture by Orna Grumberg (Technion). Slides: <em>Constrained Horn Clauses and their Applications</em>, lecture 1 of 3.</p>
+    </div>
+  </header>
+
+  <p class="lead">Proving that a program meets its specification almost always comes down to one hard step: finding an inductive invariant for the loops. This lecture follows that single step through sixty years. In 1967, after Floyd and Hoare, a person wrote the invariant by hand and a checker confirmed it. From the 2000s a solver finds it, because the whole verification problem can be written as a set of constrained Horn clauses, and satisfiability of that set is exactly the existence of an invariant. Today a language model can produce candidates too, but the checking half of the arrangement does not change.</p>
+
+  <h3 id="mk5-problem">The verification problem, and who supplies the invariant <span class="slide-ref">slides 3-6</span></h3>
+
+  <p>The problem statement is short. You are given a program and a formal specification, that is, a logical formula, and you must answer whether the program satisfies the specification. This question is not decidable. Floyd and Hoare, in the late 1960s, gave methods for verifying input-output specifications, and those methods remain the backbone of the field.</p>
+
+  <p>Undecidability does not make the situation hopeless. It means no single method can be automatic, complete and always terminating at the same time. The methods in this lecture give up guaranteed termination: they are automatic, and when they answer the answer is sound, but they may run forever.</p>
+
+  <p>The specification of the running example is an input-output pair: if the precondition <code>x &gt; 0</code> holds at the start, then the postcondition <code>a*b &lt; 0</code> must hold at the end. Around it the deck frames the history as one question with three answers. In 1967 a human writes the invariant, in the 2000s a solver finds it, and today a language model is one more guesser. What stays fixed is the set of proof obligations the candidate has to pass.</p>
+
+  <h3 id="mk5-floyd">Floyd's three obligations on one small program <span class="slide-ref">slides 7-8</span></h3>
+
+  <p>The program is drawn as a control flow graph with five locations:</p>
+
+  <div class="algo" data-title="The running example, as a control flow graph">
+    <ol>
+      <li>&#8467;<sub>0</sub>: entry</li>
+      <li>&#8467;<sub>1</sub>: a := 0 ; b := 0</li>
+      <li>&#8467;<sub>2</sub>: a &lt; x ?   (loop head; true goes to &#8467;<sub>3</sub>, false goes to &#8467;<sub>4</sub>)</li>
+      <li>&#8467;<sub>3</sub>: a := a+1 ; b := b&minus;1   (then back to &#8467;<sub>2</sub>)</li>
+      <li>&#8467;<sub>4</sub>: return(a*b)</li>
+    </ol>
+  </div>
+
+  <p>Floyd's method asks you to place an assertion <em>Inv</em> at the loop head &#8467;<sub>2</sub>, and then to discharge three obligations. Written with the primed variables standing for the values after the loop body, they are:</p>
+
+  <div class="formula">
+    Initiation: &nbsp; Pre &and; (a=0 &and; b=0) &nbsp;&rarr;&nbsp; Inv(x, 0, 0)<br>
+    Consecution: &nbsp; Inv(x, a, b) &and; a &lt; x &and; a&prime; = a+1 &and; b&prime; = b&minus;1 &nbsp;&rarr;&nbsp; Inv(x, a&prime;, b&prime;)<br>
+    Safety: &nbsp; Inv &and; &not;(a &lt; x) &nbsp;&rarr;&nbsp; Post
+  </div>
+
+  <p>If all three are valid, the program satisfies the specification, written as the pair &#12296;Pre, Post&#12297;, and <em>Inv</em> is an inductive invariant: it holds whenever execution reaches &#8467;<sub>2</sub>. Initiation says the invariant is true on first arrival at the loop head, consecution says one pass through the body cannot break it, and safety says that whatever the invariant still allows on exit is enough to imply the postcondition.</p>
+
+  <div class="callout def">
+    <p><span class="co-tag">Definition</span> <strong>Inductive invariant.</strong> An assertion attached to a program location that is implied by the initial condition, is preserved by every transition back to that location, and is strong enough to imply the property you want. The three conditions are checked without ever running the program, which is why the check is finite even though the set of executions is not.</p>
+  </div>
+
+  <h3 id="mk5-hard">Why finding the invariant is hard <span class="slide-ref">slides 9-10</span></h3>
+
+  <p>The deck now tries the obvious candidate, <code>a+b = 0</code>. It looks right: the loop increments <code>a</code> and decrements <code>b</code> in lockstep from <code>a = b = 0</code>, so their sum stays zero, and initiation and consecution both go through.</p>
+
+  <p>The answer on the slide is no, and the reason is the safety obligation. That obligation quantifies over every state satisfying <em>Inv</em>, not only over the states the program can reach, and <code>a+b = 0</code> has forgotten everything about <code>x</code>. Take <code>x = &minus;5</code> with <code>a = b = 0</code>. The guard <code>a &lt; x</code> is false, so this state satisfies <em>Inv</em> &and; &not;(a &lt; x), and yet <code>a*b = 0</code>, which is not <code>&lt; 0</code>. The safety check fails.</p>
+
+  <p>A correct invariant has to carry the precondition forward with it:</p>
+
+  <div class="formula"><strong>x &gt; 0 &and; a + b = 0</strong></div>
+
+  <p>Now the safety check works. On exit we know <code>a &ge; x</code> and <code>x &gt; 0</code>, so <code>a &gt; 0</code>; from <code>a + b = 0</code> we get <code>b = &minus;a &lt; 0</code>; therefore <code>a*b &lt; 0</code>. The lesson the deck draws is blunt: finding the invariant is hard. The obvious candidate was too weak by one conjunct, and nothing in the program text points at the missing piece.</p>
+
+  <div class="quiz">
+    <script type="application/json">
+    {"type":"mc","q":"Why is a+b=0 rejected as an inductive invariant for this program?","options":["It is not preserved by the loop body, because a grows and b shrinks","It fails initiation, since a and b do not start at zero","It is preserved and holds initially, but it is too weak to imply the postcondition on loop exit","It mentions variables that do not appear in the postcondition"],"answer":2,"explain":"Initiation and consecution both hold. Safety fails: the state x = -5, a = 0, b = 0 satisfies a+b=0 and falsifies the guard, yet a*b = 0 is not less than zero. The invariant has to remember x > 0 as well."}
+    </script>
+  </div>
+
+  <h3 id="mk5-automate">Two ways to make it automatic <span class="slide-ref">slides 11-13</span></h3>
+
+  <p>If a human should not have to supply the invariant, the machine must. The deck lays out two strategies for that.</p>
+
+  <div class="tabs">
+    <div class="tab" data-label="Restrict until decidable">
+      <p><strong>Model checking</strong>, due to Clarke, Emerson and Sifakis in the early 1980s, takes a finite-state model together with a temporal-logic property and answers yes, or no with a counterexample. The procedure is fully automatic and it always terminates, because the state space it explores is finite. The price is in the first word: the model has to be finite state, and programs with integer variables, heaps and recursion are not.</p>
+    </div>
+    <div class="tab" data-label="Keep the program, call a solver">
+      <p>The second strategy keeps the program as it is and represents both the program and the specification symbolically, as logical formulas. Verification is then reduced to a single question: is this formula satisfiable? Very strong solvers answer that question. The deck traces the line SAT, then SMT, then CHCs. At the last step the invariant itself becomes the unknown that the solver is asked to find, rather than an input the user has to provide.</p>
+    </div>
+  </div>
+
+  <p>The second route is what the rest of the lecture develops. Structurally it splits the verifier into two independent pieces. An <strong>encoder</strong> knows the programming language and turns the program plus the specification into a set of constrained Horn clauses. A <strong>CHC solver</strong> knows nothing about programs and only decides satisfiability of clause sets. Satisfiable means safe, unsatisfiable means buggy. <span class="slide-ref">slide 14</span></p>
+
+  <figure class="fig">
+    <svg viewBox="0 0 720 220" role="img" aria-label="Program and specification enter an encoder, which produces a set of constrained Horn clauses, which a CHC solver decides; satisfiable means safe and unsatisfiable means buggy">
+      <defs>
+        <marker id="mk5-arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" fill="var(--muted)"/>
+        </marker>
+      </defs>
+      <rect x="10" y="30" width="120" height="40" rx="9" fill="var(--surface)" stroke="var(--muted)" stroke-width="1.5"/>
+      <text x="70" y="55" text-anchor="middle" font-size="13" fill="currentColor">Program</text>
+      <rect x="10" y="100" width="120" height="40" rx="9" fill="var(--surface)" stroke="var(--muted)" stroke-width="1.5"/>
+      <text x="70" y="125" text-anchor="middle" font-size="13" fill="currentColor">Specification</text>
+
+      <path d="M130,50 C165,50 165,78 190,85" fill="none" stroke="var(--muted)" stroke-width="1.6" marker-end="url(#mk5-arr)"/>
+      <path d="M130,120 C165,120 165,92 190,86" fill="none" stroke="var(--muted)" stroke-width="1.6" marker-end="url(#mk5-arr)"/>
+
+      <rect x="198" y="58" width="104" height="56" rx="9" fill="var(--surface)" stroke="var(--accent)" stroke-width="2"/>
+      <text x="250" y="83" text-anchor="middle" font-size="13" font-weight="700" fill="currentColor">Encoder</text>
+      <text x="250" y="101" text-anchor="middle" font-size="11" fill="var(--muted)">knows the language</text>
+
+      <line x1="302" y1="86" x2="336" y2="86" stroke="var(--muted)" stroke-width="1.6" marker-end="url(#mk5-arr)"/>
+      <rect x="340" y="52" width="126" height="68" rx="9" fill="var(--surface)" stroke="var(--hairline)" stroke-width="1.5" stroke-dasharray="5 4"/>
+      <text x="403" y="76" text-anchor="middle" font-size="12.5" fill="currentColor">Set of CHCs</text>
+      <text x="403" y="95" text-anchor="middle" font-size="11" fill="var(--muted)">the invariant is</text>
+      <text x="403" y="110" text-anchor="middle" font-size="11" fill="var(--muted)">the unknown</text>
+
+      <line x1="466" y1="86" x2="500" y2="86" stroke="var(--muted)" stroke-width="1.6" marker-end="url(#mk5-arr)"/>
+      <rect x="504" y="58" width="112" height="56" rx="9" fill="var(--surface)" stroke="var(--accent)" stroke-width="2"/>
+      <text x="560" y="83" text-anchor="middle" font-size="13" font-weight="700" fill="currentColor">CHC Solver</text>
+      <text x="560" y="101" text-anchor="middle" font-size="11" fill="var(--muted)">knows no code</text>
+
+      <path d="M616,74 C640,74 640,48 654,44" fill="none" stroke="var(--good)" stroke-width="1.8" marker-end="url(#mk5-arr)"/>
+      <path d="M616,100 C640,100 640,126 654,132" fill="none" stroke="var(--crit)" stroke-width="1.8" marker-end="url(#mk5-arr)"/>
+      <rect x="612" y="22" width="98" height="38" rx="9" fill="var(--surface)" stroke="var(--good)" stroke-width="1.8"/>
+      <text x="661" y="40" text-anchor="middle" font-size="12" font-weight="700" fill="currentColor">SAT</text>
+      <text x="661" y="54" text-anchor="middle" font-size="11.5" fill="var(--muted)">Safe</text>
+      <rect x="612" y="114" width="98" height="38" rx="9" fill="var(--surface)" stroke="var(--crit)" stroke-width="1.8"/>
+      <text x="661" y="132" text-anchor="middle" font-size="12" font-weight="700" fill="currentColor">UNSAT</text>
+      <text x="661" y="146" text-anchor="middle" font-size="11.5" fill="var(--muted)">Buggy</text>
+
+      <text x="250" y="180" text-anchor="middle" font-size="12" fill="var(--muted)">Encoding</text>
+      <text x="560" y="180" text-anchor="middle" font-size="12" fill="var(--muted)">Satisfiability checking</text>
+      <line x1="198" y1="160" x2="466" y2="160" stroke="var(--hairline)" stroke-width="1"/>
+      <line x1="504" y1="160" x2="710" y2="160" stroke="var(--hairline)" stroke-width="1"/>
+    </svg>
+    <figcaption class="fig-caption">The two-stage architecture. The front end depends on the programming language, the back end does not. After the lecture's figure.</figcaption>
+  </figure>
+
+  <div class="callout warn">
+    <p><span class="co-tag">Careful</span> The polarity here is the opposite of the one used for verification conditions. When a tool sends a negated property to an SMT solver, <em>unsat</em> is the good news. With CHCs, <em>sat</em> is the good news, because a satisfying interpretation is a proof. Read the verdict against the encoding that produced it.</p>
+  </div>
+
+  <h3 id="mk5-chc">What a constrained Horn clause is <span class="slide-ref">slide 15</span></h3>
+
+  <p>A constrained Horn clause is a first order logic formula of the form</p>
+
+  <div class="formula">&forall;<em>x</em>. &nbsp; <em>B</em>(<em>x</em>) &nbsp;&rarr;&nbsp; <em>H</em>(<em>x</em>)</div>
+
+  <p>where the body and the head are restricted as follows:</p>
+
+  <div class="formula">
+    <em>B</em>(<em>x</em>) &nbsp;:=&nbsp; p<sub>1</sub>(<em>x</em><sub>1</sub>) &and; &hellip; &and; p<sub>k</sub>(<em>x</em><sub>k</sub>) &and; &phi;<br>
+    <em>H</em>(<em>x</em>) &nbsp; is either &nbsp; p<sub>k+1</sub>(<em>x</em><sub>k+1</sub>) &nbsp; or &nbsp; &phi;&prime;
+  </div>
+
+  <p>Three ingredients deserve names. The symbols p<sub>1</sub>, &hellip;, p<sub>k+1</sub> are <strong>uninterpreted predicates</strong>: they have an arity and nothing else, and giving them a meaning is precisely the solver's job. The formulas &phi; and &phi;&prime; are <strong>constraints</strong>, written in a fixed background theory such as linear integer arithmetic, so their meaning is fixed in advance. The whole clause is universally quantified over its free variables, which is why the quantifier is usually left implicit.</p>
+
+  <p>The Horn restriction is the part that matters: the body may contain any number of predicate applications, but the head contains <strong>at most one</strong>. That is what keeps a satisfying interpretation constructible rather than requiring a case split on which disjunct in the head to make true. The example on the slide is</p>
+
+  <div class="formula">&forall;x, y, z. &nbsp; p<sub>1</sub>(x, y) &and; p<sub>2</sub>(y, z) &and; z = x + y &nbsp;&rarr;&nbsp; p<sub>3</sub>(x, z)</div>
+
+  <p>Here <code>z = x + y</code> is the constraint and the three p symbols are uninterpreted.</p>
+
+  <div class="callout def">
+    <p><span class="co-tag">Definition</span> <strong>Three shapes of clause.</strong> A clause whose body has no predicate applications at all, so the body is just a constraint, is a <em>fact</em>: it asserts something unconditionally. A clause with predicates in both body and head is a <em>rule</em>. A clause whose head is a constraint &phi;&prime; rather than a predicate application is a <em>query</em>, also called a goal clause: it states an obligation that the predicates must be strong enough to discharge. Every program encoding uses all three.</p>
+  </div>
+
+  <div class="callout key">
+    <p><span class="co-tag">Key idea</span> <strong>Satisfiability of a CHC system.</strong> A set of clauses &Pi; is satisfiable if there is an <em>interpretation</em> I that assigns to every uninterpreted predicate a relation, given as a formula over the background theory, such that every clause in &Pi; becomes valid. Satisfiability is a property of the whole set, not of a single clause, because the same predicate can occur in many clauses and one interpretation must serve them all.</p>
+  </div>
+
+  <div class="quiz">
+    <script type="application/json">
+    {"type":"mc","q":"Which formula is NOT a constrained Horn clause?","options":["x > 0 and a = 0 implies p(x, a)","p(x, a) and a < x implies p(x, a+1)","p(x, a) and not (a < x) implies a < 0","p(x, a) implies q(x, a) or r(x, a)"],"answer":3,"explain":"The head may hold at most one uninterpreted predicate application. A disjunction of two predicates in the head breaks the Horn restriction. The first three are a fact, a rule and a query respectively."}
+    </script>
+  </div>
+
+  <h3 id="mk5-encode">Encoding the example program <span class="slide-ref">slides 16-17</span></h3>
+
+  <p>The encoder introduces one uninterpreted predicate per program location of interest, with the program variables as arguments. For the running example it needs two: <code>p(x, a, b)</code> for the loop head &#8467;<sub>2</sub>, and <code>q(x, a, b)</code> for the exit &#8467;<sub>4</sub>. Reading the predicate as "this state is reachable at that location" is the right intuition. The four clauses it emits are exactly the ones on the slide:</p>
+
+  <div class="formula">
+    x &gt; 0 &and; a = 0 &and; b = 0 &nbsp;&rarr;&nbsp; p(x, a, b)<br>
+    p(x, a, b) &and; a &lt; x &nbsp;&rarr;&nbsp; p(x, a+1, b&minus;1)<br>
+    p(x, a, b) &and; &not;(a &lt; x) &nbsp;&rarr;&nbsp; q(x, a, b)<br>
+    q(x, a, b) &nbsp;&rarr;&nbsp; a*b &lt; 0
+  </div>
+
+  <p>Nothing in this list required creativity. The first clause is the entry edge with the precondition and the initialisation of <code>a</code> and <code>b</code>; it is a fact, since its body is only a constraint. The second is the loop body edge taken when the guard holds, with the assignment written directly into the arguments of the head. The third is the exit edge taken when the guard fails. The fourth is the query: it carries the postcondition, and it is the only clause whose head is not a predicate application.</p>
+
+  <figure class="fig">
+    <svg viewBox="0 0 720 300" role="img" aria-label="The control flow graph on the left, with each of its four edges matched to one Horn clause on the right: entry to fact, loop body to rule, loop exit to rule, and postcondition to query">
+      <defs>
+        <marker id="mk5-arr2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" fill="var(--muted)"/>
+        </marker>
+      </defs>
+
+      <rect x="34" y="12" width="150" height="30" rx="8" fill="var(--surface)" stroke="var(--muted)" stroke-width="1.4"/>
+      <text x="109" y="32" text-anchor="middle" font-size="12" fill="currentColor">&#8467;1: a:=0 ; b:=0</text>
+      <line x1="109" y1="42" x2="109" y2="76" stroke="var(--muted)" stroke-width="1.6" marker-end="url(#mk5-arr2)"/>
+
+      <rect x="34" y="80" width="150" height="42" rx="8" fill="var(--surface)" stroke="var(--accent)" stroke-width="2"/>
+      <text x="109" y="99" text-anchor="middle" font-size="12" fill="currentColor">&#8467;2: a &lt; x ?</text>
+      <text x="109" y="115" text-anchor="middle" font-size="11.5" font-weight="700" fill="var(--accent)">p(x, a, b)</text>
+
+      <path d="M62,122 C20,150 20,190 62,196" fill="none" stroke="var(--muted)" stroke-width="1.6" marker-end="url(#mk5-arr2)"/>
+      <text x="16" y="163" text-anchor="middle" font-size="11" fill="var(--muted)">true</text>
+      <rect x="60" y="180" width="150" height="30" rx="8" fill="var(--surface)" stroke="var(--muted)" stroke-width="1.4"/>
+      <text x="135" y="200" text-anchor="middle" font-size="12" fill="currentColor">&#8467;3: a:=a+1 ; b:=b&minus;1</text>
+      <path d="M198,180 C226,150 200,126 186,110" fill="none" stroke="var(--muted)" stroke-width="1.6" marker-end="url(#mk5-arr2)"/>
+
+      <line x1="109" y1="122" x2="109" y2="242" stroke="var(--muted)" stroke-width="1.6" stroke-dasharray="4 3" marker-end="url(#mk5-arr2)"/>
+      <text x="83" y="238" text-anchor="middle" font-size="11" fill="var(--muted)">false</text>
+      <rect x="34" y="246" width="150" height="42" rx="8" fill="var(--surface)" stroke="var(--accent)" stroke-width="2"/>
+      <text x="109" y="265" text-anchor="middle" font-size="12" fill="currentColor">&#8467;4: return(a*b)</text>
+      <text x="109" y="281" text-anchor="middle" font-size="11.5" font-weight="700" fill="var(--accent)">q(x, a, b)</text>
+
+      <line x1="230" y1="18" x2="230" y2="288" stroke="var(--hairline)" stroke-width="1"/>
+
+      <rect x="252" y="14" width="452" height="46" rx="8" fill="var(--surface)" stroke="var(--good)" stroke-width="1.6"/>
+      <text x="266" y="34" font-size="12.5" fill="currentColor">x &gt; 0 &and; a = 0 &and; b = 0 &nbsp;&rarr;&nbsp; p(x, a, b)</text>
+      <text x="266" y="51" font-size="11" fill="var(--muted)">fact &#183; initiation</text>
+
+      <rect x="252" y="80" width="452" height="46" rx="8" fill="var(--surface)" stroke="var(--muted)" stroke-width="1.6"/>
+      <text x="266" y="100" font-size="12.5" fill="currentColor">p(x, a, b) &and; a &lt; x &nbsp;&rarr;&nbsp; p(x, a+1, b&minus;1)</text>
+      <text x="266" y="117" font-size="11" fill="var(--muted)">rule &#183; consecution</text>
+
+      <rect x="252" y="146" width="452" height="46" rx="8" fill="var(--surface)" stroke="var(--muted)" stroke-width="1.6"/>
+      <text x="266" y="166" font-size="12.5" fill="currentColor">p(x, a, b) &and; &not;(a &lt; x) &nbsp;&rarr;&nbsp; q(x, a, b)</text>
+      <text x="266" y="183" font-size="11" fill="var(--muted)">rule &#183; loop exit</text>
+
+      <rect x="252" y="212" width="452" height="46" rx="8" fill="var(--surface)" stroke="var(--crit)" stroke-width="1.6"/>
+      <text x="266" y="232" font-size="12.5" fill="currentColor">q(x, a, b) &nbsp;&rarr;&nbsp; a*b &lt; 0</text>
+      <text x="266" y="249" font-size="11" fill="var(--muted)">query &#183; safety, the only head that is a constraint</text>
+
+      <path d="M186,96 C216,96 222,60 248,44" fill="none" stroke="var(--hairline)" stroke-width="1.4" marker-end="url(#mk5-arr2)"/>
+      <path d="M210,192 C230,178 228,120 248,104" fill="none" stroke="var(--hairline)" stroke-width="1.4" marker-end="url(#mk5-arr2)"/>
+      <path d="M186,240 C214,232 224,186 248,172" fill="none" stroke="var(--hairline)" stroke-width="1.4" marker-end="url(#mk5-arr2)"/>
+      <path d="M186,272 C214,268 224,248 248,238" fill="none" stroke="var(--hairline)" stroke-width="1.4" marker-end="url(#mk5-arr2)"/>
+    </svg>
+    <figcaption class="fig-caption">One predicate per location, one clause per edge. Each control flow edge becomes exactly one Horn clause, and the postcondition becomes the query. After the lecture's encoding figure.</figcaption>
+  </figure>
+
+  <h3 id="mk5-meaning">Derivations, and why an interpretation is better <span class="slide-ref">slides 18-19</span></h3>
+
+  <p>There are two ways to think about what satisfiability of the clause set means. The first is operational. A <strong>derivation</strong> starts from a fact and applies rules, building ground atoms as it goes. Intuitively, the clause set &Pi; is satisfiable if all derivations satisfy the query, and dually it is unsatisfiable if there exists a derivation that leads to a query violation. A derivation reaching the query with a violated constraint is a concrete failing execution of the program, which is why UNSAT comes with a counterexample.</p>
+
+  <div class="stepper" data-title="One derivation for the example, with x = 1">
+    <div class="step" data-label="Fact"><p>Start from the first clause with <code>x = 1</code>. Its body <code>x &gt; 0 &and; a = 0 &and; b = 0</code> is true in the theory, so its head gives us the atom <code>p(1, 0, 0)</code>.</p></div>
+    <div class="step" data-label="Rule: loop body"><p>Apply the second clause to <code>p(1, 0, 0)</code>. The guard <code>0 &lt; 1</code> holds, so the head yields <code>p(1, 0+1, 0&minus;1)</code>, that is <code>p(1, 1, &minus;1)</code>. This is one pass through the loop.</p></div>
+    <div class="step" data-label="Rule: loop exit"><p>Apply the third clause to <code>p(1, 1, &minus;1)</code>. Now <code>&not;(1 &lt; 1)</code> holds, so the loop is finished and we derive <code>q(1, 1, &minus;1)</code>.</p></div>
+    <div class="step" data-label="Query check"><p>The fourth clause demands <code>a*b &lt; 0</code> for this atom. Substituting gives <code>1 * (&minus;1) &lt; 0</code>, which is true, so this derivation satisfies the query. No violation on this path.</p></div>
+    <div class="step" data-label="The problem"><p>One derivation proves nothing. There is one derivation per input value and per number of loop iterations, so there are infinitely many, and enumerating them is usually infeasible. This is why solvers do something else.</p></div>
+  </div>
+
+  <p>The second way is symbolic, and it is the one CHC solvers actually use. Instead of enumerating derivations, the solver searches for an <strong>interpretation</strong> of the uninterpreted predicates, given as formulas in the background theory, that makes every clause valid at once. For the example the slide gives such an interpretation:</p>
+
+  <div class="formula">
+    I(p)(x, a, b) &nbsp;&#8614;&nbsp; x &gt; 0 &and; a + b = 0<br>
+    I(q)(x, a, b) &nbsp;&#8614;&nbsp; a &gt; 0 &and; b &lt; 0
+  </div>
+
+  <p>Substitute these into the four clauses and check them one at a time. Clause 1 becomes <code>x &gt; 0 &and; a = 0 &and; b = 0 &rarr; x &gt; 0 &and; a+b = 0</code>, which is valid. Clause 2 becomes <code>(x &gt; 0 &and; a+b = 0) &and; a &lt; x &rarr; x &gt; 0 &and; (a+1)+(b&minus;1) = 0</code>, again valid. Clause 3 becomes <code>(x &gt; 0 &and; a+b = 0) &and; a &ge; x &rarr; a &gt; 0 &and; b &lt; 0</code>, valid because <code>a &ge; x &gt; 0</code> forces <code>a &gt; 0</code> and then <code>b = &minus;a</code>. Clause 4 becomes <code>a &gt; 0 &and; b &lt; 0 &rarr; a*b &lt; 0</code>, valid in arithmetic. All four hold, so the set is satisfiable and the program is safe.</p>
+
+  <div class="callout key">
+    <p><span class="co-tag">Key idea</span> Look at what the solver returned for <code>p</code>: the formula <code>x &gt; 0 &and; a + b = 0</code>. That is character for character the correct invariant from the earlier slide, the one that a human had to invent by hand after the obvious guess failed. I(p) <em>is</em> an inductive invariant. The solution to the satisfiability problem is not a hint about the invariant, or a certificate that one exists; it is the invariant itself.</p>
+  </div>
+
+  <p>The correspondence is worth stating precisely, because it is the reason this encoding is used at all. The clauses about <code>p</code> are, one for one, Floyd's obligations with <em>Inv</em> replaced by the unknown <code>p</code>. Validating the fact means <code>p</code> is implied by the precondition at the loop head, which is initiation. Validating the loop rule means <code>p</code> is preserved by the body, which is consecution. Validating the exit rule together with the query means <code>p</code> is strong enough to give the postcondition, which is safety. A satisfying interpretation therefore exists if and only if an inductive invariant exists, and the two are the same formula.</p>
+
+  <h3 id="mk5-same">The same three obligations, sixty years apart <span class="slide-ref">slide 20</span></h3>
+
+  <p>The deck places the 1967 form and the modern form side by side, and they line up row by row.</p>
+
+  <div class="table-wrap">
+    <table>
+      <tr><th>Obligation</th><th>1967: the user supplies Inv</th><th>Today: the solver supplies p</th></tr>
+      <tr><td>Initiation</td><td>Pre &and; init &rarr; Inv</td><td>x&gt;0 &and; a=0 &and; b=0 &rarr; p(x,a,b)</td></tr>
+      <tr><td>Consecution</td><td>Inv &and; guard &and; body &rarr; Inv&prime;</td><td>p(x,a,b) &and; a&lt;x &rarr; p(x,a+1,b&minus;1)</td></tr>
+      <tr><td>Safety</td><td>Inv &and; &not;guard &rarr; Post</td><td>p(x,a,b) &and; &not;(a&lt;x) &rarr; a*b&lt;0</td></tr>
+    </table>
+  </div>
+
+  <p>The formulas are the same formulas. The only thing that changed is who produces the invariant. In the left column <em>Inv</em> is given and the tool checks three implications. In the right column <code>p</code> is an unknown and the tool solves for it. This is also why the split into encoder and solver pays off: the encoder can be rewritten for a new language, and every improvement in the solver is inherited by all the front ends at once.</p>
+
+  <div class="quiz">
+    <script type="application/json">
+    {"type":"fill","q":"A CHC solver answers SAT and returns an interpretation for the predicate at the loop head. In program terms, that interpretation is exactly the loop's ...","accept":["inductive invariant","invariant","loop invariant","inductive loop invariant"],"explain":"The three clauses about the loop head predicate are Floyd's initiation, consecution and safety obligations with the invariant left as an unknown. Any interpretation that validates them is an inductive invariant, and it is returned as a formula in the background theory."}
+    </script>
+  </div>
+
+  <h3 id="mk5-tools">Solvers and applications <span class="slide-ref">slides 21-22</span></h3>
+
+  <p>The back end of the pipeline is a competitive area with several mature implementations. The deck names Spacer, Eldarica, Golem and FreqHorn. They all consume a set of CHCs and return SAT with an interpretation or UNSAT with a counterexample derivation, so a front end can in principle switch between them.</p>
+
+  <p>The clause set is a general interface, not a program-specific one. The applications slide shows three inputs producing the same kind of object: a program with a property, a piece of hardware with a property, and a concurrent system with a property, all encoded into CHCs and all answered as SAT or UNSAT. Any task that can be phrased as "does there exist an inductive assertion covering all behaviours" fits this shape.</p>
+
+  <h3 id="mk5-honest">What the answer guarantees, and what it does not <span class="slide-ref">slide 23</span></h3>
+
+  <p>The lecture is explicit about the limits. SAT means the system meets its specification on all behaviours, which is a much stronger statement than any amount of testing can give. UNSAT means there is a bug, and it comes with a counterexample. But both are guaranteed only relative to three things.</p>
+
+  <ul>
+    <li><span class="pill">Encoding</span> Does the model say what the code really does? A wrong encoding proves a true statement about the wrong program.</li>
+    <li><span class="pill">Specification</span> Is the property the one we actually wanted? A verified program can still be useless if Post is too weak.</li>
+    <li><span class="pill warn">Termination</span> CHC solving is undecidable, so the solver may never answer at all.</li>
+  </ul>
+
+  <p>These three gaps are, in the deck's framing, exactly where a language model can help, and exactly where it must not be trusted.</p>
+
+  <h3 id="mk5-llm">A language model as one more guesser <span class="slide-ref">slides 24-27</span></h3>
+
+  <p>The final part of the lecture puts the history back together. If the hard part is producing a candidate invariant and the easy part is checking one, then any generator can fill the generating position, including a language model. The arrangement is a loop: a generator proposes a candidate, a checker tests it, and on failure the candidate together with the counterexample goes back so the generator can try again.</p>
+
+  <figure class="fig">
+    <svg viewBox="0 0 660 190" role="img" aria-label="A generator, drawn as replaceable, proposes a candidate invariant to a checker; a valid candidate becomes a proof, an invalid one is returned with a counterexample">
+      <defs>
+        <marker id="mk5-arr3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" fill="var(--muted)"/>
+        </marker>
+      </defs>
+      <rect x="16" y="40" width="150" height="56" rx="10" fill="var(--surface)" stroke="var(--hairline)" stroke-width="1.6" stroke-dasharray="5 4"/>
+      <text x="91" y="64" text-anchor="middle" font-size="13" font-weight="700" fill="currentColor">Generator</text>
+      <text x="91" y="82" text-anchor="middle" font-size="11" fill="var(--muted)">LLM, or anything else</text>
+      <text x="91" y="114" text-anchor="middle" font-size="11" fill="var(--muted)">replaceable</text>
+
+      <line x1="166" y1="58" x2="272" y2="58" stroke="var(--muted)" stroke-width="1.7" marker-end="url(#mk5-arr3)"/>
+      <text x="219" y="48" text-anchor="middle" font-size="12" fill="currentColor">candidate</text>
+
+      <rect x="276" y="30" width="150" height="76" rx="10" fill="var(--surface)" stroke="var(--accent)" stroke-width="2.4"/>
+      <text x="351" y="60" text-anchor="middle" font-size="13" font-weight="700" fill="currentColor">Checker</text>
+      <text x="351" y="78" text-anchor="middle" font-size="11" fill="var(--muted)">Floyd's three</text>
+      <text x="351" y="92" text-anchor="middle" font-size="11" fill="var(--muted)">obligations</text>
+      <text x="351" y="124" text-anchor="middle" font-size="11" fill="var(--muted)">the central building block</text>
+
+      <line x1="426" y1="56" x2="520" y2="56" stroke="var(--good)" stroke-width="1.7" marker-end="url(#mk5-arr3)"/>
+      <text x="473" y="46" text-anchor="middle" font-size="12" fill="currentColor">valid</text>
+      <rect x="524" y="36" width="112" height="40" rx="10" fill="var(--surface)" stroke="var(--good)" stroke-width="1.8"/>
+      <text x="580" y="61" text-anchor="middle" font-size="13" font-weight="700" fill="currentColor">Proof</text>
+
+      <path d="M351,106 C351,156 160,160 91,120" fill="none" stroke="var(--warn)" stroke-width="1.7" marker-end="url(#mk5-arr3)"/>
+      <text x="238" y="168" text-anchor="middle" font-size="12" fill="currentColor">not valid: failed candidate plus counterexample</text>
+    </svg>
+    <figcaption class="fig-caption">Guess and check. The generator is replaceable, the checker is not, and a rejected candidate returns the same information Floyd's obligations gave a human. After the lecture's figure.</figcaption>
+  </figure>
+
+  <p>Two points deserve emphasis. First, the feedback on failure is not new: it is the same information Floyd's checks gave a human in 1967, namely which obligation broke and on which state. Second, the checker is the part that carries the guarantee. A generator that is right most of the time is useful; a generator trusted without checking removes the point of the exercise.</p>
+
+  <p>The conclusion the deck draws is deliberately modest. This is a limited view of formal verification, invariant finding for proving program correctness, while the Floyd method and modern solvers handle far richer program structures and more complex specifications. Recent work applies language models in several ways to assist formal methods, not to replace them, and such models guarantee nothing unless their output is checked by a formal checker. The closing slide completes the three-line history: in 1967 a human writes it, in 2000 a solver finds it, and now a language model guesses it and a solver still checks it.</p>
+
+  <details class="reveal">
+    <summary>Why the Horn restriction is what makes solving possible</summary>
+    <p>Suppose heads could be disjunctions of predicate applications. Then a satisfying interpretation would have to choose, for each situation, which disjunct to make true, and those choices interact across clauses. With at most one predicate in the head, each clause reads as a lower bound on one predicate: whatever the body allows must be inside the head predicate. There is then a well defined least interpretation, the set of atoms derivable from the facts by the rules, and the whole question is whether that least interpretation satisfies the queries. Solvers do not compute it directly, since it is generally infinite, but its existence is what lets them search for an over-approximation of it that is still strong enough for the query. The invariant they return is exactly such an over-approximation.</p>
+  </details>
+</section>

@@ -1,0 +1,143 @@
+<section class="lecture" id="sec-mk-jp1" data-num="19" data-day="mk-rust" data-title="Linearity, Ownership and Borrowing" data-lecturer="Jonathan Protzenko">
+  <header class="lec-head">
+    <div class="lec-num">19</div>
+    <div>
+      <h2 id="mkj1-top">Linearity, Ownership and Borrowing</h2>
+      <p class="lec-meta">Lecture by Jonathan Protzenko (Google), on verified systems programming in Rust. Slides: <em>Linearity, Rust and Verification</em>, one deck covering both lectures of the series, with Son Ho, Guillaume Boisseau, Aymeric Fromherz and the Aeneas collaborators. Where the audio garbles a definition beyond safe repair the point has been left out rather than guessed at.</p>
+    </div>
+  </header>
+
+  <p class="lead">Protzenko opened by gathering up the previous session in three sentences. Linear types are the main incarnation of linearity in mainstream languages today, they are there for the sake of safety, and Rust is what that looks like in a language people actually ship. The concepts already on the table were ownership, the annotation distinguishing a mutable from an immutable borrow, and the invariant he asked the room to remember by name: mutable xor shared <button type="button" class="slide-ref" data-slide="protzenko:24" title="Open this slide">slide 24</button>. He then thanked Peter Mueller, whose separation logic lectures earlier in the school had reached the same discipline from the other direction. The rest of the hour makes those slogans precise, by building a model of Rust in which ownership and borrowing are not side conditions bolted onto a semantics but the state of the semantics itself.</p>
+
+  <h3 id="mkj1-linearity">Linearity, and what it buys</h3>
+
+  <p>A linear value must be used exactly once. It may not be silently duplicated and it may not be silently discarded. That single restriction is the foundation, and the payoff is memory safety with no garbage collector and no runtime. If a value is linear then at every program point it has exactly one owner, so the compiler knows statically where the last use of that owner is and can place the deallocation there. A double free is impossible because only one party is ever in a position to free. A use after free is impossible because using a value after it has been consumed is, by definition, a second use of something that had one use to give. None of this is checked at run time; it falls out of the typing discipline <button type="button" class="slide-ref" data-slide="protzenko:8" title="Open this slide">slides 8-9</button>.</p>
+
+  <h3 id="mkj1-gadgets">The gadgets that make it bearable</h3>
+
+  <p>Basic linearity, taken neat, is punishing. If reading a value consumes it, every function that so much as inspects a structure has to hand the structure back, and programs turn into plumbing. Protzenko made the point explicitly: there is plenty of syntactic and semantic gadgetry in Rust that makes linearity more tractable in practice, so that you do not suffer too much from the strong restrictions that come with basic linearity <button type="button" class="slide-ref" data-slide="protzenko:24" title="Open this slide">slide 24</button>. Borrowing is the largest of those gadgets, granting temporary access without consuming. Around it sit smaller ones: the copy and move distinction, so that small values behave as a programmer expects; re-borrowing, so a borrow can be handed on without ceremony; two-phase borrows, so a borrow can begin in one mode and end in another; and lifetime inference, so most code never mentions a lifetime.</p>
+
+  <p>None of them relaxes the underlying invariant. They only spare the programmer from writing it out, and the compiler desugars all of them away in its intermediate representations. That shaped Protzenko's tooling: his extraction tool, Charon, pulls the Rust compiler's mid-level IR out into a small calculus called LLBC <button type="button" class="slide-ref" data-slide="protzenko:26" title="Open this slide">slide 26</button>, deliberately sitting after the desugaring, because you do not want to give semantics to the syntactic sugar, you want to be as close to the truth of the Rust semantics as you can get.</p>
+
+  <h3 id="mkj1-ownership">Ownership, moves and copies</h3>
+
+  <p>Every value has a unique owner. Passing it to a function moves it; assigning it moves it, unless the type is one that may be copied <button type="button" class="slide-ref" data-slide="protzenko:21" title="Open this slide">slide 21</button>. LLBC writes both operations out as distinct syntactic forms rather than inferring them <button type="button" class="slide-ref" data-slide="protzenko:28" title="Open this slide">slide 28</button>, and Protzenko paused on the distinction, because it is not obviously worth the trouble: after a move and after a copy the information in the resulting state is the same, since whether you move an array or copy it, the same bytes end up in the same place. His answer was that the distinction unlocks optimisation. If the compiler can rely on a variable having been moved out of, reading it afterwards is undefined behaviour, and undefined behaviour is a licence to optimise more aggressively at the backend. He mentioned an RFC on exactly this which he believed was still under debate <button type="button" class="slide-ref" data-slide="protzenko:29" title="Open this slide">slide 29</button>. The distinction is therefore not only a typing artefact; it is information the type system hands down the pipeline.</p>
+
+  <h3 id="mkj1-mxs">Mutable xor shared</h3>
+
+  <p>There are two flavours of borrow, and in LLBC the type records which: a borrow is mutable if that is specified, and shared otherwise <button type="button" class="slide-ref" data-slide="protzenko:21" title="Open this slide">slide 21</button>. At any moment a value may have <strong>either</strong> exactly one mutable borrow and nothing else, <strong>or</strong> any number of shared borrows and no mutable one. Aliasing and mutability, never together.</p>
+
+  <p>That rule is what rules out data races, and the argument is short enough to state in full. A data race needs two accesses to the same location, at least one of them a write, unsynchronised. Writing requires a mutable borrow, and a mutable borrow excludes every other reference to that value, including the owner's own, so the pair of accesses cannot be constructed in the first place. The same rule rules out use after free: freeing is an exercise of ownership, and while a borrow is outstanding the ownership has been lent away, so the owner cannot free what is still borrowed. Aliasing and destruction are separated in time, and the dangling pointer never comes into existence <button type="button" class="slide-ref" data-slide="protzenko:9" title="Open this slide">slide 9</button>.</p>
+
+  <figure class="fig">
+    <svg viewBox="0 0 690 250" role="img" aria-label="Three panels side by side. The first shows a single owner box x with one arrow down to a value, labelled one owner with reads and writes. The second shows three shared reference boxes r1, r2 and r3 all pointing down at the same value, labelled any number of readers and nobody may write. The third shows one mutable reference m pointing at the value, with the owner box and another reference box drawn struck through beside it, labelled exactly one writer and the owner locked out too.">
+      <defs>
+        <marker id="mkj1-arw" markerWidth="9" markerHeight="8" refX="8" refY="4" orient="auto" markerUnits="userSpaceOnUse">
+          <path d="M0,0 L9,4 L0,8 z" fill="var(--accent)"></path>
+        </marker>
+      </defs>
+
+      <line x1="228" y1="12" x2="228" y2="212" stroke="var(--hairline)" stroke-width="1"></line>
+      <line x1="458" y1="12" x2="458" y2="212" stroke="var(--hairline)" stroke-width="1"></line>
+
+      <text x="110" y="26" text-anchor="middle" font-size="13" fill="var(--ink)">Owned</text>
+      <rect x="82" y="42" width="56" height="28" rx="8" fill="var(--surface)" stroke="var(--accent)" stroke-width="1.6"></rect>
+      <text x="110" y="61" text-anchor="middle" font-size="12.5" fill="var(--accent)">x</text>
+      <line x1="110" y1="72" x2="110" y2="106" stroke="var(--accent)" stroke-width="1.8" marker-end="url(#mkj1-arw)"></line>
+      <rect x="55" y="112" width="110" height="40" rx="10" fill="var(--accent)" fill-opacity="0.09" stroke="var(--hairline)"></rect>
+      <text x="110" y="137" text-anchor="middle" font-size="12.5" fill="var(--ink)">value</text>
+      <text x="110" y="178" text-anchor="middle" font-size="11.5" fill="var(--muted)">one owner,</text>
+      <text x="110" y="194" text-anchor="middle" font-size="11.5" fill="var(--muted)">reads and writes</text>
+
+      <text x="343" y="26" text-anchor="middle" font-size="13" fill="var(--ink)">Shared borrows</text>
+      <rect x="248" y="42" width="56" height="28" rx="8" fill="var(--surface)" stroke="var(--good)" stroke-width="1.6"></rect>
+      <text x="276" y="61" text-anchor="middle" font-size="12.5" fill="var(--good)">r1</text>
+      <rect x="315" y="42" width="56" height="28" rx="8" fill="var(--surface)" stroke="var(--good)" stroke-width="1.6"></rect>
+      <text x="343" y="61" text-anchor="middle" font-size="12.5" fill="var(--good)">r2</text>
+      <rect x="382" y="42" width="56" height="28" rx="8" fill="var(--surface)" stroke="var(--good)" stroke-width="1.6"></rect>
+      <text x="410" y="61" text-anchor="middle" font-size="12.5" fill="var(--good)">r3</text>
+      <line x1="276" y1="72" x2="326" y2="106" stroke="var(--good)" stroke-width="1.5"></line>
+      <line x1="343" y1="72" x2="343" y2="106" stroke="var(--good)" stroke-width="1.5"></line>
+      <line x1="410" y1="72" x2="360" y2="106" stroke="var(--good)" stroke-width="1.5"></line>
+      <rect x="288" y="112" width="110" height="40" rx="10" fill="var(--good)" fill-opacity="0.11" stroke="var(--hairline)"></rect>
+      <text x="343" y="137" text-anchor="middle" font-size="12.5" fill="var(--ink)">value</text>
+      <text x="343" y="178" text-anchor="middle" font-size="11.5" fill="var(--muted)">any number of readers,</text>
+      <text x="343" y="194" text-anchor="middle" font-size="11.5" fill="var(--muted)">nobody may write</text>
+
+      <text x="570" y="26" text-anchor="middle" font-size="13" fill="var(--ink)">Mutable borrow</text>
+      <rect x="475" y="42" width="56" height="28" rx="8" fill="var(--surface)" stroke="var(--hairline)" stroke-width="1.4"></rect>
+      <text x="503" y="61" text-anchor="middle" font-size="12.5" fill="var(--muted)">x</text>
+      <line x1="479" y1="68" x2="527" y2="44" stroke="var(--crit)" stroke-width="1.6"></line>
+      <rect x="542" y="42" width="56" height="28" rx="8" fill="var(--surface)" stroke="var(--crit)" stroke-width="1.8"></rect>
+      <text x="570" y="61" text-anchor="middle" font-size="12.5" fill="var(--crit)">m</text>
+      <rect x="609" y="42" width="56" height="28" rx="8" fill="var(--surface)" stroke="var(--hairline)" stroke-width="1.4"></rect>
+      <text x="637" y="61" text-anchor="middle" font-size="12.5" fill="var(--muted)">r</text>
+      <line x1="613" y1="68" x2="661" y2="44" stroke="var(--crit)" stroke-width="1.6"></line>
+      <line x1="570" y1="72" x2="570" y2="106" stroke="var(--crit)" stroke-width="1.8"></line>
+      <rect x="515" y="112" width="110" height="40" rx="10" fill="var(--crit)" fill-opacity="0.11" stroke="var(--hairline)"></rect>
+      <text x="570" y="137" text-anchor="middle" font-size="12.5" fill="var(--ink)">value</text>
+      <text x="570" y="178" text-anchor="middle" font-size="11.5" fill="var(--muted)">exactly one writer, and</text>
+      <text x="570" y="194" text-anchor="middle" font-size="11.5" fill="var(--muted)">the owner locked out too</text>
+
+      <text x="345" y="232" text-anchor="middle" font-size="12" fill="var(--muted)">the middle and right pictures never overlap: that is the whole invariant</text>
+    </svg>
+    <figcaption>Mutable xor shared. A value is in exactly one of these three states at any program point.</figcaption>
+  </figure>
+
+  <div class="callout key">
+    <p><span class="co-tag">The same idea, twice</span> In Peter Mueller's lectures on separation logic and Viper, section 5 of these notes, the currency is permission. A permission cannot be duplicated, the separating conjunction insists its two halves hold disjoint permissions, and a write needs the full permission while a read needs only a fraction, so many readers may coexist but a writer must hold the whole thing. That is mutable xor shared, stated in a program logic instead of a type system. The difference is where the work happens: in Viper the permissions are written in specifications and discharged by a verifier, while in Rust the same discipline is inferred by the compiler and costs the programmer nothing except the refusals.</p>
+  </div>
+
+  <div class="quiz">
+    <script type="application/json">
+    {"type":"fill","q":"Complete the name of Rust's central invariant: mutable ___ shared.","accept":["xor","x-or","exclusive or","exclusive-or"],"explain":"Mutable xor shared, also written as aliasing xor mutability. At any moment a value has either one mutable borrow and nothing else, or any number of shared borrows and no mutable one. Both halves being unavailable at once is what makes data races and use after free unconstructible rather than merely unlikely."}
+    </script>
+  </div>
+
+  <h3 id="mkj1-loans">Borrows and loans, written into the state</h3>
+
+  <p>The operational semantics Protzenko presented has no memory in it. No heap, no pointer type. The environment, which he wrote as a capital omega, is a map from variables to values, almost like the semantics of a functional language <button type="button" class="slide-ref" data-slide="protzenko:30" title="Open this slide">slide 30</button>. Linearity is what makes that possible, and the trick is to record <em>both ends</em> of every borrow. When something is lent out, the value at the lender is replaced by a marker saying loaned out, tagged with a fresh loan identifier, and the borrower receives a borrow value carrying the same identifier with the borrowed value underneath it. Take <code>x</code> holding 0 and borrow it mutably into <code>p</code>: afterwards the environment says <code>x</code> is loaned out under a fresh identifier <em>L</em>, and <code>p</code> is a mutable borrow of <em>L</em> holding the 0. In a C-style semantics you would have abstract addresses and would have to reconstruct the borrow relation afterwards; here who points at what is legible at every program point <button type="button" class="slide-ref" data-slide="protzenko:31" title="Open this slide">slide 31</button>, and that is the ingredient which makes these programs tractable to verify. Shared borrows work the same way, except the loan carries a <em>set</em> of identifiers which each further borrow augments <button type="button" class="slide-ref" data-slide="protzenko:32" title="Open this slide">slide 32</button>. Copies do not enter the tracking at all, which is the semantic statement of what a copy is.</p>
+
+  <h3 id="mkj1-lifetimes">Ending a borrow, and getting ownership back</h3>
+
+  <p>The sentence worth keeping about lifetimes is his own: in the Rust type checker, when the lifetime terminates, you regain the ownership of whatever was being borrowed in the first place. A lifetime is the stretch of program over which the loan stands, and its end is the moment the owner becomes whole again.</p>
+
+  <p>His semantics does this <em>lazily</em> <button type="button" class="slide-ref" data-slide="protzenko:33" title="Open this slide">slide 33</button>, keeping the exploded view and folding it back only when something forces the issue, typically an assertion. If the program asserts that <code>x</code> is 0 while <code>x</code> is still loaned out, the assertion cannot be discharged as things stand, so a reorganisation step ends the loan, moves the value back to the lender, and leaves the borrower unusable; where a chain of re-borrows has built up, the unwinding goes from the innermost outward. Both ending rules are declarative. Ending a mutable borrow needs a borrow carrying <em>L</em> and, elsewhere, the loan carrying <em>L</em>, and regains the full value provided it is not itself lent out further. Ending a shared borrow gives the last outstanding borrower the value back whole, and anyone else simply drops their identifier from the set. Protzenko admitted he used to dislike rules presented this way and wanted an algorithm instead, and said he had come round: declarative rules state what is legal, which is the truth of the system, and leave the strategy to whoever implements it <button type="button" class="slide-ref" data-slide="protzenko:45" title="Open this slide">slide 45</button>.</p>
+
+  <div class="stepper" data-title="The life of a borrow, as the environment records it">
+    <div class="step" data-label="Owned"><p><code>x</code> holds its value outright. No loan exists anywhere, and reads and writes through <code>x</code> are unrestricted.</p></div>
+    <div class="step" data-label="Borrow"><p><code>let p = &amp;mut x;</code> A fresh identifier <em>L</em> is invented. <code>x</code> becomes a mutable loan marked <em>L</em>, and <code>p</code> a mutable borrow of <em>L</em> with the value underneath. Ownership has been lent, not copied.</p></div>
+    <div class="step" data-label="Locked out"><p>While the loan stands, <code>x</code> is unusable: not read, not written, not freed. This is the half of mutable xor shared that surprises newcomers, since the owner is excluded along with everyone else.</p></div>
+    <div class="step" data-label="Something forces a fold"><p>An assertion about <code>x</code>, or a call needing <code>x</code> whole, cannot be discharged while <code>x</code> is loaned out. That is the trigger, not any syntactic notion of a scope ending.</p></div>
+    <div class="step" data-label="End the loan"><p>The innermost borrow is terminated first: its value moves back to the matching loan and the borrow becomes unusable. Repeat outward until the chain is gone.</p></div>
+    <div class="step" data-label="Owned again"><p><code>x</code> holds its value outright once more and the assertion goes through. A shared loan only shrinks its identifier set unless you were the last borrower.</p></div>
+  </div>
+
+  <h3 id="mkj1-permissive">More permissive than you would expect</h3>
+
+  <p>The reduction rules carry their soundness conditions as premises, which is the fastest way to see where Rust is stricter than expected and where it is looser. The copy rule says that copying from a place <em>P</em> produces a value and an updated environment, provided the value found at <em>P</em> is not moved out, not loaned out mutably, and not itself a mutable borrow. Each premise kills one unsoundness: copying a moved-out value reads something that no longer exists, and duplicating a mutable loan or a mutable borrow duplicates exclusive access, which is the invariant itself. What matters just as much is the condition that is <em>absent</em>. Shared borrows are not excluded, and you may copy one freely, because being copyable is exactly what shared means <button type="button" class="slide-ref" data-slide="protzenko:35" title="Open this slide">slides 35-37</button>.</p>
+
+  <p>Reading through a shared loan is the case Protzenko singled out as subtle. If a value has been lent out in a shared fashion you may still read the lender itself, which looks wrong at first, since the value is marked as loaned out and the mutable case forbids precisely this. It is sound because every outstanding borrow is shared, so nothing can mutate underneath your feet while you read. He said this one took the team a while to get right. On moves he began to say they are more restrictive than copies, corrected himself mid-sentence, and settled on slightly <em>more</em> permissive; the justification is not preserved clearly enough on the recording to reproduce, and its shape is that a move consumes the source outright, so some of the conditions protecting a copy have nothing left to protect.</p>
+
+  <p>Strictness reappears in the mutable borrow rule. You may not borrow mutably from behind a shared borrow, because following a shared reference to the value it points at and taking a mutable borrow of that would launder shared access into exclusive access; nor may you mutably borrow something already moved out, loaned out or borrowed <button type="button" class="slide-ref" data-slide="protzenko:37" title="Open this slide">slide 37</button>. The shared borrow rule has the same shape, differing only in that an existing shared loan set is augmented rather than refused. Assignment adds a condition the deck names no outer loans <button type="button" class="slide-ref" data-slide="protzenko:39" title="Open this slide">slide 39</button>: loans hidden behind an indirection in the old value are fine, since they travel with the old value, which the rule remembers rather than discards, but a loan on the outer value is not, because writing to something other borrows point into is precisely a memory error.</p>
+
+  <div class="quiz">
+    <script type="application/json">
+    {"type":"mc","q":"The copy rule refuses to copy a value that is moved out, mutably loaned, or a mutable borrow. Why is there no premise excluding shared borrows?","options":["Shared borrows are copied by a separate rule that appears later in the calculus","Because a shared borrow grants no access at all, so copying it is meaningless","Because duplicating shared access is sound: no holder of a shared borrow may write, so no number of copies can create a race","Because the Rust compiler rejects shared borrows before the semantics ever sees them"],"answer":2,"explain":"The premises exist to prevent duplicating exclusive access, and a shared borrow carries no exclusivity to duplicate: every holder may read and none may write, so any number of copies preserve mutable xor shared. Being freely copyable is what shared means, and the same reasoning is why reading through a shared loan is allowed while reading through a mutable one is not."}
+    </script>
+  </div>
+
+  <h3 id="mkj1-checker">What the borrow checker accepts, and what is actually sound</h3>
+
+  <p>Because the premises live inside the reduction rules, stepping the semantics <em>is</em> a borrow check. Protzenko put it plainly: the model is powerful enough to substitute for the Rust borrow checker, and amounts to a static analysis that walks the program and says at each point what is legal <button type="button" class="slide-ref" data-slide="protzenko:34" title="Open this slide">slide 34</button>. Whether the two verdicts agree is a separate question, and they do not. His analysis is flow sensitive, and he reported examples the Rust borrow checker rejects but the semantics can explain, including some he called tricky. So the borrow checker's acceptance is a conservative approximation of soundness: everything it accepts is sound, but soundness is the larger set, and a working Rust programmer meets the gap as a rejection that feels unfair. The gap is the price of a check that has to be fast, syntactic, and predictable enough for its refusals to be explained in an error message.</p>
+
+  <p>Two-phase borrows show the same gap from the other side, as a mismatch between how a rule is described and what it means. The official documentation describes them operationally: at every location in the mid-level IR, check whether any two-phase borrows are activated, look for conflicting live mutable borrows between the reservation point and the activation point, and use dominators to settle the question <button type="button" class="slide-ref" data-slide="protzenko:43" title="Open this slide">slide 43</button>. Protzenko's objection is that this describes how one implementation performs the check and destroys the intuition, which is simply that some borrows want to start out mutable and later become shared. In his calculus that becomes a reserved borrow obeying exactly the restrictions of a mutable borrow, plus a promotion step turning it into a shared one <button type="button" class="slide-ref" data-slide="protzenko:44" title="Open this slide">slide 44</button>. Stating rules declaratively, he argued, keeps the focus on what the system permits and leaves room for more than one implementation strategy, and all of it is powered by the strong linearity restrictions, which are what let the semantics track the borrow relation exactly with no memory model underneath.</p>
+
+  <div class="callout warn">
+    <p><span class="co-tag">The recurring question</span> This is the theme that keeps returning through the school. A permission discipline, whether it is Viper's fractional permissions or Rust's borrows, is deliberately incomplete: it accepts a decidable subset of the sound programs and refuses the rest without claiming they are wrong. Passing the check is evidence of soundness, never a characterisation of it. What Protzenko adds is that the honest way to see the difference is to have a semantics saying what soundness <em>is</em>, independently of the checker, so the two can be compared instead of conflated. He was careful not to overclaim on his own behalf: there are many ways to think about Rust <button type="button" class="slide-ref" data-slide="protzenko:46" title="Open this slide">slide 46</button>, and his point is only that this is a style you can build a verification tool on.</p>
+  </div>
+
+  <h3 id="mkj1-ahead">Where this is heading</h3>
+
+  <p>The closing minutes turned to the reason for building the model at all, which is translating borrowing Rust programs into pure functions that can be reasoned about directly. The example is a function taking a boolean and two references and returning one of them <button type="button" class="slide-ref" data-slide="protzenko:49" title="Open this slide">slide 49</button>. The caller cannot tell which one comes back; all the lifetime annotations guarantee is that the result originates from one argument or the other. Writing through the returned reference therefore has to be reflected back into whichever argument it came from, without inspecting the body of the callee, and that is what makes the program hard to give a functional meaning to. The next section picks the example up from there.</p>
+</section>

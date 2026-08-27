@@ -1,0 +1,184 @@
+<section class="lecture" id="sec-mk-jp2" data-num="20" data-day="mk-rust" data-title="Verifying Rust: Charon and Aeneas" data-lecturer="Jonathan Protzenko">
+  <header class="lec-head">
+    <div class="lec-num">20</div>
+    <div>
+      <h2 id="mkj2-top">Verifying Rust: Charon, the Low-Level Borrow Calculus, and Aeneas</h2>
+      <p class="lec-meta">Jonathan Protzenko (Google), 18 August 2026. Slides: <em>Linearity, Rust and Verification</em>, the second half of the deck that also covers the previous section. The tape is heavily garbled in places; where a name or a detail could not be recovered with confidence it is described rather than guessed at, or left out.</p>
+    </div>
+  </header>
+
+  <p class="lead">The previous section ended with linearity, ownership and borrowing treated as language design. This one turns that design into a verification story. The engineering half is getting real Rust, the kind that arrives as a crate with dependencies rather than as a single file, into a form a proof tool can read. The conceptual half is the payoff: because safe Rust forbids observable aliasing, a Rust function can be modelled as a pure function of its inputs, so verification proceeds with no heap and no separation logic.</p>
+
+  <h3 id="mkj2-pipeline">Getting real Rust out of the compiler</h3>
+
+  <p>The Rust compiler lowers a program through intermediate representations whose names, as the lecturer put it, are pleasingly unimaginative: a high-level one, then a typed high-level one, then a mid-level one <button type="button" class="slide-ref" data-slide="protzenko:26" title="Open this slide">slide 26</button>. The mid-level IR is the target worth having, because surface syntax has been elaborated away and borrow information is present. Reaching it is a great deal of engineering, and none of it is research.</p>
+
+  <p>Four difficulties came up. The compiler's internals move, so anything built against them has to be chased through releases. A real crate is not a file you can hand to the compiler: the build system decides the exact invocation, with the right options and paths, so the practical way in is to sit inside the build and intercept that invocation rather than reconstruct it. The mid-level IR is shaped for a compiler that monomorphises, whereas a verifier wants functions before specialisation with their type parameters still visible, so that one proof covers every instantiation. And it is a control flow graph, while rules and proofs are far easier over a syntax tree, so control flow has to be rebuilt on the way out <button type="button" class="slide-ref" data-slide="protzenko:26" title="Open this slide">slide 26</button>. Representation detail such as the internal encoding of constants can be discarded entirely.</p>
+
+  <div class="callout key"><p><span class="co-tag">Key idea</span> Going through the build system is not a shortcut, it is the only honest entry point. Parsing source directly means reimplementing dependency resolution, feature selection and trait resolution, and making them agree with the compiler exactly. Riding inside the build lets the compiler do that work and reads off the result.</p></div>
+
+  <p>The tool that does this is Charon. It takes the arguments you would give the compiler or the build system, drives the build, and writes out a file in LLBC, the Low-Level Borrow Calculus, as plain JSON. That deliberately boring format means an analysis can be written against LLBC without linking against the compiler. Charon also pretty-prints, and printed that way LLBC shows a program with the sugar removed: reborrows and two-phase borrows explicit, trait resolution already done, every variable declared at function entry. The stage is shared infrastructure rather than a private component: the recording names Aeneas as the main consumer, plus a Rust to C compiler and further research projects on the same output <button type="button" class="slide-ref" data-slide="protzenko:27" title="Open this slide">slide 27</button>.</p>
+
+  <div class="stepper" data-title="From a crate to something a proof assistant can read">
+    <div class="step" data-label="Start from the crate"><p>Entered the way a build is entered, with compiler or build-system arguments. The build resolves dependencies, features and targets; the tool intercepts the resulting compiler invocation.</p></div>
+    <div class="step" data-label="Take the mid-level IR"><p>The program is picked up after surface syntax has been elaborated, at the representation where borrow information is available.</p></div>
+    <div class="step" data-label="Keep it polymorphic"><p>Functions are kept generic, with type parameters intact, rather than specialised as the compiler's own back end prefers.</p></div>
+    <div class="step" data-label="Rebuild a syntax tree"><p>The control flow graph is turned back into structured control flow.</p></div>
+    <div class="step" data-label="Clean up"><p>Detail that only a code generator cares about, such as the internal encoding of constants, is dropped.</p></div>
+    <div class="step" data-label="Emit LLBC"><p>The result is JSON in the Low-Level Borrow Calculus: a small statement language with places, explicit moves and copies, and borrows annotated with their flavour.</p></div>
+    <div class="step" data-label="Hand it to a back end"><p>Aeneas reads LLBC and produces the pure functional model that goes to the proof assistant. Other back ends read the same file for other purposes.</p></div>
+  </div>
+
+  <figure class="fig">
+    <svg viewBox="0 0 660 200" role="img" aria-label="A pipeline: a Rust crate built by its build system feeds Charon, which emits LLBC, a borrow calculus in JSON; Aeneas consumes LLBC and produces a pure functional model for a proof assistant, while other back ends such as a Rust to C compiler consume the same file.">
+      <defs>
+        <marker id="mkj2-ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="var(--ink-2)"/></marker>
+        <marker id="mkj2-ah-dim" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="var(--muted)"/></marker>
+      </defs>
+      <text x="24" y="20" font-size="12" font-weight="600" fill="var(--ink)">One file format in the middle, several tools on either side</text>
+
+      <rect x="24" y="34" width="132" height="54" rx="6" fill="var(--surface)" stroke="var(--hairline)"/>
+      <text x="90" y="57" font-size="12" text-anchor="middle" fill="var(--ink)">Rust crate</text>
+      <text x="90" y="73" font-size="10" text-anchor="middle" fill="var(--muted)">built by the build system</text>
+
+      <line x1="158" y1="61" x2="182" y2="61" stroke="var(--ink-2)" stroke-width="1.5" marker-end="url(#mkj2-ah)"/>
+
+      <rect x="184" y="34" width="132" height="54" rx="6" fill="var(--surface)" stroke="var(--hairline)"/>
+      <text x="250" y="57" font-size="12" text-anchor="middle" fill="var(--ink)">Charon</text>
+      <text x="250" y="73" font-size="10" text-anchor="middle" fill="var(--muted)">rides inside the build</text>
+
+      <line x1="318" y1="61" x2="342" y2="61" stroke="var(--ink-2)" stroke-width="1.5" marker-end="url(#mkj2-ah)"/>
+
+      <rect x="344" y="34" width="132" height="54" rx="6" fill="var(--surface)" stroke="var(--accent)"/>
+      <text x="410" y="57" font-size="12" text-anchor="middle" fill="var(--ink)">LLBC</text>
+      <text x="410" y="73" font-size="10" text-anchor="middle" fill="var(--muted)">loans and borrows, no heap</text>
+
+      <line x1="478" y1="61" x2="502" y2="61" stroke="var(--ink-2)" stroke-width="1.5" marker-end="url(#mkj2-ah)"/>
+
+      <rect x="504" y="34" width="132" height="54" rx="6" fill="var(--surface)" stroke="var(--hairline)"/>
+      <text x="570" y="57" font-size="12" text-anchor="middle" fill="var(--ink)">Aeneas</text>
+      <text x="570" y="73" font-size="10" text-anchor="middle" fill="var(--muted)">functional translation</text>
+
+      <line x1="570" y1="90" x2="570" y2="124" stroke="var(--ink-2)" stroke-width="1.5" marker-end="url(#mkj2-ah)"/>
+      <rect x="504" y="128" width="132" height="52" rx="6" fill="var(--surface)" stroke="var(--hairline)"/>
+      <text x="570" y="150" font-size="12" text-anchor="middle" fill="var(--ink)">Proof assistant</text>
+      <text x="570" y="166" font-size="10" text-anchor="middle" fill="var(--muted)">pure functions only</text>
+
+      <line x1="410" y1="90" x2="410" y2="124" stroke="var(--muted)" stroke-width="1.5" stroke-dasharray="4 3" marker-end="url(#mkj2-ah-dim)"/>
+      <rect x="344" y="128" width="132" height="52" rx="6" fill="none" stroke="var(--muted)" stroke-dasharray="4 3"/>
+      <text x="410" y="150" font-size="12" text-anchor="middle" fill="var(--muted)">Other back ends</text>
+      <text x="410" y="166" font-size="10" text-anchor="middle" fill="var(--muted)">such as a Rust to C compiler</text>
+    </svg>
+    <figcaption>The file in the middle is a calculus with a semantics, not a dump of compiler internals, which is what lets several tools share one front end.</figcaption>
+  </figure>
+
+  <h3 id="mkj2-llbc">What the borrow calculus makes explicit</h3>
+
+  <div class="callout def"><p><span class="co-tag">Definition</span> <em>LLBC</em>, the Low-Level Borrow Calculus, is a statement language with a separate category of operands. It distinguishes right-hand from left-hand values, in the sense the terms have in C, and addresses memory through <em>places</em>, which are paths rooted at a variable: <code>x</code>, <code>*x</code>, <code>x.f</code>. Moves and copies are written out rather than inferred, intermediate subexpressions are lifted into named temporaries, and every local, every argument and a distinguished return variable is declared at function entry <button type="button" class="slide-ref" data-slide="protzenko:28" title="Open this slide">slide 28</button>.</p></div>
+
+  <p>The feature that matters most is that a borrow carries its flavour in the syntax: the term itself records whether it is shared or mutable. The recording is explicit that this is not decoration, and that the reason is the treatment of moves. Take the copy rule. Copying out of a place is allowed only when the value there is not moved out, not loaned out, and not mutably borrowed. Each premise is a soundness condition: copying a moved-out value reads something that no longer exists, duplicating a loan destroys the accounting that says exactly one borrow is outstanding, and duplicating a mutable borrow breaks the mutable-exclusive-or-shared discipline outright. Shared borrows are the exception and may be duplicated, since a shared borrow is by definition not unique <button type="button" class="slide-ref" data-slide="protzenko:37" title="Open this slide">slide 37</button>. Moves obey a slightly more permissive rule than copies, because moving out of a borrowed value can be sound where copying it is not.</p>
+
+  <details class="reveal"><summary>Why distinguish a move from a copy at all, if the information is the same?</summary><p>The lecturer raised this himself. Move an array or copy an array and the bits at the destination are identical, so nothing turns on the distinction informationally. His answer was about optimisation. If reading a variable after it has been moved out is undefined behaviour, a compiler can exploit that during code generation, and it can only do so if the move is recorded rather than reconstructed. He noted this has been the subject of a long-running and still contested language proposal <button type="button" class="slide-ref" data-slide="protzenko:29" title="Open this slide">slide 29</button>.</p></details>
+
+  <p>The second decision is more radical. The operational semantics has no memory, no addresses, no byte layouts and no pointer type. An environment maps variables directly to values, which makes it read almost exactly like the semantics of a functional language <button type="button" class="slide-ref" data-slide="protzenko:30" title="Open this slide">slide 30</button>. Borrowing is expressed by two special values: a <em>borrow</em>, tagged with a loan identifier and its flavour, and a <em>loan</em>, marking a value as lent out. Taking a second shared borrow from an already shared place grows the loan set by one fresh identifier rather than replacing it <button type="button" class="slide-ref" data-slide="protzenko:32" title="Open this slide">slide 32</button>.</p>
+
+  <p>What that buys is that the borrow relationship is a fact of the semantics rather than something recovered afterwards. At every program point the environment says which places are loaned out, under which identifiers, and which borrows hold them. A semantics built on addresses would first commit to a model of memory and then need an alias analysis to reconstruct the very relationship the language had already guaranteed. Here the graph of who points at what is apparent by inspection, and the analysis is flow sensitive by construction rather than a global system of constraints to be solved <button type="button" class="slide-ref" data-slide="protzenko:37" title="Open this slide">slide 37</button>. Two consequences follow: the semantics is strong enough to stand in for the borrow checker, since the soundness conditions live in the premises of the rules; and being semantic rather than tied to lifetime annotations, it accepts, and can explain, examples the real checker rejects <button type="button" class="slide-ref" data-slide="protzenko:34" title="Open this slide">slide 34</button>.</p>
+
+  <div class="quiz">
+    <script type="application/json">
+    {"type":"mc","q":"Why can the operational semantics of LLBC do without memory, addresses and a pointer type?","options":["Because Rust is compiled ahead of time, so every address is known statically","Because the environment maps variables straight to values, and loan identifiers record which value is lent to which borrow, so the borrow structure is already explicit in the state","Because the semantics only covers programs that never allocate","Because the borrow checker has already run, so the semantics may assume no borrows remain"],"answer":1,"explain":"An environment from variables to values, plus loan and borrow values carrying loan identifiers, states the aliasing relationship directly. A semantics built on addresses would have to reconstruct that relationship with an alias analysis, having first thrown it away."}
+    </script>
+  </div>
+
+  <h3 id="mkj2-declarative">Rules you may apply whenever you like</h3>
+
+  <p>Environments are deliberately kept in an exploded form, with the whole chain of loans and borrows spelled out, and are folded back into ordinary values only when something forces the issue <button type="button" class="slide-ref" data-slide="protzenko:33" title="Open this slide">slide 33</button>. A separate family of rules does the tidying. They do not fire at particular program points; they state which manipulations of an environment are legal, and an implementation applies them when convenient <button type="button" class="slide-ref" data-slide="protzenko:38" title="Open this slide">slide 38</button>. Ending a mutable borrow is allowed when the borrow is not itself lent out further: the borrow is lost and the matching loan regains the full value. Ending a shared borrow either restores full ownership, if you were the last borrower, or simply shrinks the loan set by one.</p>
+
+  <p>One rule took real effort to get right. If a place is lent out but only through shared borrows, you may still read from it. That sounds like a violation and is not: since every outstanding borrow is shared, nobody can mutate the value underneath you, so the read is sound <button type="button" class="slide-ref" data-slide="protzenko:40" title="Open this slide">slide 40</button>.</p>
+
+  <blockquote class="anecdote"><p>I used to hate declarative semantics. I wanted someone to just give me the algorithm for implementing the thing. I came round to these rules, because they encode the truth of the system: they say what is legal and what is not, and they leave the strategy to you.</p><footer>Jonathan Protzenko, paraphrased from the recording</footer></blockquote>
+
+  <h3 id="mkj2-twophase">Two-phase borrows, stated rather than computed</h3>
+
+  <p>Two-phase borrows were his worked example of why the declarative style is worth having. The official description is thoroughly operational: treat them as mutable borrows, except that at each location you check whether a two-phase borrow has been activated, look for conflicting live mutable borrows between the reservation point and the activation point, and use dominators to find those points <button type="button" class="slide-ref" data-slide="protzenko:43" title="Open this slide">slide 43</button>. His verdict was that this is correct and destroys the intuition, which is simply that a borrow should begin under the restrictions of a mutable borrow and later become shared.</p>
+
+  <p>In the calculus that is two lines. There is a third flavour, a <em>reserved</em> borrow, and the rules give it exactly the restrictions a mutable borrow has, so in particular it cannot be duplicated. A separate rule permits a reserved borrow to be promoted to a shared one <button type="button" class="slide-ref" data-slide="protzenko:44" title="Open this slide">slide 44</button>. Nothing is computed and no dominators appear; the operational description falls out as a consequence of the restrictions instead of being the definition.</p>
+
+  <h3 id="mkj2-functional">The translation that makes verification easy</h3>
+
+  <p>Since the semantics maps variables to values and never mentions memory, translating a Rust program into a pure function ought to be within reach. The example showing why it is not immediate is a function that picks one of two mutable references <button type="button" class="slide-ref" data-slide="protzenko:49" title="Open this slide">slides 49-50</button>.</p>
+
+<pre class="algo"><code>fn choose&lt;'a, T&gt;(b: bool, x: &amp;'a mut T, y: &amp;'a mut T) -&gt; &amp;'a mut T {
+    if b { x } else { y }
+}
+
+let mut x = 0;
+let mut y = 0;
+let z = choose(true, &amp;mut x, &amp;mut y);
+*z = *z + 1;
+assert!(x == 1);</code></pre>
+
+  <p>The assertion is obviously true and proving it modularly is genuinely hard. The caller may not look inside <code>choose</code>. Its interface says only that the returned reference shares a lifetime with both arguments, so the value behind it comes from <code>x</code> or from <code>y</code> without saying which, and yet the write through <code>z</code> has to be reflected back into whichever it was.</p>
+
+  <p>The resolution is to translate one Rust function into two pure functions. The forward function is the half you would write by hand. The backward function is the interesting half: it says what happens at the moment the borrow is given up, taking the final value behind the returned reference and handing back updated values for the inputs <button type="button" class="slide-ref" data-slide="protzenko:56" title="Open this slide">slides 56-57</button>.</p>
+
+<pre class="algo"><code>choose      (b : bool) (x : T) (y : T)         : T     = if b then x else y
+choose_back (b : bool) (x : T) (y : T) (z : T) : T * T = if b then (z, y) else (x, z)
+
+let z      = choose true x y in
+let z      = z + 1 in
+let (x, y) = choose_back true x y z in
+assert (x = 1)</code></pre>
+
+  <p>Read the backward function as a statement about ownership. Along the true branch the reference came from <code>x</code>, so the updated <code>z</code> becomes the new <code>x</code> and <code>y</code> is returned untouched; along the false branch the roles swap. The caller never learns which branch ran, because the pair of functions is the callee's interface and is derived once. The lecturer ran this through the tool in the last minutes of the session, with a proof assistant back end selected, and got back the forward and backward pair he had just written out by hand.</p>
+
+  <figure class="fig">
+    <svg viewBox="0 0 660 186" role="img" aria-label="One Rust function becomes two pure functions: a forward function applied when the borrow is taken, returning the value behind the reference, and a backward function applied when the borrow is given up, returning updated values for the inputs.">
+      <text x="24" y="20" font-size="12" font-weight="600" fill="var(--ink)">One borrowing function becomes two pure functions</text>
+
+      <rect x="24" y="34" width="212" height="108" rx="6" fill="var(--surface)" stroke="var(--hairline)"/>
+      <text x="130" y="56" font-size="11" text-anchor="middle" fill="var(--muted)">in Rust</text>
+      <text x="130" y="80" font-size="11" text-anchor="middle" fill="var(--ink)">z = choose(b, &amp;mut x, &amp;mut y)</text>
+      <text x="130" y="102" font-size="11" text-anchor="middle" fill="var(--ink)">*z = *z + 1</text>
+      <text x="130" y="124" font-size="11" text-anchor="middle" fill="var(--ink)">assert x == 1</text>
+
+      <line x1="238" y1="60" x2="288" y2="60" stroke="var(--ink-2)" stroke-width="1.5" marker-end="url(#mkj2-ah)"/>
+      <text x="263" y="52" font-size="10" text-anchor="middle" fill="var(--muted)">borrow taken</text>
+
+      <rect x="292" y="34" width="344" height="48" rx="6" fill="var(--surface)" stroke="var(--accent)"/>
+      <text x="464" y="55" font-size="11" text-anchor="middle" fill="var(--ink)">forward: choose b x y : T</text>
+      <text x="464" y="71" font-size="10" text-anchor="middle" fill="var(--muted)">the value the reference points at</text>
+
+      <line x1="238" y1="116" x2="288" y2="116" stroke="var(--ink-2)" stroke-width="1.5" marker-end="url(#mkj2-ah)"/>
+      <text x="263" y="108" font-size="10" text-anchor="middle" fill="var(--muted)">borrow given up</text>
+
+      <rect x="292" y="92" width="344" height="62" rx="6" fill="var(--surface)" stroke="var(--accent)"/>
+      <text x="464" y="113" font-size="11" text-anchor="middle" fill="var(--ink)">backward: choose_back b x y z : T * T</text>
+      <text x="464" y="129" font-size="10" text-anchor="middle" fill="var(--muted)">if b then (z, y) else (x, z)</text>
+      <text x="464" y="145" font-size="10" text-anchor="middle" fill="var(--muted)">the write goes back into whichever input it came from</text>
+    </svg>
+    <figcaption>The backward function is where a mutable borrow pays for itself. Nothing is written through a pointer; the effect of the write appears when ownership returns.</figcaption>
+  </figure>
+
+  <h3 id="mkj2-noheap">Why this means no separation logic</h3>
+
+  <p>Safe Rust guarantees that a value is either shared and immutable or uniquely owned and mutable. There is therefore no observable aliasing, and without observable aliasing the effect of a function is a function of its inputs <button type="button" class="slide-ref" data-slide="protzenko:22" title="Open this slide">slide 22</button>. So the model of a Rust program can be a pure functional program, and a proof about it is a proof about pure functions.</p>
+
+  <p>Compare the Viper lectures in section 5. There the heap is a first-class object of the reasoning: to say anything about a write you need an access permission for the location, and to say that an assertion about a different location still holds you need the separating conjunction, the device that lets you assert two things about disjoint parts of the heap and frame one across an operation on the other. All of that machinery exists to recover, inside the logic, a disjointness property the program does not otherwise guarantee.</p>
+
+  <div class="callout key"><p><span class="co-tag">Key idea</span> A type system strong enough to forbid aliasing buys a verification setting in which permissions and the separating conjunction are not required. The disjointness is not proved by the verifier; it is enforced by the language, once, before verification begins. That is why the target of the translation can be a proof assistant's ordinary functional language rather than a program logic.</p></div>
+
+  <p>Two honest qualifications. The machinery has not vanished, it has moved: the care separation logic spends on permissions is spent here in the borrow calculus and in the discipline of backward functions, paid once by the toolchain rather than once per program. And the argument rests entirely on the guarantees of <em>safe</em> Rust, so unsafe code, raw pointers and interior mutability sit outside it <button type="button" class="slide-ref" data-slide="protzenko:23" title="Open this slide">slide 23</button>.</p>
+
+  <div class="quiz">
+    <script type="application/json">
+    {"type":"mc","q":"Safe Rust code can be modelled as a pure function of its inputs. What does that buy, compared with the Viper lectures in section 5?","options":["Loop invariants become unnecessary, because pure functions always terminate","The heap disappears from the reasoning, so no access permissions and no separating conjunction are needed to know that an unrelated assertion survives a write","The specification becomes unnecessary, because the functional model is the specification","The proofs become fully automatic, so no proof assistant is needed"],"answer":1,"explain":"Separation logic spends permissions and the separating conjunction on establishing disjointness inside the logic. Safe Rust enforces that disjointness in the type system instead, so the model needs no heap at all. Invariants and specifications are still required, and the guarantee covers only safe code."}
+    </script>
+  </div>
+
+  <h3 id="mkj2-limits">What the recording settles, and what it does not</h3>
+
+  <p>The lecturer was careful not to overclaim. He said outright that this is one style of semantics for Rust among several, that different tools reasonably sit at different levels, and that he was not arguing it is the only right account <button type="button" class="slide-ref" data-slide="protzenko:46" title="Open this slide">slide 46</button>. His claim was narrower: it is a style you can build a functional translation on, and therefore a style you can verify Rust through.</p>
+
+  <p>The recording contains no list of unsupported features, so none is offered here. What it does flag as delicate is the condition on overwriting a value: writing to a place is fine when the loans sit underneath a borrow, since the old value is retained along with its ownership information, and unsound when the place itself is lent out, because the write would be visible through a borrow that expected the value to hold still. The session closed by naming what follows. The semantics here is concrete, with real values in the environment; the next lecture replaces it with a symbolic interpreter over the same rules, and the remaining two use that to synthesise the forward and backward pair systematically rather than by hand <button type="button" class="slide-ref" data-slide="protzenko:48" title="Open this slide">slide 48</button>.</p>
+</section>

@@ -1,0 +1,354 @@
+<section class="lecture" id="sec-mk-ryu3" data-num="17" data-day="mk-sem" data-title="P4 and P4-SpecTec" data-lecturer="Sukyoung Ryu">
+  <header class="lec-head">
+    <div class="lec-num">17</div>
+    <div>
+      <h2 id="mkr3-top">P4 and P4-SpecTec</h2>
+      <p class="lec-meta">Sukyoung Ryu (KAIST), from the deck <em>Mechanized Specifications (3): P4 and P4-SpecTec</em>, 20 August 2026. There is no recording of this lecture, so these notes follow the slides alone.</p>
+    </div>
+  </header>
+
+  <p class="lead">The first two lectures of this series each started from a document. JavaScript has ECMA-262, a large and awkward standard but a standard all the same, and WebAssembly has a specification written by people who wanted it to be formal. P4 is the case where that starting point is missing. Its official specification is informal prose that the deck describes as not systematic, its formalizations are years out of date, and the thing everyone actually treats as the definition of the language is a compiler written in C++. This lecture is about what mechanization looks like when there is no authoritative document to mechanize, and about one concrete payoff: a way to measure whether a negative test suite has covered the type errors a language can have, and a fuzzer that pushes that measure up.</p>
+
+  <h3 id="mkr3-series">Where this sits in the series</h3>
+
+  <p>This is the third of four lectures on mechanized specifications for languages used in industry: JavaScript and ESMeta, WebAssembly and SpecTec, P4 and P4-SpecTec, then other programming languages together with non-PL software <button type="button" class="slide-ref" data-slide="ryu3:4" title="Open this slide">slide 4</button>. Sections 15 and 16 cover the first two, so the ESMeta pipeline and the SpecTec meta-language are not re-derived here. What matters for this lecture is the shape of the argument they established. Take the definition of a language, express it once in a machine-readable meta-language, and generate the artifacts that used to be maintained separately by hand.</p>
+
+  <p>The WebAssembly effort is used as the template, and the deck reprints its timeline as a reminder of how long adoption takes <button type="button" class="slide-ref" data-slide="ryu3:5" title="Open this slide">slide 5</button>: a Dagstuhl seminar in March 2023, a first presentation to the WebAssembly Community Group in October 2023, the PLDI paper and a conditional acceptance of the adoption plan in June 2024, official acceptance of that plan in March 2025, WebAssembly 3.0 in September 2025, and an ASE paper in November 2025 that received an ACM SIGSOFT Distinguished Paper Award. Roughly two and a half years from a research idea to a standards body committing to it.</p>
+
+  <p>The deck opens with two pointers on research craft, Simon Peyton Jones on how to write a great research paper and a PLMW talk from ICFP 2022 hosted on Derek Dreyer's page <button type="button" class="slide-ref" data-slide="ryu3:2" title="Open this slide">slides 2-3</button>. Both slides carry only the link, so there is nothing further to report about what was said around them.</p>
+
+  <p>The P4 material itself is structured around three questions that the deck returns to twice as section dividers <button type="button" class="slide-ref" data-slide="ryu3:7" title="Open this slide">slides 7, 16, 25</button>: what mechanization is and why it is needed, how the P4 specification is mechanized, and what the benefits are. The work is P4-SpecTec, presented by Jaehyun Lee, Seokhun Jeong and Sukyoung Ryu at HATRA 2025 <button type="button" class="slide-ref" data-slide="ryu3:6" title="Open this slide">slide 6</button>, with the negative testing half published at FSE 2026.</p>
+
+  <h3 id="mkr3-what">What P4 is</h3>
+
+  <p>P4 stands for Programming Protocol-independent Packet Processors. It is a domain specific language for programming packet-processing devices, switches being the usual example, and a P4 program specifies how such a device parses, modifies and emits a network packet <button type="button" class="slide-ref" data-slide="ryu3:8" title="Open this slide">slide 8</button>.</p>
+
+  <p>The point of the language is in the word protocol-independent. A traditional switch has its supported protocols burned into the hardware: it knows what an Ethernet frame is, what an IP header looks like, and what to do with them, and if you want it to understand something new you wait for the next generation of the chip. P4 inverts that. The device provides a programmable pipeline, and the P4 program tells it what the headers are, how to pull them out of the incoming bytes, what to do with the fields it finds, and how to write a packet back out. The protocols become part of the program rather than part of the silicon.</p>
+
+  <figure class="fig">
+    <svg viewBox="0 0 660 230" role="img" aria-label="A network packet enters a switch, passes through three stages described by the P4 program, parse then modify then emit, and leaves as an output packet. The P4 program is what defines the three stages.">
+      <defs>
+        <marker id="mkr3-ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="var(--ink-2)"/></marker>
+      </defs>
+      <rect x="10" y="66" width="96" height="44" rx="6" fill="var(--surface)" stroke="var(--hairline)"/>
+      <text x="58" y="92" font-size="11" text-anchor="middle" fill="var(--ink)">Input packet</text>
+      <line x1="108" y1="88" x2="134" y2="88" stroke="var(--ink-2)" stroke-width="1.5" marker-end="url(#mkr3-ah)"/>
+
+      <rect x="140" y="26" width="380" height="124" rx="8" fill="none" stroke="var(--border)"/>
+      <text x="152" y="46" font-size="11" fill="var(--muted)">Switch (programmable pipeline)</text>
+
+      <rect x="156" y="62" width="110" height="52" rx="6" fill="var(--surface)" stroke="var(--accent)"/>
+      <text x="211" y="84" font-size="12" text-anchor="middle" fill="var(--ink)">parse</text>
+      <text x="211" y="100" font-size="10" text-anchor="middle" fill="var(--muted)">which headers</text>
+
+      <line x1="268" y1="88" x2="278" y2="88" stroke="var(--ink-2)" stroke-width="1.5" marker-end="url(#mkr3-ah)"/>
+
+      <rect x="280" y="62" width="110" height="52" rx="6" fill="var(--surface)" stroke="var(--accent)"/>
+      <text x="335" y="84" font-size="12" text-anchor="middle" fill="var(--ink)">modify</text>
+      <text x="335" y="100" font-size="10" text-anchor="middle" fill="var(--muted)">change fields</text>
+
+      <line x1="392" y1="88" x2="402" y2="88" stroke="var(--ink-2)" stroke-width="1.5" marker-end="url(#mkr3-ah)"/>
+
+      <rect x="404" y="62" width="110" height="52" rx="6" fill="var(--surface)" stroke="var(--accent)"/>
+      <text x="459" y="84" font-size="12" text-anchor="middle" fill="var(--ink)">emit</text>
+      <text x="459" y="100" font-size="10" text-anchor="middle" fill="var(--muted)">write it back out</text>
+
+      <line x1="522" y1="88" x2="548" y2="88" stroke="var(--ink-2)" stroke-width="1.5" marker-end="url(#mkr3-ah)"/>
+      <rect x="552" y="66" width="98" height="44" rx="6" fill="var(--surface)" stroke="var(--hairline)"/>
+      <text x="601" y="92" font-size="11" text-anchor="middle" fill="var(--ink)">Output packet</text>
+
+      <rect x="250" y="180" width="170" height="38" rx="6" fill="var(--surface)" stroke="var(--accent)"/>
+      <text x="335" y="204" font-size="12" text-anchor="middle" fill="var(--ink)">P4 program</text>
+      <line x1="335" y1="178" x2="335" y2="154" stroke="var(--accent)" stroke-width="1.5" marker-end="url(#mkr3-ah)"/>
+      <text x="430" y="172" font-size="10" fill="var(--accent)">defines all three stages,</text>
+      <text x="430" y="186" font-size="10" fill="var(--accent)">so the protocols live in</text>
+      <text x="430" y="200" font-size="10" fill="var(--accent)">software, not in the chip</text>
+    </svg>
+    <figcaption>The pipeline as the deck presents it: an input packet goes into a switch and an output packet comes out, and the P4 program says how the packet is parsed, modified and emitted along the way <button type="button" class="slide-ref" data-slide="ryu3:8" title="Open this slide">slide 8</button>.</figcaption>
+  </figure>
+
+  <p>For the purposes of this lecture two properties of P4 matter more than the networking <button type="button" class="slide-ref" data-slide="ryu3:9" title="Open this slide">slide 9</button>. Its syntax and semantics are C-like, so nothing about the language itself is exotic to a reader who knows an imperative language, and it is statically typed. The static type system is what the rest of the lecture is about. Types in P4 carry width information, so <code>bit&lt;8&gt;</code> is an eight-bit unsigned value and <code>int&lt;8&gt;</code> an eight-bit signed one, and the type rules have to reason about those widths as well as about the shape of the terms.</p>
+
+  <h3 id="mkr3-drift">Four representations, and why they drift apart</h3>
+
+  <p>Viewed from a programming languages perspective, P4 exists in four representations at once <button type="button" class="slide-ref" data-slide="ryu3:10" title="Open this slide">slide 10</button>. There is the official specification, written in informal prose. There are implementations, principally p4c, the reference compiler written in C++. There are formalizations, in precise mathematical notation. And there are tests, which are input-output examples.</p>
+
+  <p>The question the deck puts next is whether those four are actually in sync <button type="button" class="slide-ref" data-slide="ryu3:11" title="Open this slide">slide 11</button>. In principle yes; in practice no, because they are maintained by different parties and evolve at different paces. The concrete illustration is generic types <button type="button" class="slide-ref" data-slide="ryu3:12" title="Open this slide">slide 12</button>. The official specification introduced them in May 2021. The implementation side did not settle generics together with type inference until a patch in March 2025. The formalizations are recorded as still pre-2021, the slide adding that the most recent of them is based on 2024. One feature, three representations, and three different answers to the question of whether the language has it.</p>
+
+  <p>That leads to the question the whole project is answering <button type="button" class="slide-ref" data-slide="ryu3:13" title="Open this slide">slide 13</button>: can a programming language evolve and keep its representations consistent at the same time? The proposed answer is to stop treating the four as peers and make one of them primary.</p>
+
+  <div class="callout def"><p><span class="co-tag">Definition</span> The <em>specification model</em> is an unambiguous and complete definition of a language's syntax and semantics, for example a complete formalization or a definitional interpreter <button type="button" class="slide-ref" data-slide="ryu3:14" title="Open this slide">slide 14</button>. It is the single source of truth underlying the other representations: the official specification is the model made verbose with prose, the implementation is the model realised in a programming language, and the tests are concrete examples drawn from it.</p></div>
+
+  <div class="callout def"><p><span class="co-tag">Definition</span> A <em>language mechanization framework</em> provides a DSL, called the meta-language, for writing the specification model down, and automates the generation of the various backends from it <button type="button" class="slide-ref" data-slide="ryu3:15" title="Open this slide">slide 15</button>. SpecTec, from lecture 2, is such a framework; P4-SpecTec is the one built for P4.</p></div>
+
+  <figure class="fig">
+    <svg viewBox="0 0 660 360" role="img" aria-label="Above, the four P4 representations, official spec, implementations, formalizations and tests, drawn as four separate boxes with dashed links and a note that they are consistent in principle but not in practice. Below, the P4-SpecTec arrangement, in which one P4 spec model written in the meta-language generates five backends: the official spec, a parser, a type checker, an interpreter and a test suite.">
+      <defs>
+        <marker id="mkr3-ah2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="var(--ink-2)"/></marker>
+      </defs>
+      <text x="16" y="22" font-size="12" font-weight="600" fill="var(--ink)">Today: four representations, four owners</text>
+
+      <rect x="30" y="34" width="170" height="50" rx="6" fill="var(--surface)" stroke="var(--hairline)"/>
+      <text x="115" y="54" font-size="11" text-anchor="middle" fill="var(--ink)">Official spec</text>
+      <text x="115" y="70" font-size="10" text-anchor="middle" fill="var(--muted)">generics since 2021</text>
+
+      <rect x="250" y="34" width="170" height="50" rx="6" fill="var(--surface)" stroke="var(--hairline)"/>
+      <text x="335" y="54" font-size="11" text-anchor="middle" fill="var(--ink)">Implementations</text>
+      <text x="335" y="70" font-size="10" text-anchor="middle" fill="var(--muted)">p4c, patched 2025</text>
+
+      <rect x="30" y="108" width="170" height="50" rx="6" fill="var(--surface)" stroke="var(--hairline)"/>
+      <text x="115" y="128" font-size="11" text-anchor="middle" fill="var(--ink)">Formalizations</text>
+      <text x="115" y="144" font-size="10" text-anchor="middle" fill="var(--muted)">recorded as pre-2021</text>
+
+      <rect x="250" y="108" width="170" height="50" rx="6" fill="var(--surface)" stroke="var(--hairline)"/>
+      <text x="335" y="128" font-size="11" text-anchor="middle" fill="var(--ink)">Tests</text>
+      <text x="335" y="144" font-size="10" text-anchor="middle" fill="var(--muted)">input-output examples</text>
+
+      <line x1="202" y1="59" x2="248" y2="59" stroke="var(--warn)" stroke-width="1.2" stroke-dasharray="4 3"/>
+      <line x1="202" y1="133" x2="248" y2="133" stroke="var(--warn)" stroke-width="1.2" stroke-dasharray="4 3"/>
+      <line x1="115" y1="86" x2="115" y2="106" stroke="var(--warn)" stroke-width="1.2" stroke-dasharray="4 3"/>
+      <line x1="335" y1="86" x2="335" y2="106" stroke="var(--warn)" stroke-width="1.2" stroke-dasharray="4 3"/>
+
+      <text x="446" y="88" font-size="11" fill="var(--warn)">Consistent in principle.</text>
+      <text x="446" y="106" font-size="11" fill="var(--warn)">Not in practice: different</text>
+      <text x="446" y="124" font-size="11" fill="var(--warn)">owners, different paces.</text>
+
+      <line x1="16" y1="178" x2="644" y2="178" stroke="var(--hairline)" stroke-width="1"/>
+
+      <text x="16" y="204" font-size="12" font-weight="600" fill="var(--ink)">P4-SpecTec: one model, generated backends</text>
+
+      <rect x="250" y="214" width="170" height="52" rx="6" fill="var(--surface)" stroke="var(--accent)"/>
+      <text x="335" y="236" font-size="12" text-anchor="middle" fill="var(--ink)">P4 spec model</text>
+      <text x="335" y="252" font-size="10" text-anchor="middle" fill="var(--muted)">~8K LoC of meta-language</text>
+
+      <line x1="335" y1="268" x2="70" y2="296" stroke="var(--ink-2)" stroke-width="1.2" marker-end="url(#mkr3-ah2)"/>
+      <line x1="335" y1="268" x2="200" y2="296" stroke="var(--ink-2)" stroke-width="1.2" marker-end="url(#mkr3-ah2)"/>
+      <line x1="335" y1="268" x2="330" y2="296" stroke="var(--ink-2)" stroke-width="1.2" marker-end="url(#mkr3-ah2)"/>
+      <line x1="335" y1="268" x2="460" y2="296" stroke="var(--ink-2)" stroke-width="1.2" marker-end="url(#mkr3-ah2)"/>
+      <line x1="335" y1="268" x2="590" y2="296" stroke="var(--ink-2)" stroke-width="1.2" marker-end="url(#mkr3-ah2)"/>
+
+      <rect x="11" y="300" width="118" height="40" rx="6" fill="var(--surface)" stroke="var(--hairline)"/>
+      <text x="70" y="325" font-size="11" text-anchor="middle" fill="var(--ink)">Official spec</text>
+      <rect x="141" y="300" width="118" height="40" rx="6" fill="var(--surface)" stroke="var(--hairline)"/>
+      <text x="200" y="325" font-size="11" text-anchor="middle" fill="var(--ink)">Parser</text>
+      <rect x="271" y="300" width="118" height="40" rx="6" fill="var(--surface)" stroke="var(--good)"/>
+      <text x="330" y="325" font-size="11" text-anchor="middle" fill="var(--ink)">Type checker</text>
+      <rect x="401" y="300" width="118" height="40" rx="6" fill="var(--surface)" stroke="var(--hairline)"/>
+      <text x="460" y="325" font-size="11" text-anchor="middle" fill="var(--ink)">Interpreter</text>
+      <rect x="531" y="300" width="118" height="40" rx="6" fill="var(--surface)" stroke="var(--good)"/>
+      <text x="590" y="325" font-size="11" text-anchor="middle" fill="var(--ink)">Test suite</text>
+
+      <text x="16" y="356" font-size="10" fill="var(--good)">Outlined in green: the two backends the deck goes on to demonstrate with numbers.</text>
+    </svg>
+    <figcaption>The structural change. Instead of four artifacts kept in step by goodwill, one spec model in the meta-language and five backends derived from it <button type="button" class="slide-ref" data-slide="ryu3:10" title="Open this slide">slides 10, 11, 14, 26</button>. The slide listing the five is titled "vision and current status" and does not mark which are finished, so the two highlighted here are simply the two the deck reports results for.</figcaption>
+  </figure>
+
+  <h3 id="mkr3-authority">Why P4 is harder than WebAssembly</h3>
+
+  <p>The WebAssembly work succeeded because the recipe had an ingredient that was already there <button type="button" class="slide-ref" data-slide="ryu3:17" title="Open this slide">slides 17-18</button>. There was a standard, and that standard drove the design of the spec model: the formal reduction rules in the mechanized version correspond to something the standard already said. The mechanization was, in a real sense, a translation.</p>
+
+  <p>P4 offers nothing equivalent <button type="button" class="slide-ref" data-slide="ryu3:19" title="Open this slide">slide 19</button>. Taking the four representations again and asking which of them could serve as the authority, the deck marks each one as unsuitable. The official specification is informal and not systematic. The implementation side is a nano-pass compiler, which is well engineered but is a compiler, not a definition. The formalism is incomplete and not up to date. The tests are incomplete. There is no artifact you can point at and say that this is what the language means.</p>
+
+  <div class="callout key"><p><span class="co-tag">Key idea</span> For JavaScript the problem was that the specification was hard to read mechanically. For P4 the problem is that there is no specification worth reading mechanically. The mechanized model therefore cannot be extracted from a document, as ESMeta extracts one from ECMA-262. It has to be written, and then justified against the only thing the community currently trusts, which is the reference compiler and its test suite.</p></div>
+
+  <h3 id="mkr3-algorithmic">From declarative rules to algorithmic ones</h3>
+
+  <p>The next question is whether the WebAssembly SpecTec meta-language can simply be reused <button type="button" class="slide-ref" data-slide="ryu3:20" title="Open this slide">slide 20</button>. It has two properties that are attractive for any language. It uses declarative inference rules, which hide implementation-level details, and it enforces case analysis by disallowing nested control flow. That second constraint is worth looking at, because it turns out to matter later. Where an ordinary programming language would write a conditional inside a rule, the meta-language makes you split the rule in two:</p>
+
+<pre class="algo"><code>not allowed                     required instead
+-----------                     ----------------
+LHS ~&gt; RHS                      LHS ~&gt; RHS          LHS ~&gt; RHS
+-- if cond:                     -- if cond:         -- if not cond:
+     -- ... foo ...                  -- ... foo ...      -- ... bar ...
+-- else:
+     -- ... bar ...</code></pre>
+
+  <p>The answer to the reuse question is a qualified no <button type="button" class="slide-ref" data-slide="ryu3:21" title="Open this slide">slide 21</button>. Declarative inference rules are not directly executable. That is tolerable for WebAssembly's dynamic semantics, but it breaks down for static semantics, where the whole point is to obtain a type checker you can run. The example on the slide is the transitivity rule for subtyping:</p>
+
+<pre class="algo"><code>rule Type_sub/trans:
+  C ⊢ type_a &lt;: type_c
+  ----
+  -- Type_sub: C ⊢ type_a &lt;: type_b
+  -- Type_sub: C ⊢ type_b &lt;: type_c</code></pre>
+
+  <p>Read as a declaration this is fine and true. Read as an algorithm it is unusable: to establish that <code>type_a</code> is a subtype of <code>type_c</code> you must invent an intermediate <code>type_b</code> out of nowhere, and nothing in the rule tells you how. A rule like this can be checked but not executed, so no type checker can be generated from it.</p>
+
+  <div class="callout def"><p><span class="co-tag">Definition</span> <em>Algorithmic inference rules</em> are the subset of inference rules that are constructive <button type="button" class="slide-ref" data-slide="ryu3:22" title="Open this slide">slide 22</button>. In P4-SpecTec they are obtained by taking the WebAssembly SpecTec meta-language and adding constraints, so that every rule that type-checks as a rule can also be run as a procedure.</p></div>
+
+  <p>The deck lists four of the constraints and says there are more <button type="button" class="slide-ref" data-slide="ryu3:23" title="Open this slide">slide 23</button>:</p>
+
+  <ol>
+    <li>Relations must annotate which of their positions are inputs and which are outputs.</li>
+    <li>Data must flow through inputs, then premises, then outputs.</li>
+    <li>All variables must be known, except in binders.</li>
+    <li><code>=</code> is disambiguated into <code>==</code>, <code>:=</code> or <code>=:</code>.</li>
+  </ol>
+
+  <p>The four are one idea seen from four angles: a rule must say which way information travels. Constraint 1 fixes the direction at the level of a relation, constraint 2 fixes it at the level of a rule body, and constraint 3 rules out the guessing that made the subtyping rule unusable, since <code>type_b</code> there is a variable that is neither an input nor bound by any premise. Constraint 4 is the same discipline applied to a single symbol: in a declarative rule <code>=</code> can mean either a test or a definition, and the reading depends on which side the reader already knows, so the meta-language makes you pick between a test and a binding in one direction or the other. The deck lists the constraints without elaborating on them.</p>
+
+  <div class="quiz">
+    <script type="application/json">
+    {"type":"mc","q":"Why can a type checker not be generated from the declarative subtyping rule Type_sub/trans?","options":["Because subtyping is undecidable for P4, so no algorithm can exist","Because the rule mentions an intermediate type_b that is neither an input nor determined by any premise, so running the rule would require guessing it","Because the meta-language forbids recursive relations, and transitivity is recursive","Because the rule uses the turnstile symbol, which the metalanguage interpreter cannot parse"],"answer":1,"explain":"The rule is a correct declaration but not a construction. To use it as a procedure you would have to produce an intermediate type_b from nowhere. P4-SpecTec's third constraint, that all variables must be known except in binders, is exactly what rules this out, and the algorithmic subset of the rules is the subset that can be executed as written."}
+    </script>
+  </div>
+
+  <p>The result of writing P4 in that constrained meta-language is a full spec model of the syntax and the type system, excluding P4 annotations, at around 8,000 lines of meta-language <button type="button" class="slide-ref" data-slide="ryu3:24" title="Open this slide">slide 24</button>. Two things about that figure are worth holding on to. It covers the type system rather than the dynamic semantics, which is consistent with everything the deck goes on to demonstrate. And eight thousand lines is a substantial artifact written by hand, not extracted from anything, which follows directly from P4 having no document to extract from.</p>
+
+  <h3 id="mkr3-backends">What the framework generates</h3>
+
+  <p>The spec model sits at the top and P4-SpecTec produces backends from it <button type="button" class="slide-ref" data-slide="ryu3:26" title="Open this slide">slide 26</button>. Five are listed: the official specification, a parser, a type checker, an interpreter and a test suite. The slide is titled "vision and current status" and does not label which of the five are complete, so the honest reading is that the list is the plan and the deck's evidence covers two of the entries.</p>
+
+  <div class="tabs">
+    <div class="tab" data-label="Type checker"><p>The type checker backend is the clearest demonstration of what an algorithmic rule buys you <button type="button" class="slide-ref" data-slide="ryu3:27" title="Open this slide">slide 27</button>. A relation in the spec model, for example <code>relation Stmt_ok: context ⊢ stmt : context</code> with a hint marking positions 0 and 1 as inputs, plus the metalanguage interpreter, together are a P4 type checker. Nothing is compiled or hand-written in between: running the rules is the type checker. It was validated against the p4c reference compiler's test suite, passing 1,063 of 1,067 positive tests, which is 99.6 percent, and 254 of 258 negative tests, which is 98.4 percent.</p></div>
+    <div class="tab" data-label="Negative test backend"><p>The second backend generates negative type tests, that is, programs that should be rejected <button type="button" class="slide-ref" data-slide="ryu3:28" title="Open this slide">slide 28</button>. The motivation is that the official suite leaves many type errors untested, so the backend adds tests for previously untested type errors. Running those against p4c discovered 26 previously unknown bugs in the compiler's frontend. This is the HATRA 2025 result, and it is separate from the FSE numbers later in the deck.</p></div>
+    <div class="tab" data-label="The other three"><p>The official specification, the parser and the interpreter appear on the same slide as intended backends. The deck gives no results for them in this lecture, so nothing is claimed here about their state. The specification backend is the interesting one conceptually, since it is the arrow that would let the community keep the prose document and have it be generated rather than maintained: the same relationship ECMA-262 has to ESMeta, but running in the opposite direction.</p></div>
+  </div>
+
+  <div class="callout warn"><p><span class="co-tag">Careful</span> Two different bug counts appear in this lecture and they should not be added together or confused. The 26 frontend bugs come from the negative test backend in the HATRA 2025 talk <button type="button" class="slide-ref" data-slide="ryu3:28" title="Open this slide">slide 28</button>. The 15 soundness bugs and 14 crash bugs later on come from the coverage-guided fuzzer in the FSE 2026 paper <button type="button" class="slide-ref" data-slide="ryu3:57" title="Open this slide">slide 57</button>. They are results of two different pieces of work on the same compiler.</p></div>
+
+  <h3 id="mkr3-dangling">Measuring whether a negative test suite is comprehensive</h3>
+
+  <p>The second half of the deck is the FSE 2026 paper, "Failing with Purpose: Dangling Coverage-Guided Negative Test Generation from a Mechanized P4 Type System", by Jaehyun Lee, Seokhun Jeong and Sukyoung Ryu <button type="button" class="slide-ref" data-slide="ryu3:29" title="Open this slide">slide 29</button>. It is also on arXiv as 2608.00639 <button type="button" class="slide-ref" data-slide="ryu3:61" title="Open this slide">slide 61</button>.</p>
+
+  <p>The setup is simple to state <button type="button" class="slide-ref" data-slide="ryu3:30" title="Open this slide">slides 30-31</button>. A correct type checker accepts well-typed programs and rejects ill-typed ones, so testing it needs positive tests, which are well-typed programs it should accept, and negative tests, which are ill-typed programs it should reject. Positive testing is comparatively easy, because any program anyone wrote is a candidate. Negative testing is where suites tend to be thin, and thin in a way nobody notices.</p>
+
+  <p>The running example is the type rule for shifts <button type="button" class="slide-ref" data-slide="ryu3:32" title="Open this slide">slide 32</button>. The official specification says the right-hand side of a shift should be of type <code>bit&lt;S&gt;</code>, or, if it is <code>int&lt;S&gt;</code>, then it should be a compile-time known non-negative value.</p>
+
+<pre class="algo"><code>// well typed: RHS is bit&lt;8&gt;
+bit&lt;8&gt; shl(in bit&lt;8&gt; x, in bit&lt;8&gt; y) { return x &lt;&lt; y; }
+
+// well typed: RHS is int&lt;8&gt;, but compile-time known and non-negative
+bit&lt;8&gt; shl(in bit&lt;8&gt; x) {
+    const int&lt;8&gt; y = 42;
+    return x &lt;&lt; y;
+}
+
+// ill typed: RHS is int&lt;8&gt; and not compile-time known
+bit&lt;8&gt; shl(in bit&lt;8&gt; x, in int&lt;8&gt; y) { return x &lt;&lt; y; }</code></pre>
+
+  <p>The third program must be rejected. The finding that motivates the paper is that of the 254 official negative tests, none targets the condition on the shift right-hand side <button type="button" class="slide-ref" data-slide="ryu3:35" title="Open this slide">slides 35-36</button>, and there is a compiler bug sitting in exactly that gap. The rule was written down, an implementation got it wrong, and no test in the suite was pointed at it.</p>
+
+  <p>So the goal is a comprehensive negative test suite, with at least one test for each ill-typed condition in the P4 type system <button type="button" class="slide-ref" data-slide="ryu3:37" title="Open this slide">slide 37</button>. The obstacle is that nobody can say what those conditions are <button type="button" class="slide-ref" data-slide="ryu3:38" title="Open this slide">slide 38</button>. The specification is natural language, ambiguous and incomplete; there is no systematic characterization of the ill-typed conditions; and it is difficult to correlate the negative tests you do have with the conditions they are supposed to exercise. You cannot measure coverage of a set you cannot enumerate.</p>
+
+  <p>This is where the mechanized spec model stops being an engineering convenience and becomes the point of the exercise. A machine-readable type system is a set that can be enumerated <button type="button" class="slide-ref" data-slide="ryu3:40" title="Open this slide">slide 40</button>: it is written in the SpecTec* specification language, it is a formal description of P4 syntax and semantics, it can be parsed and treated as data, and it can be executed, so running the type system spec is running a type checker. The first three capabilities are what make the measure possible; the fourth is what makes the test oracle possible.</p>
+
+  <p>The type rule from before, written in the meta-language, looks like this <button type="button" class="slide-ref" data-slide="ryu3:42" title="Open this slide">slides 42-43</button>:</p>
+
+<pre class="algo"><code>syntax binop = PLUS | MINUS | SHL | SHR
+syntax type  = IntT | BitT
+syntax expr  = VarE text | IntE int | BitE nat | BinE binop expr expr
+
+rule Expr_ok/binary-shift:
+  C ⊢ BinE binop expr_l expr_r : type_l
+  ----
+  -- if binop ∈ { SHL, SHR }
+  -- Expr_ok: C ⊢ expr_l : type_l
+  -- Expr_ok: C ⊢ expr_r : type_r
+  -- if $is_int(type_r) =&gt; $is_non_negative(C, expr_r)</code></pre>
+
+  <p>Feed a P4 program and this rule to the spec interpreter and you get a verdict <button type="button" class="slide-ref" data-slide="ryu3:44" title="Open this slide">slides 44-46</button>: the well-typed shift passes, the ill-typed one fails. Now comes the observation the paper is built on <button type="button" class="slide-ref" data-slide="ryu3:47" title="Open this slide">slide 47</button>. Inference rules only define well-typed conditions. If a premise is violated, that corresponds to an ill-typed condition. So the premises of the type system look, at first glance, like exactly the enumeration of type errors that was missing.</p>
+
+  <p>They are not, quite <button type="button" class="slide-ref" data-slide="ryu3:48" title="Open this slide">slide 48</button>. Some premises exist only to perform case analysis. The premise <code>binop ∈ { SHL, SHR }</code> in the shift rule has a counterpart, <code>binop ∈ { PLUS, MINUS }</code>, in the rule for addition and subtraction:</p>
+
+<pre class="algo"><code>rule Expr_ok/binary-shift:
+  ...
+  -- if binop ∈ { SHL, SHR }        &lt;- a counterpart exists
+
+rule Expr_ok/binary-plus-minus:
+  ...
+  -- if binop ∈ { PLUS, MINUS }     &lt;- that counterpart</code></pre>
+
+  <p>Violating the first of those is not a type error. It just means the other rule applies. This is a direct consequence of the design decision back on slide 20: because the meta-language forbids nested control flow and forces case analysis to be spelled out as separate rules, the case-analysis premises are visible as syntax rather than buried inside an <code>if</code>. That is what makes them findable.</p>
+
+  <div class="callout key"><p><span class="co-tag">Key idea</span> A <em>dangling premise</em> is a premise with no counterpart <button type="button" class="slide-ref" data-slide="ryu3:49" title="Open this slide">slides 49-50</button>. Violating a premise that has a counterpart simply moves you to another rule. Violating a dangling premise leaves nowhere to go, so it is a genuine type error, that is, an ill-typed condition. Filtering the case-analysis premises out of the full set of premises therefore yields a mechanically derived enumeration of the ways a P4 program can fail to type-check.</p></div>
+
+  <p>In the shift rule, <code>if $is_int(type_r) =&gt; $is_non_negative(C, expr_r)</code> is dangling. Nothing else in the specification catches a program that violates it, so a program that violates it is ill-typed. And that gives the measure the work needed <button type="button" class="slide-ref" data-slide="ryu3:51" title="Open this slide">slide 51</button>: run a set of P4 programs against the spec, and <em>dangling coverage</em> is the fraction of the extracted dangling premises that some program in the set actually violates. It quantifies how comprehensive a negative test suite is, against a baseline derived from the specification itself rather than from anybody's judgement.</p>
+
+  <div class="quiz">
+    <script type="application/json">
+    {"type":"mc","q":"What distinguishes a dangling premise from an ordinary one?","options":["It is the last premise listed in the rule, so it is checked after all the others","It has no counterpart premise in a sibling rule, so violating it is a real type error rather than a switch to a different case","It refers to the typing context C, whereas ordinary premises do not","It was added by the P4-SpecTec authors and is not derived from the official specification"],"answer":1,"explain":"Premises like binop in {SHL, SHR} exist to perform case analysis and have a counterpart, here binop in {PLUS, MINUS}, so violating them just selects another rule. A premise with no counterpart has nowhere to fall through to, so violating it is an ill-typed condition. Collecting the dangling premises gives an enumeration of the type errors the language admits."}
+    </script>
+  </div>
+
+  <details class="reveal"><summary>Why does having a measure change what a fuzzer can do?</summary><p>Without a measure, generating ill-typed programs is easy but aimless: you can produce a million rejected programs that all break the same handful of rules, and you have no way to tell that this is what happened. Dangling coverage turns test generation into a search with a gradient. A mutation is interesting precisely when it violates a dangling premise that no earlier test violated, which is a condition the tool can evaluate for itself, so the generator can keep the mutations that reach new ground and discard the rest. That is the same move coverage-guided fuzzing made for code paths, applied to conditions in a specification rather than to branches in a program.</p></details>
+
+  <p>The generation loop follows from the measure <button type="button" class="slide-ref" data-slide="ryu3:41" title="Open this slide">slides 41, 52-54</button>. It starts from the observation that type errors tend to be one step away from a well-typed program: changing <code>in bit&lt;8&gt; y</code> to <code>in int&lt;8&gt; y</code> in the shift example is a single edit that turns an accepted program into one that violates a dangling premise.</p>
+
+  <div class="stepper" data-title="Dangling coverage-guided negative test generation">
+    <div class="step" data-label="Extract the dangling premises"><p>Parse the mechanized spec as data and collect the premises that have no counterpart. These are the conditions the generator is trying to hit, and they are also the coverage domain against which any test suite can be scored.</p></div>
+    <div class="step" data-label="Collect well-typed seeds"><p>Take well-typed P4 programs as starting points. The evaluation used 1,166 of them, drawn from the official test suite, which is a nice reuse: the positive tests, which were never intended for this, become the raw material for the negative ones.</p></div>
+    <div class="step" data-label="Mutate at random"><p>Apply a random mutation to a seed. Two choices have to be made here, which well-typed program to mutate and which part of it to mutate, and the deck defers both to the paper rather than describing the strategies <button type="button" class="slide-ref" data-slide="ryu3:54" title="Open this slide">slide 54</button>.</p></div>
+    <div class="step" data-label="Check for a new violation"><p>Run the mutant through the spec interpreter. The question is not merely whether it is rejected but whether it violates a dangling premise that has not been violated before. That check is what makes the search directed rather than a random walk.</p></div>
+    <div class="step" data-label="Measure and repeat"><p>Update dangling coverage and go round again, keeping what advanced the measure. The output is a set of negative tests, each of which is tied to the specific ill-typed condition it exercises, which is the correlation that slide 38 said was missing.</p></div>
+  </div>
+
+  <h3 id="mkr3-results">What the evaluation found</h3>
+
+  <p>The deck lists five evaluation questions <button type="button" class="slide-ref" data-slide="ryu3:55" title="Open this slide">slide 55</button>: whether the approach achieves higher dangling coverage than the official test suite, how effective the mutation strategies are, how good the fuzzer is at finding bugs, how sensitive dangling coverage is to the negative input space, and how it compares with existing P4 fuzzers. Results are shown for the first and third.</p>
+
+  <p>On coverage <button type="button" class="slide-ref" data-slide="ryu3:56" title="Open this slide">slide 56</button>, 939 dangling premises were extracted from the mechanized spec. Ten hours of fuzzing over the 1,166 well-typed seed programs generated 422 negative tests. The official suite, as the baseline, covers 247 of the 939 dangling premises, which is 26.30 percent. The generated tests cover 557 of 939, which is 59.32 percent, an improvement of 33.02 percentage points.</p>
+
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Dangling coverage of the P4 type system</th><th>Premises covered</th><th>Share</th></tr></thead>
+      <tbody>
+        <tr><td>Official negative test suite (baseline)</td><td>247 of 939</td><td>26.30 percent</td></tr>
+        <tr><td>Generated negative tests (422 tests, 10 hours)</td><td>557 of 939</td><td>59.32 percent</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>The baseline figure is the one to sit with. Before this work there was no way to know that the official negative suite exercised about a quarter of the conditions the type system defines, because there was no denominator. Producing the denominator is arguably a larger contribution than beating it.</p>
+
+  <p>On bug finding <button type="button" class="slide-ref" data-slide="ryu3:57" title="Open this slide">slides 57-58</button>, the generated negative tests were run against the official P4 compiler's type checker and found 15 soundness bugs, where the compiler accepts a program it should reject, and 14 crash bugs, where it falls over instead of reporting an error.</p>
+
+  <div class="quiz">
+    <script type="application/json">
+    {"type":"fill","q":"How many dangling premises were extracted from the mechanized P4 type system spec, giving the denominator for dangling coverage?","accept":["939","939 premises","939 dangling premises"],"explain":"939 dangling premises. Against that denominator the official negative test suite covers 247, or 26.30 percent, and the generated suite covers 557, or 59.32 percent. The denominator is the part that did not exist before the spec was mechanized: without it, neither number could be stated at all."}
+    </script>
+  </div>
+
+  <p>The three contributions the deck closes the paper on <button type="button" class="slide-ref" data-slide="ryu3:39" title="Open this slide">slides 39, 59</button> are worth restating in order, because each depends on the one before it. Define a mechanized formal specification of the P4 type system. Define dangling coverage over that specification, which quantifies the ill-typed conditions. Then generate negative tests guided by that coverage.</p>
+
+  <h3 id="mkr3-adoption">Getting a community to take it</h3>
+
+  <p>As with the JavaScript and WebAssembly efforts, the technical work is only half of it. The deck ends with the P4 timeline <button type="button" class="slide-ref" data-slide="ryu3:62" title="Open this slide">slide 62</button>:</p>
+
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>When</th><th>What</th></tr></thead>
+      <tbody>
+        <tr><td>January 2024</td><td>First meeting</td></tr>
+        <tr><td>October 2024</td><td>Presentation at the P4 Workshop</td></tr>
+        <tr><td>December 2024</td><td>First presentation at a P4 LDWG meeting</td></tr>
+        <tr><td>March 2026</td><td>Conditional acceptance at a P4 LDWG meeting</td></tr>
+        <tr><td>July 2026</td><td>FSE paper</td></tr>
+        <tr><td>October 2026</td><td>OOPSLA paper</td></tr>
+        <tr><td>December 2026</td><td>Official acceptance at a P4 LDWG meeting (planned)</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>Set beside the WebAssembly timeline at the start of the lecture, the two have the same shape: a couple of years of building and presenting, then a conditional acceptance, then an official one roughly nine months later. The last row was still in the future on the day of the lecture, and the deck marks it as planned. The pattern from the earlier lectures holds here too: papers and working group meetings alternate, and the acceptances come after the results, not before them.</p>
+
+  <h3 id="mkr3-compare">The three projects side by side</h3>
+
+  <p>The closing slide compares all three efforts across the same columns <button type="button" class="slide-ref" data-slide="ryu3:63" title="Open this slide">slide 63</button>: the problem each one addresses, the solution it offers, and the burden it imposes. The burden column is the honest one, and it is the reason the three projects were not simply the same project done three times.</p>
+
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th></th><th>Problem</th><th>Solution</th><th>Burden</th></tr></thead>
+      <tbody>
+        <tr><td>JavaScript</td><td>Bugs in the specification and diverse implementations</td><td>Type checking of the specification, and rich test generation</td><td>The ESMeta team's maintenance</td></tr>
+        <tr><td>WebAssembly</td><td>Bugs and inconsistencies across artifacts</td><td>Automatic generation of the artifacts</td><td>The community learning a specification language</td></tr>
+        <tr><td>P4</td><td>No specification</td><td>Understanding, discussing, specifying and testing the semantics</td><td>The community learning a specification language</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>The slide has one further column, headed "requirement", naming what each effort could build on. For JavaScript that is ECMA-262 and for P4 it is p4c. The WebAssembly cell is an image the deck text does not recover, so it is left out here.</p>
+
+  <p>That column is the whole difference in one word. JavaScript's requirement was a document, so ESMeta could extract a model from it and hand the maintenance burden back to a research team, since the committee never had to change how it works. WebAssembly's requirement was a document written by people who wanted it to be formal, so the artifacts could be generated, and the price was that the community had to learn the specification language. P4's requirement is a compiler. There is no document to extract from and no formal standard to generate from, so the solution column reads differently from the other two: not automated production of artifacts, but understanding, discussing, specifying and testing the semantics. The specification has to be created before it can be mechanized, and P4-SpecTec is the vehicle for creating it.</p>
+
+  <div class="callout key"><p><span class="co-tag">Key idea</span> The lecture's transferable result is not the P4 type checker. It is dangling coverage: given a type system written as algorithmic inference rules, the premises that have no counterpart form a machine-derived enumeration of that language's type errors, and a test suite can be scored against it. Nothing in that argument is specific to P4, or to networking. It needs only a mechanized type system whose case analysis is explicit in the rules, which is precisely what the meta-language design of the previous lecture was already delivering for another reason.</p></div>
+</section>

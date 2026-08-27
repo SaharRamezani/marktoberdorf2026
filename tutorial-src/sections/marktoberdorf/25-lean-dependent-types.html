@@ -1,0 +1,141 @@
+<section class="lecture" id="sec-mk-dm1" data-num="25" data-day="mk-lean" data-title="Lean and Dependent Type Theory" data-lecturer="Leonardo de Moura">
+  <header class="lec-head">
+    <div class="lec-num">25</div>
+    <div>
+      <h2 id="mkd1-top">Lean and Dependent Type Theory</h2>
+      <p class="lec-meta">Lecture by Leonardo de Moura, the first of his series on Lean. His deck exists only as slide images with no text layer, so nothing in it can be quoted or cited, and this section is reconstructed from the recording alone. The audio is poor and preserves only part of the lecture, so passages that could not be decoded with confidence have been left out rather than guessed at.</p>
+    </div>
+  </header>
+
+  <p class="lead">Leonardo de Moura designed Lean, and before Lean he designed Z3, the SMT solver that sits under a good deal of the verification work in these lectures, so his name has already come up several times before he steps up to speak. The surviving part of this recording is about the most basic question a dependently typed system has to answer: how data is introduced, how functions over that data are written, and what exactly the kernel has to be convinced of before it accepts such a definition. The three answers are inductive types, definition by cases, and structural recursion, and the last of them is where the termination argument lives.</p>
+
+  <h3 id="mkd1-inductive">Inductive types: how data gets introduced</h3>
+
+  <p>Data in Lean is introduced by declaring an inductive type. You give the type a name and you list its constructors, saying what arguments each one takes. That is the whole declaration. The two examples de Moura used are the two that every course uses, and for good reason: between them they show the two features that matter.</p>
+
+  <p>The natural numbers have two constructors. One is <code>zero</code>, which takes no arguments. The other is <code>succ</code>, which takes a natural and produces a natural. Lists also have two constructors: <code>nil</code> for the empty list, and <code>cons</code>, which carries a head of type α and a tail which is itself a list of α.</p>
+
+<pre><code>inductive Nat where
+  | zero : Nat
+  | succ : Nat → Nat
+
+inductive List (α : Type) where
+  | nil  : List α
+  | cons : α → List α → List α</code></pre>
+
+  <p>The exact surface syntax he used is not recoverable from the audio, so treat the code in this section as a rendering of the shape rather than as a transcription. The shape is the part that carries the content.</p>
+
+  <p>Two things follow from a declaration of this kind, and both get used immediately. The first is that the constructors are the <em>only</em> way to build a value of the type. Every natural is either <code>zero</code> or <code>succ</code> of some natural, and nothing else, so an analysis that covers those two possibilities has covered everything. The second is that a value is a finite tree of constructor applications. There is no way to write down an infinite descent of successors, because you would never finish writing it.</p>
+
+  <p>The α in the list declaration is a parameter, and de Moura drew attention to it. It is not a second copy of the declaration for each element type; it is one declaration that yields all of them. You get lists of natural numbers, lists of lists of natural numbers, and lists of whatever else you later declare, out of the same three lines.</p>
+
+  <div class="callout def">
+    <p><span class="co-tag">Definition</span> A <strong>parametric inductive type</strong> is an inductive declaration that abstracts over one or more types, so that a single declaration of the constructors gives a whole family of types. <code>List</code> is the standard example: one declaration, and <code>List Nat</code>, <code>List (List Nat)</code> and the rest all come from it.</p>
+  </div>
+
+  <h3 id="mkd1-cases">Definition by cases over the constructors</h3>
+
+  <p>Once the constructors are fixed, functions over the type are written by cases on them: one clause per constructor, with the constructor's fields available as names on the left of the clause and usable on the right. Addition on naturals is the recording's own example. It looks at the second argument. If that argument is <code>zero</code>, the result is the first argument. If it is <code>succ</code> of some <code>y</code>, the result is the successor of the sum with <code>y</code>.</p>
+
+  <p>Appending two lists follows the same pattern on the first argument. If the first list is <code>nil</code>, the result is the second list unchanged. If it is <code>cons x xs</code>, the result is <code>x</code> consed onto the append of <code>xs</code> with the second list.</p>
+
+<pre><code>def add : Nat → Nat → Nat
+  | x, zero   => x
+  | x, succ y => succ (add x y)
+
+def append : List α → List α → List α
+  | nil,       ys => ys
+  | cons x xs, ys => cons x (append xs ys)</code></pre>
+
+  <p>Nothing here has to argue that the cases are exhaustive. Exhaustiveness is a consequence of the inductive declaration rather than a property to be checked afterwards, because the declaration is precisely the statement that these constructors are all there is.</p>
+
+  <h3 id="mkd1-structural">Structural recursion, and why it terminates</h3>
+
+  <p>Both of those definitions call themselves, so both of them owe an argument that they finish. The argument is the same in both cases and it has a name that de Moura gave explicitly: <strong>structural recursion</strong>.</p>
+
+  <p>The condition is syntactic. In every clause, the recursive call must be made on an argument that is a <em>field of the constructor matched in that clause</em>. Look at where each definition recurses. In <code>add</code> the clause matched <code>succ y</code>, and the call is on <code>y</code>, which is the field that <code>succ</code> carries. In <code>append</code> the clause matched <code>cons x xs</code>, and the call is on <code>xs</code>, which is the tail field that <code>cons</code> carries. The definition is accepted, in de Moura's words, because <code>xs</code> is smaller.</p>
+
+  <p>Smaller in what order, though, is the question worth pausing on, because the answer is what makes this work without the user writing anything. The order is not supplied; it is built into the shape of the data. A value of an inductive type is a finite tree of constructor applications, and taking a field of a constructor moves strictly down that tree. There are no infinite descending chains, because there are no infinite trees. So a well founded order comes free with every inductive declaration, and structural recursion is the discipline of recursing along it.</p>
+
+  <div class="stepper" data-title="Unfolding a structurally recursive definition">
+    <div class="step" data-label="The definition"><p>Two clauses: <code>add x zero = x</code>, and <code>add x (succ y) = succ (add x y)</code>. The recursion is on the second argument only. The first argument <code>x</code> is carried along untouched.</p></div>
+    <div class="step" data-label="Start"><p>Evaluate <code>add x (succ (succ zero))</code>. The second argument is a <code>succ</code>, so the second clause applies, with <code>y</code> bound to <code>succ zero</code>.</p></div>
+    <div class="step" data-label="First unfolding"><p>The result is <code>succ (add x (succ zero))</code>. The recursive call sits on <code>succ zero</code>, which is the field that the matched <code>succ</code> was carrying. One constructor layer has been peeled off the argument and moved onto the result.</p></div>
+    <div class="step" data-label="Second unfolding"><p>The second clause applies again, with <code>y</code> bound to <code>zero</code>. The result is <code>succ (succ (add x zero))</code>. Another layer peeled off the argument, another added to the result.</p></div>
+    <div class="step" data-label="Base case"><p>Now the second argument is <code>zero</code>, so the first clause applies and there is no further call. The answer is <code>succ (succ x)</code>.</p></div>
+    <div class="step" data-label="Why it stopped"><p>Read the chain of second arguments: <code>succ (succ zero)</code>, then <code>succ zero</code>, then <code>zero</code>. Each is a field of the one before it, so each is strictly smaller in the constructor ordering. That chain cannot be extended forever no matter which value you start from, which is the termination argument, and it was never written down by the user.</p></div>
+  </div>
+
+  <p>It is worth setting this against the Filliâtre lectures in sections 1 to 4, because the obligation is the same one and only the way of discharging it differs. There, termination was handled by an explicit <code>variant</code> clause: the user writes a term, the verification condition generator emits an obligation that the term strictly decreases at every recursive call with respect to a well founded order, and a prover discharges it like any other proof obligation. Here the order is fixed in advance by the constructors of the type, the decreasing quantity is the argument itself, and the check is syntactic rather than proved. Same debt, paid in a different currency. The variant approach is more general, since the variant can be any term at all; the structural approach costs the user nothing when the recursion happens to follow the data.</p>
+
+  <div class="quiz">
+    <script type="application/json">
+    {"type":"mc","q":"In the clause append (cons x xs) ys = cons x (append xs ys), what makes the recursive call acceptable as structural recursion?","options":["The result is shorter than the first argument","xs is the tail field of the cons constructor matched in that clause, so it is a strict sub-component of the argument","The second argument ys is unchanged across the call","A variant term has been supplied for the definition and proved to decrease"],"answer":1,"explain":"Structural recursion is a condition on the argument of the call, not on the result and not on the arguments that stay fixed. The clause matched cons x xs, and the call is on xs, one of the fields that constructor carries. Because a value of an inductive type is a finite tree of constructor applications, descending into a field strictly shrinks it, which is why no variant clause has to be written."}
+    </script>
+  </div>
+
+  <h3 id="mkd1-kernel">What the kernel actually checks</h3>
+
+  <p>The most striking claim in this part of the lecture is that none of the above is checked by the kernel. de Moura was explicit and repeated it: the kernel does not check for termination, it never checks for termination, and it has no built-in notion of recursion or of fixed points at all.</p>
+
+  <p>The way out is compilation. A definition written by cases with structural recursion is elaborated into a term built from the type's <strong>recursor</strong>, the elimination principle that comes with every inductive declaration. The recursor is not itself a recursive definition; it is a constant with a type, and applying it is an ordinary application that the kernel can typecheck by its ordinary rules. So the recursive definition never arrives at the kernel as a recursive definition. It arrives as a term with no recursion left in it, and checking that term is a routine job.</p>
+
+  <figure class="fig">
+    <svg viewBox="0 0 660 220" role="img" aria-label="Three boxes left to right. The first holds the definition as the user writes it, by cases with structural recursion. An arrow labelled elaborates leads to the second box, which holds a term built from the type's recursor with no recursion left. An arrow labelled type checks leads to the third box, the kernel. A dashed line below the kernel points to a note saying it has no termination checker and no built-in fixed points.">
+      <defs>
+        <marker id="mkd1-arw" markerWidth="9" markerHeight="8" refX="8" refY="4" orient="auto" markerUnits="userSpaceOnUse">
+          <path d="M0,0 L9,4 L0,8 z" fill="var(--muted)"></path>
+        </marker>
+      </defs>
+
+      <rect x="14" y="40" width="178" height="96" rx="12" fill="var(--surface)" stroke="var(--hairline)"></rect>
+      <text x="103" y="74" text-anchor="middle" font-size="13" fill="var(--ink)">Definition by cases,</text>
+      <text x="103" y="94" text-anchor="middle" font-size="13" fill="var(--ink)">structural recursion</text>
+      <text x="103" y="118" text-anchor="middle" font-size="11.5" fill="var(--muted)">what you write</text>
+
+      <line x1="200" y1="88" x2="268" y2="88" stroke="var(--muted)" stroke-width="1.6" marker-end="url(#mkd1-arw)"></line>
+      <text x="234" y="76" text-anchor="middle" font-size="11.5" fill="var(--accent)">elaborates</text>
+
+      <rect x="276" y="40" width="178" height="96" rx="12" fill="var(--accent)" fill-opacity="0.07" stroke="var(--hairline)"></rect>
+      <text x="365" y="74" text-anchor="middle" font-size="13" fill="var(--ink)">Term built from</text>
+      <text x="365" y="94" text-anchor="middle" font-size="13" fill="var(--ink)">the recursor</text>
+      <text x="365" y="118" text-anchor="middle" font-size="11.5" fill="var(--accent)">no recursion left</text>
+
+      <line x1="462" y1="88" x2="530" y2="88" stroke="var(--muted)" stroke-width="1.6" marker-end="url(#mkd1-arw)"></line>
+      <text x="496" y="76" text-anchor="middle" font-size="11.5" fill="var(--accent)">type checks</text>
+
+      <rect x="538" y="40" width="108" height="96" rx="12" fill="var(--surface)" stroke="var(--border)" stroke-width="1.8"></rect>
+      <text x="592" y="84" text-anchor="middle" font-size="13.5" fill="var(--ink)">Kernel</text>
+      <text x="592" y="106" text-anchor="middle" font-size="11.5" fill="var(--muted)">small, trusted</text>
+
+      <path d="M 592 136 L 592 162" fill="none" stroke="var(--muted)" stroke-width="1.4" stroke-dasharray="4 4"></path>
+      <text x="646" y="182" text-anchor="end" font-size="11.5" fill="var(--muted)">no termination checker,</text>
+      <text x="646" y="198" text-anchor="end" font-size="11.5" fill="var(--muted)">no built-in fixed points</text>
+    </svg>
+    <figcaption>The route a recursive definition takes. Termination is settled before the kernel is reached, by turning the definition into a term the kernel already knows how to accept.</figcaption>
+  </figure>
+
+  <p>de Moura put the same point in a second way that is worth keeping, because it explains why the arrangement is designed like this: you have to provide a certificate that the definition terminates. The elaborator's job is to produce that certificate on your behalf, and the certificate is the recursor based term itself. You write equations, the machinery finds the term, and what is trusted at the end is only the small set of rules for applications and recursors. A termination checker is a large and delicate piece of software, and keeping it out of the trusted core is the whole point. He noted that the compiled form is not hidden: you can ask the system to show you what your definition turned into, and see how the recursor does the work.</p>
+
+  <div class="quiz">
+    <script type="application/json">
+    {"type":"fill","q":"A structurally recursive definition is compiled, before the kernel sees it, into a term built from which construct that comes with every inductive declaration?","accept":["recursor","recursors","the recursor","a recursor"],"explain":"The elaborator compiles the definition into a term built from the type's recursor, its elimination principle. The kernel has no notion of recursion, of fixed points or of termination, so it can only accept the definition once the recursion has been turned into ordinary applications of a constant whose type it can check."}
+    </script>
+  </div>
+
+  <h3 id="mkd1-option">When a function has no answer</h3>
+
+  <p>The last piece the recording preserves clearly is what to do when a case genuinely has no value to return. His example is taking the first element of a list. On <code>cons x xs</code> the answer is obvious, but on <code>nil</code> there is nothing to give back, and a total language cannot simply fail.</p>
+
+  <p>The fix is to change the result type rather than the totality of the function. The function returns an <code>Option α</code>: <code>none</code> in the empty case, and <code>some x</code> when there is a head.</p>
+
+<pre><code>def first : List α → Option α
+  | nil      => none
+  | cons x _ => some x</code></pre>
+
+  <p>Notice that this is the same mechanism applied one level up. <code>Option</code> is itself a parametric inductive type with two constructors, so the partiality has been encoded as data. The function stays total, the definition stays a definition by cases, and every caller is forced to say what it does in the empty case, because the only way to get at the value is to case on the two constructors of the result.</p>
+
+  <h3 id="mkd1-gaps">What this section does not cover</h3>
+
+  <p>The recording is a fragment of a longer lecture, and this section reconstructs only the part that came through clearly. Later passages are audible enough to name their subjects but not to reconstruct them: structures and their projections, type classes with instance resolution and derived instances, the notation and macro system that lets you write your own syntax, a small imperative language whose state is modelled as a function from variable names to values with get and set operations, an evaluator for its expressions written by recursion, and a verified optimiser over those expressions proved correct with the help of functional induction and calculational proof. The audio for those stretches is too damaged to render them at the accuracy the rest of these notes aim at, and the slides cannot repair the gap because they carry no extractable text. They are listed here so that the omission is visible rather than silent.</p>
+</section>

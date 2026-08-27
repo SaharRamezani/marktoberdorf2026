@@ -1,0 +1,248 @@
+<section class="lecture" id="sec-mk-bl3" data-num="23" data-day="mk-atp" data-title="Lambda-Superposition" data-lecturer="Jasmin Blanchette">
+  <header class="lec-head">
+    <div class="lec-num">23</div>
+    <div>
+      <h2 id="mkb3-top">Lambda-Superposition</h2>
+      <p class="lec-meta">Jasmin Blanchette (LMU Munich), the third lecture of his series on provers and solvers, from the deck <em>Provers and Solvers, Lecture 3: &lambda;-Superposition</em>, which he credits as partly based on slides by Alexander Bentkamp. No recording of this session is available, so this section follows the deck throughout.</p>
+    </div>
+  </header>
+
+  <p class="lead">The two preceding sections built first-order superposition: saturation with a given clause algorithm, redundancy and the deletion it licenses, and the superposition rule itself with its term ordering and literal selection. This lecture keeps every one of those pieces and asks what has to change when the input is higher-order, so that terms may contain lambda abstractions, a variable may stand for a function and be applied to arguments, and a symbol may appear partially applied. The answer is lambda-superposition, developed by Blanchette with Alexander Bentkamp, Sophie Tourret, Petar Vukmirovi&cacute; and Uwe Waldmann. The deck is organised around the three places where the first-order machinery breaks: the term ordering, unification, and Booleans.</p>
+
+  <h3 id="mkb3-why">What a first-order encoding loses</h3>
+
+  <p>The motivating slide is a proof assistant with a goal open in it <button type="button" class="slide-ref" data-slide="blanchette3:7" title="Open this slide">pages 7-8</button>. The goal is that the sum of <code>i&sup2; + 2i + 1</code> for <em>i</em> from 1 to <em>n</em> equals the sum of <code>i&sup2;</code>, plus the sum of <code>2i</code>, plus the sum of <code>1</code>. The user presses a button marked Find Proof and expects an automatic prover to close it.</p>
+
+  <p>One way to get a first-order prover to attempt this is to translate the goal into first-order logic. The next slide, titled Lost in Translation, shows what comes out <button type="button" class="slide-ref" data-slide="blanchette3:9" title="Open this slide">pages 9-10</button>.</p>
+
+  <div class="formula">
+    <code>sum(1, n, C(B(plus, S(B(plus, C(power, 2)), app(times, 2))), 1))</code><br>
+    <code>= app(app(plus, app(app(plus, sum(1, n, C(power, 2))), sum(1, n, app(times, 2)))), sum(1, n, K(1)))</code>
+  </div>
+
+  <p>Every lambda abstraction has been compiled away into the combinators <em>B</em>, <em>C</em>, <em>K</em> and <em>S</em>, and every application has become an occurrence of a binary symbol <code>app</code>. The result is genuinely first-order and a first-order prover will accept it, but the structure that a human proof would exploit has dissolved into combinator plumbing. The slide makes no argument beyond putting the two formulas one above the other, and none is needed.</p>
+
+  <div class="callout key">
+    <p><span class="co-tag">Design goal</span> A sound, complete, <strong>graceful</strong> generalization of first-order superposition <button type="button" class="slide-ref" data-slide="blanchette3:11" title="Open this slide">page 11</button>. Graceful is the load-bearing word: on input that happens to be first-order, the calculus should collapse back into ordinary superposition and impose no extra cost. The family picture on the opening slides places lambda-superposition directly above superposition, in the same relation that superposition bears to ordered resolution, with a ground version of each sitting underneath <button type="button" class="slide-ref" data-slide="blanchette3:3" title="Open this slide">pages 3-6</button>.</p>
+  </div>
+
+  <h3 id="mkb3-logic">The logic and its clauses</h3>
+
+  <p>A signature declares atomic types, such as <code>bool</code> and <code>nat</code>, and symbols with their types, such as <code>1</code>, <code>&middot;</code> and <code>gcd</code>. Terms are built by four rules <button type="button" class="slide-ref" data-slide="blanchette3:12" title="Open this slide">pages 12-14</button>: a variable declared with type <em>&tau;</em> is a term of type <em>&tau;</em>; a symbol declared with type <em>&tau;</em> is a term of type <em>&tau;</em>; if <em>t</em> has type <em>&tau;</em> then the abstraction <code>&lambda;x : &sigma;. t</code> has type <code>&sigma; &rarr; &tau;</code>; and if <em>t</em> has type <code>&sigma; &rarr; &tau;</code> and <em>t'</em> has type <em>&sigma;</em> then the application <code>t t'</code> has type <em>&tau;</em>. Formulas are simply terms of type <code>bool</code>.</p>
+
+  <p>Two consequences of that grammar are exactly what first-order syntax rules out. Application is a term former in its own right rather than something fixed by the shape of an atom, so the same symbol can occur applied to one argument, applied to two, and not applied at all, all within a single term. The deck's example list makes the point with <code>p f (f a) (f a b)</code> <button type="button" class="slide-ref" data-slide="blanchette3:15" title="Open this slide">page 15</button>, in which <em>f</em> is passed as an argument and also applied to one and to two arguments. And abstraction lets a term bind its own variable, as in <code>&lambda;x. &lambda;y. g y x</code>.</p>
+
+  <p>Terms are then identified up to three rules <button type="button" class="slide-ref" data-slide="blanchette3:16" title="Open this slide">pages 16-17</button>. Alpha allows bound variables to be renamed, so <code>g (&lambda;x. f x x)</code> and <code>g (&lambda;z. f z z)</code> are the same term. Beta says <code>(&lambda;x. t(x)) u = t(u)</code>, so <code>(&lambda;x. f x x) a</code> is <code>f a a</code>. Eta says <code>(&lambda;x. t x) = t</code> when <em>x</em> is not free in <em>t</em>, so <code>g (f a a)</code> and <code>g (&lambda;y. f a a y)</code> are the same term. Everything the calculus does happens modulo that equivalence rather than over syntax trees, which is already a departure from the first-order setting, where syntactic identity is the only identity there is.</p>
+
+  <p>The clause language, by contrast, is unchanged <button type="button" class="slide-ref" data-slide="blanchette3:18" title="Open this slide">pages 18-19</button>. An atom is an equation <code>t&#8321; = t&#8322;</code> viewed as an unordered pair. A literal is an equation or a disequation. A clause is a multiset of literals, and the empty clause is written <code>&perp;</code>. Two footnotes on that slide matter later: the connectives <code>&top;</code>, <code>&and;</code>, negation, <code>&forall;</code> and <code>&exist;</code> may appear <em>inside</em> terms, and the free variables of a clause are read universally.</p>
+
+  <div class="callout def">
+    <p><span class="co-tag">What carries over</span> The saturation framework of the earlier sections survives intact. There is still an active set and a passive set, still a given clause algorithm, still redundancy-driven deletion, still a term ordering and a literal selection restricting which inferences fire, and a refutation still ends when <code>&perp;</code> appears. Nothing in this lecture replaces that architecture. Every change is a repair to one of its components.</p>
+  </div>
+
+  <h3 id="mkb3-summations">The running example, worked</h3>
+
+  <p>The same summation goal comes back written in higher-order syntax <button type="button" class="slide-ref" data-slide="blanchette3:20" title="Open this slide">pages 20-21</button>. The goal becomes <code>sum 1 n (&lambda;i. i&sup2; + 2i + 1) = sum 1 n (&lambda;i. i&sup2;) + sum 1 n (&lambda;i. 2i) + sum 1 n (&lambda;i. 1)</code>, and the distributivity lemma available to the prover becomes <code>sum 1 n (&lambda;i. f i + g i) = sum 1 n (&lambda;i. f i) + sum 1 n (&lambda;i. g i)</code>, with <em>f</em> and <em>g</em> universally quantified over functions. Compared with the combinator encoding these are readable, and more to the point the lemma now looks like something that could match the goal. Note where the difficulty sits: <code>f i</code> is a variable applied to an argument, underneath a binder.</p>
+
+  <div class="stepper" data-title="Refuting the summation goal">
+    <div class="step" data-label="The clause set"><p>Two clauses. The lemma is a positive equation, <code>sum 1 n (&lambda;i. f i + g i) = sum 1 n (&lambda;i. f i) + sum 1 n (&lambda;i. g i)</code>, with <em>f</em> and <em>g</em> free and therefore universally quantified. The negated goal is a disequation, <code>sum 1 n (&lambda;i. i&sup2; + 2i + 1) &ne; sum 1 n (&lambda;i. i&sup2;) + sum 1 n (&lambda;i. 2i) + sum 1 n (&lambda;i. 1)</code> <button type="button" class="slide-ref" data-slide="blanchette3:22" title="Open this slide">page 22</button>.</p></div>
+    <div class="step" data-label="Choose a position"><p>Superposition needs a subterm of one clause that the other clause's equation can rewrite. The lemma is used from right to left here, so the subterm to match is <code>sum 1 n (&lambda;i. i&sup2;) + sum 1 n (&lambda;i. 2i)</code>, the first two summands on the right of the disequation.</p></div>
+    <div class="step" data-label="Unify"><p>Match <code>sum 1 n (&lambda;i. f i) + sum 1 n (&lambda;i. g i)</code> against it. The solution is <code>{f &mapsto; &lambda;i. i&sup2;, g &mapsto; &lambda;i. 2i}</code>. This is where higher-order unification is doing real work: the unifier has to invent lambda terms as the values of <em>f</em> and <em>g</em>, and the match only succeeds modulo beta, since <code>(&lambda;i. i&sup2;) i</code> has to be recognised as <code>i&sup2;</code>.</p></div>
+    <div class="step" data-label="First conclusion"><p>Replacing the matched subterm by the left side of the lemma under that substitution yields <code>sum 1 n (&lambda;i. i&sup2; + 2i + 1) &ne; sum 1 n (&lambda;i. i&sup2; + 2i) + sum 1 n (&lambda;i. 1)</code> <button type="button" class="slide-ref" data-slide="blanchette3:23" title="Open this slide">page 23</button>. Two summands have been merged into one.</p></div>
+    <div class="step" data-label="Second conclusion"><p>The same lemma applies again to the new clause, this time with <code>{f &mapsto; &lambda;i. i&sup2; + 2i, g &mapsto; &lambda;i. 1}</code>. The value of <em>g</em> is a constant function, which is precisely what the combinator encoding had to spell out as <code>K 1</code>. The result is <code>sum 1 n (&lambda;i. i&sup2; + 2i + 1) &ne; sum 1 n (&lambda;i. i&sup2; + 2i + 1)</code> <button type="button" class="slide-ref" data-slide="blanchette3:27" title="Open this slide">page 27</button>.</p></div>
+    <div class="step" data-label="Close"><p>The two sides of the disequation are now the same term, so the literal is false under every interpretation and can be struck out by equality resolution, the rule from the previous section. Nothing is left, and the clause set contains <code>&perp;</code> <button type="button" class="slide-ref" data-slide="blanchette3:31" title="Open this slide">page 31</button>. One lemma, used twice, plus one clean-up step.</p></div>
+  </div>
+
+  <div class="quiz">
+    <script type="application/json">
+    {"type":"mc","q":"In the first step of the summation refutation, what does unification have to produce that a first-order unifier never could?","options":["A renaming of the bound variable i","Lambda terms as the values of the variables f and g, matched modulo beta reduction","An ordering constraint saying which side of the lemma is larger","A substitution replacing one variable by another variable"],"answer":1,"explain":"A first-order unifier can only map a variable to a first-order term built from symbols and other variables. Here f and g range over functions, and the unifier has to construct the abstractions lambda i. i squared and lambda i. 2i. The match also has to be checked modulo beta, because the lemma writes the body as the applied variable f i, which becomes i squared only after the abstraction is applied and reduced. Renaming a bound variable is alpha conversion and is free, and no ordering constraint is part of the unifier."}
+    </script>
+  </div>
+
+  <h3 id="mkb3-order">Challenge 1: the term ordering</h3>
+
+  <p>The deck names three design challenges <button type="button" class="slide-ref" data-slide="blanchette3:34" title="Open this slide">page 34</button>, and the ordering is the first. First-order superposition requires two properties of its term ordering <button type="button" class="slide-ref" data-slide="blanchette3:35" title="Open this slide">page 35</button>. A subterm must be smaller than the whole term, so <code>c &lt; g(c) &lt; f(g(c))</code>. And placing two terms in the same context must preserve their orientation, so if <code>b &gt; a</code> then <code>f(b, c) &gt; f(a, c)</code>. In higher-order logic the two cannot both hold.</p>
+
+  <p>The counterexample is short <button type="button" class="slide-ref" data-slide="blanchette3:36" title="Open this slide">pages 36-42</button>. Start from <code>(&lambda;y. f (&lambda;z. z)) &gt; (&lambda;z. z)</code>, which the subterm requirement forces, since the identity function occurs inside the term on the left. Now place both terms in the same context, namely apply each of them to the argument <code>g (f (&lambda;z. z))</code>. On the left the bound variable <em>y</em> does not occur in the body, so beta reduction throws the argument away and leaves <code>f (&lambda;z. z)</code>. On the right the term is the identity, so beta reduction returns the argument itself, <code>g (f (&lambda;z. z))</code>. By the subterm requirement the second of these is the larger. The orientation has flipped, and the deck marks the clash with a lightning bolt.</p>
+
+  <figure class="fig">
+    <svg viewBox="0 0 680 290" role="img" aria-label="Two terms on the top row separated by a greater-than sign: lambda y dot f of lambda z dot z on the left, and lambda z dot z on the right. Arrows lead down from each to a second row, labelled apply each to g of f of lambda z dot z and beta reduce. The second row holds f of lambda z dot z on the left and g of f of lambda z dot z on the right, separated by a less-than sign. A caption below reads the orientation has flipped, so compatibility with contexts fails.">
+      <defs>
+        <marker id="mkb3-arw" markerWidth="9" markerHeight="8" refX="8" refY="4" orient="auto" markerUnits="userSpaceOnUse">
+          <path d="M0,0 L9,4 L0,8 z" fill="var(--muted)"></path>
+        </marker>
+      </defs>
+
+      <text x="340" y="26" text-anchor="middle" font-size="12.5" font-family="inherit" fill="var(--muted)">the subterm requirement forces this orientation</text>
+
+      <rect x="30" y="40" width="250" height="48" rx="10" fill="var(--surface)" stroke="var(--hairline)"></rect>
+      <text x="155" y="70" text-anchor="middle" font-size="15" font-family="monospace" fill="var(--ink)">(&#955;y. f (&#955;z. z))</text>
+      <text x="340" y="72" text-anchor="middle" font-size="19" font-family="monospace" fill="var(--accent)">&gt;</text>
+      <rect x="400" y="40" width="250" height="48" rx="10" fill="var(--surface)" stroke="var(--hairline)"></rect>
+      <text x="525" y="70" text-anchor="middle" font-size="15" font-family="monospace" fill="var(--ink)">(&#955;z. z)</text>
+
+      <line x1="155" y1="88" x2="155" y2="172" stroke="var(--muted)" stroke-width="1.6" marker-end="url(#mkb3-arw)"></line>
+      <line x1="525" y1="88" x2="525" y2="172" stroke="var(--muted)" stroke-width="1.6" marker-end="url(#mkb3-arw)"></line>
+
+      <text x="340" y="120" text-anchor="middle" font-size="12.5" font-family="inherit" fill="var(--accent-ink)">put both in the context [ ] (g (f (&#955;z. z)))</text>
+      <text x="340" y="140" text-anchor="middle" font-size="12.5" font-family="inherit" fill="var(--muted)">that is, apply each to that argument, then reduce</text>
+
+      <rect x="30" y="180" width="250" height="48" rx="10" fill="var(--surface)" stroke="var(--hairline)"></rect>
+      <text x="155" y="210" text-anchor="middle" font-size="15" font-family="monospace" fill="var(--ink)">f (&#955;z. z)</text>
+      <text x="340" y="212" text-anchor="middle" font-size="19" font-family="monospace" fill="var(--crit)">&lt;</text>
+      <rect x="400" y="180" width="250" height="48" rx="10" fill="var(--crit)" fill-opacity="0.08" stroke="var(--hairline)"></rect>
+      <text x="525" y="210" text-anchor="middle" font-size="15" font-family="monospace" fill="var(--ink)">g (f (&#955;z. z))</text>
+
+      <text x="340" y="262" text-anchor="middle" font-size="12.5" font-family="inherit" fill="var(--crit)">the orientation has flipped: compatibility with contexts fails</text>
+    </svg>
+    <figcaption class="fig-caption">The clash behind Challenge 1. Beta reduction lets a context discard its content on one side and keep it on the other, so the same context can reverse an ordering that the subterm requirement fixed.</figcaption>
+  </figure>
+
+  <p>The repair has three parts <button type="button" class="slide-ref" data-slide="blanchette3:43" title="Open this slide">pages 43-44</button>. Compatibility with contexts is weakened, so that only <strong>good</strong> contexts are required to preserve orientation. The main superposition rule is then restricted to act only on good contexts. And because that restriction removes inferences the calculus needs, an extra rule compensates: if a clause <code>C &or; t = t'</code> is in the clause set and <em>t</em> and <em>t'</em> are functions, add the clause <code>C &or; t x = t' x</code>, with <em>x</em> fresh.</p>
+
+  <p>The deck does not give the full definition of a good context. What it does give is one context that is not good, and a worked example built around it <button type="button" class="slide-ref" data-slide="blanchette3:45" title="Open this slide">pages 45-54</button>. Take the clause set containing <code>g = f</code> and <code>g a &ne; f a</code>, which is plainly unsatisfiable. The obvious inference rewrites the <em>g</em> inside <code>g a</code> using <code>g = f</code>, giving <code>f a &ne; f a</code>, which equality resolution closes at once. That inference is disallowed, and the slide says why: the hole sits in the function position of an application, and <code>[ ] a</code> is not a good context <button type="button" class="slide-ref" data-slide="blanchette3:48" title="Open this slide">page 48</button>.</p>
+
+  <p>The extra rule supplies the missing route. Applied to <code>g = f</code> it produces <code>g x = f x</code> <button type="button" class="slide-ref" data-slide="blanchette3:50" title="Open this slide">page 50</button>. Now the superposition step rewrites the whole left-hand side <code>g a</code> rather than a symbol buried in its function position, so the context is empty and therefore good, and the same conclusion <code>f a &ne; f a</code> is reached legitimately, followed by <code>&perp;</code> <button type="button" class="slide-ref" data-slide="blanchette3:52" title="Open this slide">pages 52-54</button>. The extra rule is argument congruence, and its soundness is one line: if <em>g</em> and <em>f</em> denote the same function in an interpretation, then <code>g a</code> and <code>f a</code> denote the same value for every <em>a</em> <button type="button" class="slide-ref" data-slide="blanchette3:83" title="Open this slide">page 83</button>.</p>
+
+  <div class="quiz">
+    <script type="application/json">
+    {"type":"mc","q":"Given g = f and g a is not equal to f a, why can lambda-superposition not simply rewrite the g inside g a?","options":["Because g and f would need to have the same type, and they do not","Because the term ordering makes f larger than g, so the equation points the wrong way","Because the hole would sit in the function position of an application, and [ ] a is not a good context","Because unifying g with g requires a higher-order unifier and none exists"],"answer":2,"explain":"The main superposition rule is restricted to good contexts, which is the price paid for weakening compatibility with contexts. The context [ ] a applies its hole to an argument, and the deck marks that inference as disallowed for exactly that reason. The extra rule recovers the proof: from g = f it derives g x = f x, after which the rewritten position is a whole side of a literal rather than a function position, the context is empty, and the step goes through."}
+    </script>
+  </div>
+
+  <h3 id="mkb3-redundancy">Challenge 1bis: keeping the extra rule from deleting itself</h3>
+
+  <p>The extra rule immediately upsets the redundancy criterion inherited from the first-order theory <button type="button" class="slide-ref" data-slide="blanchette3:55" title="Open this slide">pages 55-57</button>. In first-order logic a ground clause <em>C</em> is redundant with respect to a ground clause set if some clauses of that set, all smaller than <em>C</em>, together entail it. But <code>g = f</code> entails <code>g x = f x</code> and is smaller than it, so the conclusion of the extra rule is redundant with respect to its own premise. A prover applying the criterion literally would delete the conclusion as soon as it appeared, and would never obtain the clause the previous section's example depends on.</p>
+
+  <p>The fix is to weaken the notion of entailment used inside the criterion <button type="button" class="slide-ref" data-slide="blanchette3:58" title="Open this slide">page 58</button>. The deck pins the intended behaviour down by two examples rather than by a definition: <code>b = a</code> does make <code>f b = f a</code> redundant, and <code>g = f</code> does not make <code>g a = f a</code> redundant. The following slide indicates how the distinction is drawn, by annotating the symbols with the number of arguments they carry, so that the second pair is read as <code>g&#8320; = f&#8320;</code> against <code>g&#8321; a&#8320; = f&#8321; a&#8320;</code> <button type="button" class="slide-ref" data-slide="blanchette3:59" title="Open this slide">page 59</button>. Under that reading a symbol applied to one argument is a different symbol from the same symbol applied to none, so the equation between the unapplied versions says nothing about the applied ones. Rewriting an argument, as in the first example, is unaffected.</p>
+
+  <p>Lifting to clauses with variables is then the usual construction <button type="button" class="slide-ref" data-slide="blanchette3:60" title="Open this slide">pages 60-61</button>: a non-ground clause <em>C</em> is redundant with respect to a non-ground clause set <em>F</em> if every ground instance of <em>C</em> is redundant with respect to the ground instances of <em>F</em>. The two examples track the ground ones. <code>b x = a</code> makes <code>f (b x) = f a</code> redundant, while <code>g = f</code> does not make <code>g x = f x</code> redundant, which is exactly the outcome the extra rule needs.</p>
+
+  <p>With a workable criterion in place, the deck gives one redundancy-based simplification specific to higher-order clauses, called argument pruning <button type="button" class="slide-ref" data-slide="blanchette3:62" title="Open this slide">pages 62-68</button>. If a clause contains an applied variable one of whose arguments is computable from the others, the argument carries no information and can be removed. Three instances appear on the slide.</p>
+
+  <table>
+    <thead>
+      <tr><th>Clause</th><th>Pruned to</th><th>Why the argument is redundant</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><code>y b b &ne; y a a</code></td><td><code>y b &ne; y a</code></td><td>The second argument always repeats the first.</td></tr>
+      <tr><td><code>y a c &ne; y a b</code></td><td><code>y c &ne; y b</code></td><td>The first argument is the constant <em>a</em> at every occurrence.</td></tr>
+      <tr><td><code>y a c &ne; z b d</code></td><td><code>y &ne; z</code></td><td>Each variable always receives the same arguments, so all of them go.</td></tr>
+    </tbody>
+  </table>
+
+  <p>Each pruned clause is more general than the one it came from and makes it redundant, so the original is deleted. This is the higher-order counterpart of the simplifications that keep a first-order prover's clause set from growing without bound.</p>
+
+  <h3 id="mkb3-unification">Challenge 2: unification stops being unitary</h3>
+
+  <p>In first-order logic a most general unifier always exists when a unifier exists at all, and it can be computed: unifying <code>f(a, y)</code> with <code>f(x, b)</code> gives <code>{x &mapsto; a, y &mapsto; b}</code>, and every other unifier is an instance of it <button type="button" class="slide-ref" data-slide="blanchette3:69" title="Open this slide">page 69</button>. Three things go wrong at higher order <button type="button" class="slide-ref" data-slide="blanchette3:70" title="Open this slide">page 70</button>.</p>
+
+  <ul>
+    <li><strong>Most general unifiers do not always exist.</strong> Unifying <code>f (y a)</code> with <code>y (f a)</code> yields infinitely many unifiers: <code>{y &mapsto; &lambda;x. x}</code>, <code>{y &mapsto; &lambda;x. f x}</code>, <code>{y &mapsto; &lambda;x. f (f x)}</code>, and so on. Each one works, and none is an instance of another. Check the second: both sides become <code>f (f a)</code>.</li>
+    <li><strong>Unification is undecidable.</strong> There is no procedure that always tells you whether two higher-order terms are unifiable, so a prover cannot treat unification as a subroutine it calls and waits on.</li>
+    <li><strong>Applied variables can hide positions where inferences should be made.</strong> A subterm that a rewriting step needs may not be present in the clause at all, and may appear only once a variable standing for a function has been instantiated.</li>
+  </ul>
+
+  <p>Each has its own answer <button type="button" class="slide-ref" data-slide="blanchette3:71" title="Open this slide">page 71</button>. For the first, the calculus uses a possibly infinite sequence of unifiers in place of a most general unifier, so an inference produces a sequence of conclusions rather than one. For the second, unification and inference are interweaved, so that the prover never blocks on a unification problem that may not terminate but keeps making progress elsewhere. For the third, there is a special <em>fluid</em> version of the main inference rule.</p>
+
+  <p>The fluid case is worth following. Take the clause set containing <code>f a = c</code> and <code>h (y b) (y a) &ne; h (g (f b)) (g c)</code> <button type="button" class="slide-ref" data-slide="blanchette3:72" title="Open this slide">page 72</button>. It is unsatisfiable, and the refutation runs through the substitution <code>{y &mapsto; &lambda;x. g (f x)}</code>, which turns the second clause into <code>h (g (f b)) (g (f a)) &ne; h (g (f b)) (g c)</code> <button type="button" class="slide-ref" data-slide="blanchette3:73" title="Open this slide">page 73</button>. Only now is there an <code>f a</code> for the first clause to rewrite, and rewriting it gives a disequation between two identical terms and hence <code>&perp;</code> <button type="button" class="slide-ref" data-slide="blanchette3:74" title="Open this slide">page 74</button>. Standard superposition inspects subterms that are actually present in its premises, so it never sees this position and never finds the proof.</p>
+
+  <p>The fluid rule makes the hidden position visible by lifting the equation into an unknown context. The deck writes the first premise as <code>z (f a) = z c</code>, where <em>z</em> is a fresh function variable standing for whatever surrounds the rewritten subterm, and then unifies <code>z (f a)</code> with the applied-variable subterm <code>y a</code> of the second premise <button type="button" class="slide-ref" data-slide="blanchette3:77" title="Open this slide">pages 77-78</button>. Higher-order unification answers <code>{z &mapsto; g, y &mapsto; &lambda;x. g (f x)}</code>. Substituting <code>z c</code>, that is <code>g c</code>, for that position produces <code>h (g (f b)) (g c) &ne; h (g (f b)) (g c)</code>, which equality resolution closes <button type="button" class="slide-ref" data-slide="blanchette3:79" title="Open this slide">page 79</button>. The substitution that a human would have had to guess is instead delivered by the unifier.</p>
+
+  <h3 id="mkb3-booleans">Challenge 3: Boolean expressions inside terms</h3>
+
+  <p>In first-order logic terms and formulas are syntactically distinct, and clausification is a straightforward preprocessing pass that works on the outer skeleton of a formula <button type="button" class="slide-ref" data-slide="blanchette3:80" title="Open this slide">page 80</button>. Higher-order logic makes formulas a special case of terms, and two problems follow <button type="button" class="slide-ref" data-slide="blanchette3:81" title="Open this slide">page 81</button>. Formulas can appear nested inside terms, including underneath lambdas, as in <code>&lambda;x. if &exist;y. p x y then a else b</code>. And as a consequence, clausification cannot be carried out entirely in preprocessing, because inferences and substitutions can create Boolean structure that was not there when the input was read. The response is to add dedicated inference rules that clausify dynamically, during saturation rather than before it <button type="button" class="slide-ref" data-slide="blanchette3:82" title="Open this slide">page 82</button>.</p>
+
+  <table>
+    <thead>
+      <tr><th>Challenge</th><th>What breaks</th><th>Repair</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>Term ordering</td><td>The subterm property and compatibility with contexts cannot both hold once beta reduction is in play.</td><td>Require compatibility only for good contexts, restrict superposition to those, and add argument congruence to compensate.</td></tr>
+      <tr><td>Redundancy</td><td>The argument congruence conclusion is redundant with respect to its own premise.</td><td>Weaken the entailment used in the redundancy criterion, then lift it to non-ground clauses instance by instance.</td></tr>
+      <tr><td>Unification</td><td>No most general unifiers, undecidable, and inference positions hidden behind applied variables.</td><td>Sequences of unifiers, unification interweaved with inference, and the fluid inference rule.</td></tr>
+      <tr><td>Booleans</td><td>Formulas nest inside terms, so preprocessing cannot clausify everything.</td><td>Dedicated inference rules that clausify during saturation.</td></tr>
+    </tbody>
+  </table>
+
+  <h3 id="mkb3-guarantees">Soundness, completeness, and fairness over streams</h3>
+
+  <p>Soundness is the easy direction and the deck says so <button type="button" class="slide-ref" data-slide="blanchette3:83" title="Open this slide">page 83</button>: the inference rules are straightforward to justify, and the one that needed comment, the extra rule, follows from argument congruence in the semantics. Completeness is stated in the familiar refutational form <button type="button" class="slide-ref" data-slide="blanchette3:84" title="Open this slide">pages 84-85</button>: if the clause set is initially unsatisfiable and inferences are performed fairly, then the clause set will eventually contain <code>&perp;</code>.</p>
+
+  <div class="callout warn">
+    <p><span class="co-tag">Read the asterisk</span> The deck attaches a footnote to the word unsatisfiable: unsatisfiable with respect to the so-called Henkin semantics <button type="button" class="slide-ref" data-slide="blanchette3:85" title="Open this slide">page 85</button>. In Henkin semantics the domain interpreting a function type need not contain every function from one domain to another, only enough of them for the language to make sense. It is the standard setting in which higher-order logic admits a complete proof calculus at all, and the deck flags it without elaborating further.</p>
+  </div>
+
+  <p>The word <em>fairly</em> is where the unification story returns. The standard saturation loop of the earlier sections has two compartments, passive and active, and fairness means that every clause put into passive eventually becomes the given clause <button type="button" class="slide-ref" data-slide="blanchette3:86" title="Open this slide">pages 86-88</button>. That is not enough here, because an inference no longer yields a clause. It yields a sequence of them, one per unifier, and the sequence may be infinite. The generalized loop therefore has a third compartment ahead of passive, holding those sequences as streams <button type="button" class="slide-ref" data-slide="blanchette3:89" title="Open this slide">pages 89-91</button>. The loop repeatedly pulls one more element off some stream and drops it into passive, alongside its ordinary work of moving clauses from passive into active.</p>
+
+  <figure class="fig">
+    <svg viewBox="0 0 680 320" role="img" aria-label="Three compartments left to right. Streams on the left holds three rows of dots each trailing off into an ellipsis. Passive is in the middle and Active on the right. An arrow from Streams to Passive is labelled take the next unifier. An arrow from Passive to Active is labelled given clause. A path runs from Active back round the bottom to Streams, labelled each inference opens a new stream.">
+      <defs>
+        <marker id="mkb3-arw2" markerWidth="9" markerHeight="8" refX="8" refY="4" orient="auto" markerUnits="userSpaceOnUse">
+          <path d="M0,0 L9,4 L0,8 z" fill="var(--accent)"></path>
+        </marker>
+      </defs>
+
+      <text x="110" y="28" text-anchor="middle" font-size="13" font-family="inherit" fill="var(--ink-2)" font-weight="700">Streams</text>
+      <text x="340" y="28" text-anchor="middle" font-size="13" font-family="inherit" fill="var(--ink-2)" font-weight="700">Passive</text>
+      <text x="570" y="28" text-anchor="middle" font-size="13" font-family="inherit" fill="var(--ink-2)" font-weight="700">Active</text>
+
+      <rect x="20" y="42" width="180" height="170" rx="12" fill="var(--surface)" stroke="var(--hairline)"></rect>
+      <circle cx="44" cy="78" r="7" fill="var(--accent)" fill-opacity="0.5"></circle>
+      <circle cx="70" cy="78" r="7" fill="var(--accent)" fill-opacity="0.35"></circle>
+      <circle cx="96" cy="78" r="7" fill="var(--accent)" fill-opacity="0.2"></circle>
+      <text x="130" y="83" font-size="14" font-family="monospace" fill="var(--muted)">...</text>
+      <circle cx="44" cy="127" r="7" fill="var(--accent)" fill-opacity="0.5"></circle>
+      <circle cx="70" cy="127" r="7" fill="var(--accent)" fill-opacity="0.35"></circle>
+      <circle cx="96" cy="127" r="7" fill="var(--accent)" fill-opacity="0.2"></circle>
+      <text x="130" y="132" font-size="14" font-family="monospace" fill="var(--muted)">...</text>
+      <circle cx="44" cy="176" r="7" fill="var(--accent)" fill-opacity="0.5"></circle>
+      <circle cx="70" cy="176" r="7" fill="var(--accent)" fill-opacity="0.35"></circle>
+      <circle cx="96" cy="176" r="7" fill="var(--accent)" fill-opacity="0.2"></circle>
+      <text x="130" y="181" font-size="14" font-family="monospace" fill="var(--muted)">...</text>
+
+      <rect x="255" y="42" width="170" height="170" rx="12" fill="var(--surface)" stroke="var(--hairline)"></rect>
+      <circle cx="295" cy="90" r="8" fill="var(--ink-2)" fill-opacity="0.35"></circle>
+      <circle cx="340" cy="132" r="8" fill="var(--ink-2)" fill-opacity="0.35"></circle>
+      <circle cx="385" cy="90" r="8" fill="var(--ink-2)" fill-opacity="0.35"></circle>
+      <circle cx="318" cy="172" r="8" fill="var(--ink-2)" fill-opacity="0.35"></circle>
+
+      <rect x="480" y="42" width="180" height="170" rx="12" fill="var(--accent)" fill-opacity="0.07" stroke="var(--hairline)"></rect>
+      <circle cx="520" cy="90" r="8" fill="var(--accent)" fill-opacity="0.7"></circle>
+      <circle cx="570" cy="132" r="8" fill="var(--accent)" fill-opacity="0.7"></circle>
+      <circle cx="620" cy="90" r="8" fill="var(--accent)" fill-opacity="0.7"></circle>
+      <circle cx="545" cy="172" r="8" fill="var(--accent)" fill-opacity="0.7"></circle>
+
+      <line x1="200" y1="127" x2="253" y2="127" stroke="var(--accent)" stroke-width="1.8" marker-end="url(#mkb3-arw2)"></line>
+      <text x="227" y="112" text-anchor="middle" font-size="11.5" font-family="inherit" fill="var(--accent-ink)">next unifier</text>
+      <line x1="425" y1="127" x2="478" y2="127" stroke="var(--accent)" stroke-width="1.8" marker-end="url(#mkb3-arw2)"></line>
+      <text x="452" y="112" text-anchor="middle" font-size="11.5" font-family="inherit" fill="var(--accent-ink)">given clause</text>
+
+      <path d="M 570 212 L 570 258 L 110 258 L 110 214" fill="none" stroke="var(--muted)" stroke-width="1.6" marker-end="url(#mkb3-arw2)"></path>
+      <text x="340" y="284" text-anchor="middle" font-size="12" font-family="inherit" fill="var(--muted)">each inference against the active set opens a new stream of conclusions</text>
+      <text x="340" y="304" text-anchor="middle" font-size="12" font-family="inherit" fill="var(--muted)">fairness now means every stream is advanced, not only every passive clause</text>
+    </svg>
+    <figcaption class="fig-caption">The generalized saturation loop. A third compartment holds the possibly infinite sequences of conclusions that higher-order unification produces, and the loop interleaves pulling from them with the ordinary given clause step.</figcaption>
+  </figure>
+
+  <p>Fairness therefore acquires a second obligation. Every clause in passive must still eventually become active, but in addition every stream must eventually be advanced. A prover that kept drawing from one stream forever would never idle and would still be unfair, because the conclusion that refutes the clause set might be waiting in a stream it never touched. That is the sense in which the answer to Challenge 2 is not only a change of rule but a change to the loop the earlier sections described.</p>
+
+  <div class="quiz">
+    <script type="application/json">
+    {"type":"fill","q":"The completeness statement carries an asterisk on the word unsatisfiable. With respect to which semantics is unsatisfiability meant?","accept":["henkin","henkin semantics","the henkin semantics","henkin models"],"explain":"The deck states that if the clause set is initially unsatisfiable and inferences are performed fairly, the set will eventually contain the empty clause, and then footnotes unsatisfiable with the words with respect to the so-called Henkin semantics. In Henkin semantics the domain interpreting a function type need not contain every function between the underlying domains, which is what makes a complete proof calculus for higher-order logic possible in the first place."}
+    </script>
+  </div>
+
+  <h3 id="mkb3-credits">Credits and where the details live</h3>
+
+  <p>The deck attributes part of its material to slides by Alexander Bentkamp, and closes with three references <button type="button" class="slide-ref" data-slide="blanchette3:92" title="Open this slide">page 92</button>. <em>Superposition with Lambdas</em>, by Alexander Bentkamp, Jasmin Blanchette, Sophie Tourret, Petar Vukmirovi&cacute; and Uwe Waldmann, appeared in the Journal of Automated Reasoning 65(7) in 2021. <em>Superposition for Higher-Order Logic</em>, by Bentkamp, Blanchette, Tourret and Vukmirovi&cacute;, appeared in the Journal of Automated Reasoning 67, article 10, in 2023. A broader account of the programme, <em>Mechanical Mathematicians</em>, by Bentkamp, Blanchette, Visa Nummelin, Tourret, Vukmirovi&cacute; and Waldmann, appeared in Communications of the ACM 66(4) in 2023.</p>
+
+  <div class="callout def">
+    <p><span class="co-tag">What the deck does not say</span> The motivation is a proof assistant handing a summation goal to an automatic prover <button type="button" class="slide-ref" data-slide="blanchette3:7" title="Open this slide">pages 7-8</button>, but the slides name no implementation and report no experimental results, so nothing here should be read as a claim about how any particular prover behaves. Nor does the deck give the definition of a good context, the details of the weakened entailment beyond the annotated example, or the enumeration procedure behind the sequences of unifiers. Those are in the two Journal of Automated Reasoning papers.</p>
+  </div>
+
+  <details class="reveal">
+    <summary>The four changes in one paragraph</summary>
+    <p>Lambda-superposition keeps the clause language, the saturation loop and the inference shapes of first-order superposition, and modifies four things. The term ordering only has to respect contexts that are good, with argument congruence added as a separate rule to recover the inferences that restriction costs. The redundancy criterion uses a weaker entailment, so that argument congruence does not delete its own conclusion. Unification returns a possibly infinite sequence of unifiers rather than one, is interweaved with inference rather than run to completion, and is supplemented by a fluid rule that reaches positions hidden behind applied variables. And clausification of Boolean subterms happens during saturation rather than before it. The calculus is sound, and refutationally complete with respect to Henkin semantics under a fairness condition that now covers streams as well as clauses.</p>
+  </details>
+</section>

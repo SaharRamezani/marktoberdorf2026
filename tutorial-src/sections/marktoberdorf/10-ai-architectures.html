@@ -1,0 +1,266 @@
+<section class="lecture" id="sec-mk-8" data-num="8" data-day="mk-ai" data-title="Architectures for AI Systems" data-lecturer="John C. Mitchell">
+  <header class="lec-head">
+    <div class="lec-num">8</div>
+    <div>
+      <h2 id="mk8-top">Architectures for AI Systems: Prompting, Retrieval and Agents</h2>
+      <p class="lec-meta">John C. Mitchell, Stanford University. Deck: Evaluation and Security of AI-based Systems, day 2.</p>
+    </div>
+  </header>
+
+  <p class="lead">A model on its own answers one question at a time. A deployed system wraps the model in machinery: a fixed system prompt, a retrieval step, a set of tools, a planner, a loop. This session walks up that ladder of architectures, from plain prompting to retrieval augmented generation to agentic systems, and asks two questions at every rung. What can be measured at each point in the pipeline, and what does the new machinery hand to an attacker? The session ends with the classical way of writing down a threat model, which is the setup for prompt injection.</p>
+
+  <h3 id="mk8-prompting">Prompt-based systems</h3>
+
+  <p>The simplest architecture is a conversational read and respond loop <button type="button" class="slide-ref" data-slide="mitchell2:5" title="Open this slide">slide 5</button>. The application holds a conversation history. When the user types something, the application appends that text to the history, sends the whole history to the model, receives a response, and appends the response as well. In front of the history sits a system prompt written by the application developer. Its job is to define the scope of the conversation and to state the restrictions, the so called guardrails, that turn a general model into a chatbot, a tutor or a therapist assistant.</p>
+
+  <p>Two things matter here. First, the system prompt and the user text end up in the same place: they are concatenated into one sequence of tokens, and the model has no separate channel marking one as authoritative and the other as untrusted. Second, the only place the developer can intervene is the text itself, since there is no code path to constrain and no schema to validate.</p>
+
+  <p>The deck then shows three prompting patterns that improve accuracy without touching the weights. Chain of thought prompting gives the model an example question with a worked step by step answer, and only then asks the question of interest, so the model continues in the same style <button type="button" class="slide-ref" data-slide="mitchell2:6" title="Open this slide">slides 6-7</button>. Self consistency samples several chains for the same question and takes the answer that appears most often, on the assumption that a correct answer can be reached by several routes while errors scatter <button type="button" class="slide-ref" data-slide="mitchell2:8" title="Open this slide">slide 8</button>. Both are illustrated with figures from Wang et al. (2022). Subquestion reasoning, also called least to most prompting, breaks the problem into simpler subquestions and solves them in order, feeding earlier answers into later ones, following Zhou et al. (2022) <button type="button" class="slide-ref" data-slide="mitchell2:9" title="Open this slide">slide 9</button>.</p>
+
+  <p>The trust picture for prompting is short <button type="button" class="slide-ref" data-slide="mitchell2:10" title="Open this slide">slide 10</button>. Untrusted user input is passed to a model. Jailbreaking is the attempt to subvert restrictions that the application added in its system prompt. Model output is returned to the user, which can leak information and compromise privacy. Alignment properties such as freedom from bias and cultural sensitivity are hard to guarantee, because nothing in the architecture enforces them.</p>
+
+  <h3 id="mk8-rag">Retrieval augmented generation</h3>
+
+  <p>Retrieval augmented generation, RAG, adds one component and two steps <button type="button" class="slide-ref" data-slide="mitchell2:12" title="Open this slide">slide 12</button>. The component is a grounding corpus, a document store that the developer controls. The steps are: <strong>retrieve</strong> passages relevant to the user query, either by vector search over embedded documents or by mapping the prompt to a query and running a traditional search; <strong>augment</strong> the prompt with those passages, together with instructions that the answer must be consistent with them; and <strong>generate</strong> the response. The model may additionally be finetuned on prompts in this shape so it uses the supplied passages rather than its own memory.</p>
+
+  <p>The motivation is that the corpus can hold what the training set does not: internal documents, current prices, last week's incident reports. The cost is a new failure surface. Retrieval can return nothing relevant, so the model answers from its parameters and the augmentation is decoration. It can return passages that match on the surface but not in meaning, a common effect of embedding search. It can miss a document that does exist, because query and document use different vocabulary. The corpus itself can be stale or wrong, in which case a perfectly grounded answer is still false. And because the corpus may contain proprietary material, a retrieval bug becomes a disclosure bug.</p>
+
+  <figure class="fig">
+    <svg viewBox="0 0 700 310" role="img" aria-label="A retrieval augmented generation pipeline: query, retrieve, augment, generate, response, with a grounding corpus below, and three dashed evaluation edges labelled context relevance, groundedness and answer relevance">
+      <defs>
+        <marker id="mk8-ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M 0 0 L 10 5 L 0 10 z" fill="currentColor"/>
+        </marker>
+      </defs>
+      <g fill="var(--surface)" stroke="var(--hairline)">
+        <rect x="20" y="28" width="120" height="46" rx="6"/>
+        <rect x="190" y="28" width="120" height="46" rx="6"/>
+        <rect x="360" y="28" width="120" height="46" rx="6"/>
+        <rect x="530" y="28" width="140" height="46" rx="6"/>
+        <rect x="530" y="140" width="140" height="46" rx="6"/>
+        <rect x="250" y="225" width="180" height="46" rx="6"/>
+      </g>
+      <g fill="currentColor" font-size="12" text-anchor="middle">
+        <text x="80" y="57">User query</text>
+        <text x="250" y="57">Retrieve</text>
+        <text x="420" y="57">Augment</text>
+        <text x="600" y="57">Generate</text>
+        <text x="600" y="169">Response</text>
+        <text x="340" y="254">Grounding corpus</text>
+      </g>
+      <g fill="var(--muted)" font-size="12" text-anchor="middle">
+        <text x="250" y="20">1</text>
+        <text x="420" y="20">2</text>
+        <text x="600" y="20">3</text>
+      </g>
+      <g stroke="currentColor" fill="none" marker-end="url(#mk8-ah)">
+        <path d="M 140 51 L 186 51"/>
+        <path d="M 310 51 L 356 51"/>
+        <path d="M 480 51 L 526 51"/>
+        <path d="M 600 74 L 600 136"/>
+        <path d="M 295 224 L 252 80"/>
+      </g>
+      <g stroke="var(--accent)" fill="none" stroke-dasharray="5 4">
+        <path d="M 80 74 L 255 228"/>
+        <path d="M 425 228 L 545 188"/>
+        <path d="M 20 62 H 10 V 296 H 686 V 163 H 672"/>
+      </g>
+      <g fill="var(--accent)" font-size="12">
+        <text x="26" y="170">context relevance</text>
+        <text x="452" y="248">groundedness</text>
+        <text x="300" y="290" text-anchor="middle">answer relevance</text>
+      </g>
+    </svg>
+    <figcaption class="fig-caption">The RAG pipeline with the three evaluation edges of the RAG triad. Each dashed edge compares two of the three observable objects: the query, the retrieved context and the response. After the lecture figures on slides 12 and 14.</figcaption>
+  </figure>
+
+  <p>Because the pipeline exposes intermediate objects, it can be evaluated at more than one point. The RAG triad checks the three pairings among input, data store and output <button type="button" class="slide-ref" data-slide="mitchell2:13" title="Open this slide">slides 13-14</button>. <em>Context relevance</em> asks whether the retrieved context is relevant to the query, which tests the retriever alone. <em>Groundedness</em> asks whether the response is supported by that context, which tests generation alone. <em>Answer relevance</em> asks whether the answer addresses the query, catching responses faithful to a passage but beside the point. The three fail independently, and knowing which edge failed tells the engineer which component to fix.</p>
+
+  <div class="callout def">
+    <span class="co-tag">Definition</span>
+    <p>An LLM response is <strong>grounded</strong> in a knowledge corpus if every claim in the response can be attributed to some document in the corpus <button type="button" class="slide-ref" data-slide="mitchell2:15" title="Open this slide">slide 15</button>. The deck follows the attribution measurement work of Rashkin et al. (2023) in <em>Measuring attribution in natural language generation models</em>, Computational Linguistics 49(4).</p>
+  </div>
+
+  <p>Groundedness so defined is a claim level property, so measuring it needs a claim level procedure. The corroboration workflow on <button type="button" class="slide-ref" data-slide="mitchell2:16" title="Open this slide">slide 16</button> turns a response into a report that scores each sentence and lists the documents that support it.</p>
+
+  <div class="stepper" data-title="Corroboration workflow for groundedness">
+    <div class="step" data-label="Extract sentences"><p>A sentence extractor splits the model response into individual sentences, so that each factual claim can be judged on its own instead of the paragraph being accepted or rejected as a whole.</p></div>
+    <div class="step" data-label="Decontextualize"><p>Each sentence is rewritten to stand alone. Pronouns and references such as "it" or "the second one" are resolved, because a checker that sees only one sentence cannot otherwise tell what is being claimed.</p></div>
+    <div class="step" data-label="Filter"><p>A verification check decides which sentences require verification at all. Sentences that state no external fact, for example a restatement of the question or a transition, are passed over.</p></div>
+    <div class="step" data-label="Entailment"><p>For every remaining sentence, grounding snippets are pulled from the corpus and a natural language inference model decides whether the snippets entail the sentence.</p></div>
+    <div class="step" data-label="Report"><p>The output is one line per sentence: the sentence, a score, and the citations that support it. A reader can see which parts of an answer are attributed and which are not.</p></div>
+  </div>
+
+  <p>The trust perspective for RAG is the prompting one plus the corpus <button type="button" class="slide-ref" data-slide="mitchell2:17" title="Open this slide">slide 17</button>. Input checking may be inadequate, and if the input check is itself an AI component then it has exactly the same weaknesses as the system it protects. Data and model outputs both reach the user, and the risk is higher than in plain prompting because the database may hold proprietary information. Against that, the deck makes a constructive point: the RAG triad and the tools growing around it provide testing and assurance, and a structured architecture supports structured engineering practice. More components means more interfaces, and interfaces are where measurement is possible.</p>
+
+  <div class="quiz">
+    <script type="application/json">
+    {"type":"mc","q":"A RAG system returns an answer that is fully supported by the passages it retrieved, but the passages are about the wrong topic. Which edge of the RAG triad fails?","options":["Groundedness","Context relevance","Answer relevance","None of them, the answer is supported"],"answer":1,"explain":"Groundedness only compares the response with the retrieved context, so it passes. The retriever brought back the wrong material, which is exactly what context relevance measures. Answer relevance would probably fail too, but context relevance is the edge that localizes the fault to the retrieval step."}
+    </script>
+  </div>
+
+  <h3 id="mk8-agentic">Agentic systems: goal, plan, act</h3>
+
+  <p>An agentic system replaces the single forward pass with a loop <button type="button" class="slide-ref" data-slide="mitchell2:32" title="Open this slide">slide 32</button>. The agent is given a goal, produces a plan, and acts by calling tools. Each tool result comes back into the context and the agent decides what to do next, revising the plan when a step fails, until it declares that the goal is met. The deck's running example is a web research task <button type="button" class="slide-ref" data-slide="mitchell2:22" title="Open this slide">slide 22</button>: "Chart the market cap (in USD) of the top five U.S. banks". It is built on LangGraph state used as memory, a Tavily web search tool for the research step, a Python tool for the charting step, planning done by a planner, reflection performed by the executor and planner, and coordination between them.</p>
+
+  <div class="algo" data-title="The agent loop">
+    <ol>
+      <li>Receive the goal, in the example a chart of a quantity that the model does not know exactly.</li>
+      <li>Plan: decide whether facts are missing or whether clean numeric data is already in hand.</li>
+      <li>Act: call the search tool for values, or the Python tool to plot values that are already available.</li>
+      <li>Observe the tool result and append it to the working state, which is the agent memory.</li>
+      <li>Reflect: judge whether the step moved the task forward, and revise the plan if it did not.</li>
+      <li>Stop when the deliverable exists, signalled in the example by the prefix FINAL ANSWER.</li>
+    </ol>
+  </div>
+
+  <p>Two arrangements of the same task are compared. The single agent version uses one model, in the deck an o1 model, with a system prompt that lists both tools, states rules for when each applies, insists that exact numbers must come from search rather than estimation, and finally asks the agent to write a four part self assessment covering summary, strengths, weaknesses and recommendations <button type="button" class="slide-ref" data-slide="mitchell2:23" title="Open this slide">slide 23</button>. The multi agent version splits the work <button type="button" class="slide-ref" data-slide="mitchell2:25" title="Open this slide">slide 25</button>. A shared system prompt tells each agent that it is collaborating with others, that partial progress is acceptable because a colleague with different tools will continue, and that the prefix FINAL ANSWER is the signal for the team to stop. The research agent may only do research and is bound to the search tool. The chart generator may only produce charts and is bound to a Python interpreter tool.</p>
+
+  <p>Splitting the roles does not by itself fix coordination. Adding an orchestrator that oversees the researcher and the chart generator produced better observed behaviour and cleaner traces <button type="button" class="slide-ref" data-slide="mitchell2:26" title="Open this slide">slide 26</button>. A concrete failure mode remained: the researcher sometimes hands over without the numeric values that plotting requires. The stated goals are to improve the orchestrator and researcher interaction and to collect failure mode statistics rather than anecdotes. The deck notes that in this line of work, an early collaboration with Snowflake, the component called the executor is more commonly called the orchestrator <button type="button" class="slide-ref" data-slide="mitchell2:31" title="Open this slide">slide 31</button>.</p>
+
+  <p>Control topology is the design choice that decides who speaks when <button type="button" class="slide-ref" data-slide="mitchell2:30" title="Open this slide">slide 30</button>. Round robin consults agents in a fixed order set when the system is created, giving a cyclical deterministic network. A central orchestrator knows all the other agents and picks at each step which one acts, giving a hub and spoke non deterministic network. A central orchestrator with external data structures, for example Magentic-One (Fourney et al., 2024), adds an external task ledger loop to keep the system on task. The slide credits these definitions to work by Shmatikov and co-authors, <em>Multi-Agent Systems Execute Arbitrary Malicious Code</em>, whose title already indicates why topology is a security question as well as a performance one.</p>
+
+  <div class="tabs">
+    <div class="tab" data-label="Prompting">
+      <p><strong>Components:</strong> system prompt, conversation history, model. <strong>Flows:</strong> user text in, generated text out, both appended to one history.</p>
+      <p><strong>What can be evaluated:</strong> only the input and output pair, since there is nothing in between. <strong>Main exposure:</strong> untrusted user text sits next to the guardrails, and the output goes straight back to the user <button type="button" class="slide-ref" data-slide="mitchell2:10" title="Open this slide">slide 10</button>.</p>
+    </div>
+    <div class="tab" data-label="RAG">
+      <p><strong>Components:</strong> the above plus a retriever and a grounding corpus. <strong>Flows:</strong> query to retriever, passages into the prompt, response out.</p>
+      <p><strong>What can be evaluated:</strong> three edges instead of one, so a failure can be assigned to the retriever or to the generator. <strong>Main exposure:</strong> the corpus enters the blast radius, and it may hold proprietary data <button type="button" class="slide-ref" data-slide="mitchell2:17" title="Open this slide">slide 17</button>.</p>
+    </div>
+    <div class="tab" data-label="Single agent">
+      <p><strong>Components:</strong> one model with a tool set, a plan and a working memory. <strong>Flows:</strong> a loop of tool calls and observations rather than one pass.</p>
+      <p><strong>What can be evaluated:</strong> the whole trajectory, step by step. Simpler to design and maintain, more consistent on narrow well defined tasks, but a single point of failure and limited scalability <button type="button" class="slide-ref" data-slide="mitchell2:29" title="Open this slide">slide 29</button>.</p>
+    </div>
+    <div class="tab" data-label="Multi agent">
+      <p><strong>Components:</strong> several agents with different tools and prompts, plus a topology that decides who acts next.</p>
+      <p><strong>What can be evaluated:</strong> the same trajectory measures, plus the handovers between agents, which is where the observed failure sat. Scalable and adaptable, tolerant of one agent failing, at the price of coordination cost and communication protocols <button type="button" class="slide-ref" data-slide="mitchell2:29" title="Open this slide">slides 29-30</button>.</p>
+    </div>
+  </div>
+
+  <h3 id="mk8-agent-gpa">Evaluating agents: the GPA framework</h3>
+
+  <p>Evaluating a final answer is not enough for an agent, because an agent can reach a right answer through a wrong route that will not repeat, or fail late for a reason introduced early. The framework in the deck attaches measures to the three phases of the loop and calls the result the agent's GPA, for goal, plan and act <button type="button" class="slide-ref" data-slide="mitchell2:33" title="Open this slide">slide 33</button>.</p>
+
+  <div class="table-wrap">
+    <table>
+      <tr><th>Phase</th><th>Measure</th><th>Question it answers</th></tr>
+      <tr><td>Goal</td><td>Goal fulfilment, with answer relevance as a sub-measure</td><td>Did the run achieve what the user asked for, and does the reply address the request?</td></tr>
+      <tr><td>Across the run</td><td>Logical consistency</td><td>Do the steps follow from one another without contradiction?</td></tr>
+      <tr><td>Across the run</td><td>Execution efficiency</td><td>Were there redundant, repeated or wasted steps?</td></tr>
+      <tr><td>Plan</td><td>Plan quality, with tool selection as a sub-measure</td><td>Was the plan appropriate, and were the right tools chosen for its steps?</td></tr>
+      <tr><td>Act</td><td>Plan adherence, with tool calling as a sub-measure</td><td>Did the agent follow its own plan, and were the calls formed correctly?</td></tr>
+    </table>
+  </div>
+
+  <p>The reported results are about coverage and about agreement with people <button type="button" class="slide-ref" data-slide="mitchell2:38" title="Open this slide">slide 38</button>. On the authors' test split of the TRAIL/GAIA dataset the framework captures all 281 agent internal errors. LLM judges scoring these dimensions agree with human judgments on 94 percent of those cases, 264 out of 281, against a baseline TRAIL LLM judge at 55 percent, 154 out of 281. On Snowflake Intelligence the agreement is 82 percent on a three point scale and 97 percent on a two point scale. Judges also locate where the error happened, agreeing with human annotations on 85 percent of cases, 240 out of 281, against 49 percent for the baseline. The gap between the three point and two point scales is a reminder that a judge is far better at deciding whether something is wrong than at grading how wrong it is.</p>
+
+  <p>The security perspective for agentic systems is the widest of the three <button type="button" class="slide-ref" data-slide="mitchell2:41" title="Open this slide">slide 41</button>. Untrusted user input can be passed on to any application the agent can reach, and data poisoning becomes possible. Among agent actions, one agent can be tricked into corrupting another. The tools themselves, databases and web search among them, make serious breaches possible. And the agent's output returns to the user, so data breaches and information leakage remain in scope.</p>
+
+  <div class="quiz">
+    <script type="application/json">
+    {"type":"mc","q":"In the multi-agent chart example, the researcher hands over to the chart generator without the numeric values needed to plot. Which GPA measure is most directly designed to catch this?","options":["Answer relevance of the final reply","Execution efficiency","Plan adherence at the handover step","Context relevance"],"answer":2,"explain":"The plan said to gather values and then pass them on. The agent departed from its own plan at that step, which is plan adherence. Answer relevance only looks at the final reply, and context relevance belongs to the RAG triad, not to agent evaluation."}
+    </script>
+  </div>
+
+  <h3 id="mk8-optimization">Prompt optimization and vibe coding</h3>
+
+  <p>Prompt optimization treats the prompt as the thing to be improved while the model weights stay fixed <button type="button" class="slide-ref" data-slide="mitchell2:42" title="Open this slide">slides 42-43</button>. What is optimized is the text that the developer controls: the wording of the instructions, the choice and ordering of worked examples, and the way a task is broken into steps. How it is measured is what makes it an optimization at all. There has to be a scoring function, typically a metric over a development set of tasks with known good outcomes, or a judge model producing scores of the kind described above. The loop then proposes candidate prompts, scores them, and keeps what improves the score. Two consequences follow. The result can only be as good as the metric, so a weak or gameable score produces a prompt tuned to the score rather than the task. And the same procedure applies twice over, since the deck notes that prompt optimization is applicable both to the system of interest and to the agents that evaluate it <button type="button" class="slide-ref" data-slide="mitchell2:59" title="Open this slide">slide 59</button>. The optimization slides in this deck are credited to a talk by Lakshya Agrawal, on joint work with a large group of co-authors, and the deck points to a Snowflake engineering write-up on the CoCoEvolve system <button type="button" class="slide-ref" data-slide="mitchell2:47" title="Open this slide">slide 47</button>. The figures on those slides carry no recoverable text, so no detail is reconstructed here.</p>
+
+  <p>Vibe coding is the same agent loop applied to software construction, and the deck walks through one session end to end <button type="button" class="slide-ref" data-slide="mitchell2:48" title="Open this slide">slides 48-58</button>. The developer describes the application to be built and answers the clarifying questions the coding agent asks. The agent proposes a plan, then writes the application and explains how to run it. In this case that meant installing Xcode to build the application and install it on an iPhone, and the agent wrote the instructions for using Xcode as well. The first version had real defects: a button that did nothing and library pictures that were rendered too large. The developer described those defects in plain language, the agent repaired them, and the application worked. The interesting part is where the human sits in that loop. The developer supplies the goal and the acceptance test, and the agent supplies plan and code. Nothing in the loop checks the code except the person running it.</p>
+
+  <h3 id="mk8-threat">Writing down a threat model</h3>
+
+  <p>Before naming any attack, the deck sets out the standard recipe for security analysis <button type="button" class="slide-ref" data-slide="mitchell2:61" title="Open this slide">slide 61</button>. It has three parts. First, a system of interest. Second, the desirable properties of that system, usually its intended purpose or function, and often scaled back to the most essential user protections, because defending everything defends nothing. Third, the interface and capabilities of the attacker, which is what the term threat model means. The analysis is then the question of whether an attacker with those capabilities can make the desirable properties fail.</p>
+
+  <p>The classical attacker models are all instances of the recipe, differing only in the third part <button type="button" class="slide-ref" data-slide="mitchell2:63" title="Open this slide">slides 63-66</button>. Honest users interact with the system through the intended interface and get the intended output. A network attacker may intercept and alter traffic but cannot break cryptography. A web attacker sets up a malicious site that the victim visits but has no control over the network. An operating system attacker controls malicious files and applications. The properties at risk are the traditional three, confidentiality, integrity and availability, with the caveat stated on the slide that these are not an orthogonal decomposition and are not necessarily comprehensive <button type="button" class="slide-ref" data-slide="mitchell2:67" title="Open this slide">slide 67</button>.</p>
+
+  <h3 id="mk8-injection">Direct and indirect prompt injection</h3>
+
+  <p>Apply the recipe to the architectures above. In every one of them, text that the system did not write ends up in the same context window as the instructions the developer did write, and the model treats the whole window as one sequence. That is the trust assumption the attacks break. The two attack families differ in the attacker's interface, exactly as the network and web attackers differ.</p>
+
+  <div class="callout def">
+    <span class="co-tag">Definition</span>
+    <p><strong>Direct prompt injection.</strong> The attacker is the party talking to the system. The attacker writes instructions into the ordinary user input channel, aiming them at the model rather than at the application. The assumption that breaks is that the developer's system prompt outranks the user turn. Jailbreaking is the case where the objective is to remove restrictions that the application added <button type="button" class="slide-ref" data-slide="mitchell2:10" title="Open this slide">slide 10</button>.</p>
+    <p><strong>Indirect prompt injection.</strong> The attacker never talks to the system at all. The attacker controls content that the system will later read on its own initiative, through a retrieval step or a tool call: a public page, a document that lands in the grounding corpus, a file, an API response, a message from another agent. The assumption that breaks is that retrieved passages and tool results are data rather than instructions. The victim is whoever's session pulls that content in.</p>
+  </div>
+
+  <p>The difference matters for who can be attacked and when. In direct injection the attacker and the victim are the same account, so what is at stake is what that account was allowed to obtain: the system prompt, restricted behaviour, whatever the application would not have given willingly. In indirect injection the attacker plants text once and waits, and the harm lands in some other user's session with that user's permissions. This is the same step from web attacker to network attacker in the classical models: a change in interface, not in cleverness.</p>
+
+  <figure class="fig">
+    <svg viewBox="0 0 700 300" role="img" aria-label="Indirect prompt injection path: an attacker plants text in a page or document, the agent calls a tool that fetches it, the returned text enters the model context and the agent then acts with the user's permissions">
+      <defs>
+        <marker id="mk8-ah2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M 0 0 L 10 5 L 0 10 z" fill="currentColor"/>
+        </marker>
+        <marker id="mk8-ahx" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--crit)"/>
+        </marker>
+      </defs>
+      <rect x="8" y="88" width="196" height="170" rx="8" fill="none" stroke="var(--crit)" stroke-dasharray="6 4"/>
+      <g fill="var(--surface)" stroke="var(--hairline)">
+        <rect x="20" y="26" width="110" height="44" rx="6"/>
+        <rect x="240" y="26" width="170" height="44" rx="6"/>
+        <rect x="510" y="26" width="170" height="44" rx="6"/>
+        <rect x="240" y="190" width="170" height="48" rx="6"/>
+        <rect x="20" y="190" width="170" height="48" rx="6"/>
+        <rect x="20" y="100" width="110" height="40" rx="6"/>
+      </g>
+      <g fill="currentColor" font-size="12" text-anchor="middle">
+        <text x="75" y="53">User</text>
+        <text x="325" y="53">Agent and context</text>
+        <text x="595" y="53">Action on user data</text>
+        <text x="325" y="219">Tool: fetch or search</text>
+        <text x="105" y="212">Page or document</text>
+        <text x="105" y="228">in the corpus</text>
+        <text x="75" y="125" fill="var(--crit)">Attacker</text>
+      </g>
+      <g stroke="currentColor" fill="none" marker-end="url(#mk8-ah2)">
+        <path d="M 130 48 L 236 48"/>
+        <path d="M 290 70 L 290 186"/>
+        <path d="M 410 48 L 506 48"/>
+      </g>
+      <g stroke="var(--crit)" fill="none" marker-end="url(#mk8-ahx)">
+        <path d="M 75 140 L 75 186"/>
+        <path d="M 190 214 L 236 214"/>
+        <path d="M 360 186 L 360 72"/>
+      </g>
+      <g fill="currentColor" font-size="12">
+        <text x="184" y="38" text-anchor="middle">task</text>
+        <text x="296" y="112">tool call</text>
+        <text x="459" y="16" text-anchor="middle">follows the planted text</text>
+      </g>
+      <g fill="var(--crit)" font-size="12">
+        <text x="82" y="168">plants text</text>
+        <text x="368" y="112">returned text</text>
+        <text x="106" y="274" text-anchor="middle">attacker controlled</text>
+      </g>
+    </svg>
+    <figcaption class="fig-caption">The indirect path. The attacker only writes content on the left. The agent, acting for an honest user, calls a tool that fetches that content, and the returned text arrives in the context window where instructions also live. Any action the agent then takes carries the user's permissions. Drawn from the trust perspective slides 17 and 41.</figcaption>
+  </figure>
+
+  <div class="callout warn">
+    <span class="co-tag">Careful</span>
+    <p>These notes describe attacks at the level of interfaces and trust assumptions, which is what a threat model needs. They do not contain payloads or step by step procedures. The point to carry forward is structural: an attacker's reach equals the union of the permissions of every tool the agent may call, not the permissions of the text they managed to plant.</p>
+  </div>
+
+  <p>That last point explains why the same weakness grows more serious as the architecture grows. With prompting alone, a successful injection changes one conversation. With RAG, the corpus is inside the reachable set, and the corpus may hold proprietary information <button type="button" class="slide-ref" data-slide="mitchell2:17" title="Open this slide">slide 17</button>. With agents, tools such as databases and web search are inside it as well, one agent can be used to corrupt another, and the output still returns to a user <button type="button" class="slide-ref" data-slide="mitchell2:41" title="Open this slide">slide 41</button>. Each architecture in this session bought a capability by adding a component, and each added component also widened the interface available to an attacker. The next session takes this from definitions to consequences, starting with control flow hijacking.</p>
+
+  <div class="quiz">
+    <script type="application/json">
+    {"type":"mc","q":"An agent is asked to summarize a public web page. The page contains hidden text addressed to the model, and after reading it the agent sends the user's calendar to an external address. Which attack is this, and why?","options":["Direct prompt injection, because the instructions reached the model","Indirect prompt injection, because the attacker controlled fetched content rather than the user input channel","Jailbreaking, because a restriction was removed","Data poisoning of the training set, because the model behaved differently"],"answer":1,"explain":"The attacker never interacted with the system. The malicious text arrived through a tool call made by the agent on behalf of an honest user, so tool output was treated as instructions. That is the indirect case, and the damage is bounded by the agent's own permissions."}
+    </script>
+  </div>
+
+  <div class="quiz">
+    <script type="application/json">
+    {"type":"fill","q":"Name the property that holds when every claim in a response can be attributed to some document in the corpus.","accept":["groundedness","grounded","grounding"],"explain":"Groundedness, defined on slide 15 following Rashkin et al. (2023). It is the middle edge of the RAG triad, comparing the response with the retrieved context, and it says nothing about whether the corpus itself is correct."}
+    </script>
+  </div>
+
+  <details class="reveal">
+    <summary>Why does an input filter built from a model not close the injection problem?</summary>
+    <p>Because the filter is a prompt-based system with the same architecture as the system it protects, so it inherits the same weakness <button type="button" class="slide-ref" data-slide="mitchell2:17" title="Open this slide">slide 17</button>. The filter reads untrusted text and decides what to do with it using instructions written in that same text channel, which is precisely the assumption injection breaks. A filter raises the cost of an attack and is worth having, but it is not a trust boundary in the sense the classical models use the term, because it is not enforced by anything outside the model.</p>
+  </details>
+</section>

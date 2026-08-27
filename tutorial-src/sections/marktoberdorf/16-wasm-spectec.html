@@ -1,0 +1,323 @@
+<section class="lecture" id="sec-mk-ryu2" data-num="16" data-day="mk-sem" data-title="WebAssembly and SpecTec" data-lecturer="Sukyoung Ryu">
+  <header class="lec-head">
+    <div class="lec-num">16</div>
+    <div>
+      <h2 id="mkr2-top">WebAssembly and SpecTec: One Definition, Four Artifacts</h2>
+      <p class="lec-meta">Sukyoung Ryu (KAIST), from the deck <em>Mechanized Specifications (2): WebAssembly and SpecTec</em>, 18 August 2026.</p>
+    </div>
+  </header>
+
+  <p class="lead">The previous lecture ended on a short verdict about the next language in the series: they met WebAssembly, and its specification is really nice. This lecture is what follows from that. WebAssembly does not have to be reverse engineered, because it already has a formal specification, written that way on purpose by people who wanted one. That removes the problem ESMeta was built to solve, and it puts a different problem in its place. The formal rules are only one of four artifacts that every proposal has to deliver, and nothing keeps those four consistent with each other except people reading them carefully. SpecTec is the response, and the direction of the work is reversed. Instead of extracting a formal definition out of a document, it generates the documents out of a formal definition.</p>
+
+  <h3 id="mkr2-start">A different starting point</h3>
+
+  <p>The move to WebAssembly was partly a handover: the ESMeta work passed to the group that had
+  grown up around it, which left the question of what to do next. WebAssembly was the answer
+  because of the shape of its standard rather than the popularity of the language.</p>
+
+  <blockquote class="anecdote">
+    <p>The cool thing [about WebAssembly] is that it has an awesome, rigorously written
+    specification, with its prose in natural language.</p>
+    <footer>Sukyoung Ryu, on choosing the next target</footer>
+  </blockquote>
+
+  <p>Notice what is being praised there. It is not that WebAssembly has a formal semantics somewhere in an appendix, and it is not that the prose is easy to read. It is that the standard has both, a formal specification and a prose description, and the prose is a translation of the formal rules rather than a text written independently of them. The recap slide at the front of the deck runs quickly through the JavaScript timeline that section 15 covered and then moves on <button type="button" class="slide-ref" data-slide="ryu2:2" title="Open this slide">slides 2-4</button>. Everything from here is about a language whose committee had already accepted, before any of this work started, that a formal specification is part of what a standard is.</p>
+
+  <h3 id="mkr2-wasm">What WebAssembly is, and what a proposal has to deliver</h3>
+
+  <p>WebAssembly, usually written Wasm, is a low-level code format designed for efficient execution, especially on the web <button type="button" class="slide-ref" data-slide="ryu2:18" title="Open this slide">slide 18</button>. It is a stack machine with an explicit type system, so a small C function and its Wasm equivalent sit close together while looking nothing alike.</p>
+
+<pre class="algo"><code>int f(int x, int y) {          (func (export "f")
+  return x + y;                  (param i32 i32) (result i32)
+}                                local.get 0   ;; [ x ]
+                                 local.get 1   ;; [ x , y ]
+                                 i32.add       ;; [ x + y ]
+                               )</code></pre>
+
+  <p>It is also large and still moving. Wasm 3.0 has over 500 instructions and a type system the deck calls non-trivial. More than 20 extensions have landed since 1.0, important features are still missing, and at the time of the lecture there were 15 completed proposals and more than 20 active ones <button type="button" class="slide-ref" data-slide="ryu2:9" title="Open this slide">slide 9</button>. The three published editions show the growth clearly: 1.0 covered numeric, local, global, memory and control instructions; 2.0 added SIMD, references, table instructions, bulk memory and table operations, and multi-value; 3.0 added garbage collection, exception handling, tail calls, relaxed SIMD, multi-memory, 64-bit addresses and typeful references <button type="button" class="slide-ref" data-slide="ryu2:64" title="Open this slide">slides 64-66</button>.</p>
+
+  <p>The interesting part is the process. To reduce the risk that implementations drift apart from each other, WebAssembly requires four artifacts before a new feature can be standardised <button type="button" class="slide-ref" data-slide="ryu2:19" title="Open this slide">slides 19-21</button>.</p>
+
+  <div class="callout def"><p><span class="co-tag">Definition</span> The <em>four artifacts</em> a Wasm proposal must deliver are: the updated formal specification, written in LaTeX; the updated prose specification, written in reStructuredText; the updated reference interpreter, written in OCaml; and the updated test suite, written in the Wasm text format. The deck's list of deliverables adds two more that are not yet required but that somebody eventually has to produce: updated mechanized definitions and updated mechanized proofs, in Rocq or Isabelle <button type="button" class="slide-ref" data-slide="ryu2:11" title="Open this slide">slide 11</button>.</p></div>
+
+  <p>That last pair is worth pausing on, because it marks the limit of what is being claimed later. The proof-assistant developments exist alongside the standard, they are not part of the required deliverables, and SpecTec as presented here does not generate them. What it does generate is discussed further down, and it is a specific list.</p>
+
+  <h3 id="mkr2-limits">Why four good artifacts are still a problem</h3>
+
+  <p>Having four artifacts is better than having one prose document. It is also four times the work, and the deck sets out three separate costs <button type="button" class="slide-ref" data-slide="ryu2:22" title="Open this slide">slides 22-24</button>.</p>
+
+  <p>The first is labour. Each artifact is documented and maintained by hand. In particular, the prose is a hand-crafted translation of the formal rules, which the deck describes as laborious, tedious and error-prone <button type="button" class="slide-ref" data-slide="ryu2:10" title="Open this slide">slide 10</button>. Nothing about that translation is creative work: it says the same thing as the rule above it, one numbered step at a time.</p>
+
+  <p>The second is readability. The formal specification is LaTeX and the prose specification is reStructuredText, chosen, as the deck puts it, for political reasons and held together with tooling hacks. Neither is pleasant to review. A specification diff for a single proposal can exceed 20,000 lines of markup, and a code review over that is neither comfortable nor reliable <button type="button" class="slide-ref" data-slide="ryu2:10" title="Open this slide">slide 10</button>.</p>
+
+  <p>The third is the one that actually causes bugs. Correctness and consistency across the four artifacts rely on what the deck calls eyeball correspondence <button type="button" class="slide-ref" data-slide="ryu2:24" title="Open this slide">slide 24</button>. The question marks the slide draws between the boxes are the point: there is no mechanical link saying that the prose still matches the rule, that the reference interpreter still matches both, or that the tests still exercise what the rule now says.</p>
+
+  <p>The slide that makes the case is a single instruction, the numeric relational operator, shown in the two forms a proposal has to keep in step. The prose form is six numbered steps buried in reST with inline math markup, and the formal form is a LaTeX reduction rule saying the same thing <button type="button" class="slide-ref" data-slide="ryu2:25" title="Open this slide">slide 25</button>.</p>
+
+<pre class="algo"><code>1. Assert: Due to validation, a value of value type nt is on the top of the stack.
+2. Pop the value (nt.const c_2) from the stack.
+3. Assert: Due to validation, a value of value type nt is on the top of the stack.
+4. Pop the value (nt.const c_1) from the stack.
+5. Let c be relop_nt(c_1, c_2).
+6. Push the value (i32.const c) to the stack.
+
+(nt.const c_1) (nt.const c_2) (nt.relop)  ~>  (i32.const c)
+    if c = relop_nt(c_1, c_2)</code></pre>
+
+  <div class="callout warn"><p><span class="co-tag">Careful</span> Both of those are correct here, and both are written out in full in the source of the standard, in two different markup languages, by two different acts of typing. The slide ends with the question the whole lecture answers: can we do better? The honest reading is that the second block already determines the first, so writing the first by hand is a copy operation performed by a human, and humans are not good at copy operations.</p></div>
+
+  <figure class="fig">
+    <svg viewBox="0 0 660 316" role="img" aria-label="Two directions of work. For JavaScript, the prose standard is the source of truth and a mechanized specification is extracted from it, which then yields tools. For WebAssembly, a single SpecTec definition is the source of truth and the formal specification, the prose specification and the interpreter are generated from it, with test programs generated by the later WEST work.">
+      <defs>
+        <marker id="mkr2-ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="var(--ink-2)"/></marker>
+        <marker id="mkr2-ahb" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="var(--accent)"/></marker>
+      </defs>
+
+      <text x="16" y="18" font-size="12" font-weight="600" fill="var(--ink)">JavaScript: extract a formal definition out of the document</text>
+      <rect x="16" y="30" width="150" height="46" rx="6" fill="var(--surface)" stroke="var(--hairline)"/>
+      <text x="91" y="50" font-size="11" text-anchor="middle" fill="var(--ink)">ECMA-262</text>
+      <text x="91" y="65" font-size="10" text-anchor="middle" fill="var(--muted)">prose, the standard</text>
+      <line x1="168" y1="53" x2="240" y2="53" stroke="var(--ink-2)" stroke-width="1.5" marker-end="url(#mkr2-ah)"/>
+      <text x="204" y="46" font-size="10" text-anchor="middle" fill="var(--muted)">extract</text>
+      <rect x="244" y="30" width="160" height="46" rx="6" fill="var(--surface)" stroke="var(--hairline)"/>
+      <text x="324" y="50" font-size="11" text-anchor="middle" fill="var(--ink)">Mechanized spec</text>
+      <text x="324" y="65" font-size="10" text-anchor="middle" fill="var(--muted)">generated, downstream</text>
+      <line x1="406" y1="53" x2="478" y2="53" stroke="var(--ink-2)" stroke-width="1.5" marker-end="url(#mkr2-ah)"/>
+      <rect x="482" y="30" width="160" height="46" rx="6" fill="var(--surface)" stroke="var(--hairline)"/>
+      <text x="562" y="50" font-size="11" text-anchor="middle" fill="var(--ink)">Tests, analysers</text>
+      <text x="562" y="65" font-size="10" text-anchor="middle" fill="var(--muted)">checks on the document</text>
+      <text x="16" y="96" font-size="10" fill="var(--muted)">The document is the source of truth. Each new edition has to be extracted again.</text>
+
+      <line x1="16" y1="112" x2="644" y2="112" stroke="var(--hairline)" stroke-width="1"/>
+
+      <text x="16" y="132" font-size="12" font-weight="600" fill="var(--ink)">WebAssembly: generate the documents out of the definition</text>
+      <rect x="16" y="176" width="150" height="46" rx="6" fill="var(--surface)" stroke="var(--accent)"/>
+      <text x="91" y="196" font-size="11" text-anchor="middle" fill="var(--ink)">SpecTec DSL</text>
+      <text x="91" y="211" font-size="10" text-anchor="middle" fill="var(--muted)">single source of truth</text>
+      <path d="M168,199 L200,199" fill="none" stroke="var(--accent)" stroke-width="1.5"/>
+      <path d="M200,161 L200,269" fill="none" stroke="var(--accent)" stroke-width="1.5"/>
+      <line x1="200" y1="161" x2="246" y2="161" stroke="var(--accent)" stroke-width="1.5" marker-end="url(#mkr2-ahb)"/>
+      <line x1="200" y1="197" x2="246" y2="197" stroke="var(--accent)" stroke-width="1.5" marker-end="url(#mkr2-ahb)"/>
+      <line x1="200" y1="233" x2="246" y2="233" stroke="var(--accent)" stroke-width="1.5" marker-end="url(#mkr2-ahb)"/>
+      <line x1="200" y1="269" x2="246" y2="269" stroke="var(--ink-2)" stroke-width="1.5" stroke-dasharray="4 3" marker-end="url(#mkr2-ah)"/>
+      <rect x="250" y="146" width="240" height="30" rx="5" fill="var(--surface)" stroke="var(--hairline)"/>
+      <text x="262" y="165" font-size="11" fill="var(--ink)">Formal specification (LaTeX)</text>
+      <rect x="250" y="182" width="240" height="30" rx="5" fill="var(--surface)" stroke="var(--hairline)"/>
+      <text x="262" y="201" font-size="11" fill="var(--ink)">Prose specification (reST)</text>
+      <rect x="250" y="218" width="240" height="30" rx="5" fill="var(--surface)" stroke="var(--hairline)"/>
+      <text x="262" y="237" font-size="11" fill="var(--ink)">Interpreter (indirect, via AL)</text>
+      <rect x="250" y="254" width="240" height="30" rx="5" fill="var(--surface)" stroke="var(--hairline)" stroke-dasharray="4 3"/>
+      <text x="262" y="273" font-size="11" fill="var(--muted)">Test programs (WEST, later work)</text>
+      <text x="502" y="203" font-size="10" fill="var(--good)">the definition is</text>
+      <text x="502" y="217" font-size="10" fill="var(--good)">written once</text>
+      <text x="16" y="306" font-size="10" fill="var(--muted)">The definition is the source of truth. The documents are output, so they cannot disagree with it.</text>
+    </svg>
+    <figcaption>The same goal reached from opposite ends. ESMeta compiles a prose standard into a formal artifact; SpecTec compiles a formal artifact into the prose standard and everything else the committee ships <button type="button" class="slide-ref" data-slide="ryu2:24" title="Open this slide">slides 24, 26</button>.</figcaption>
+  </figure>
+
+  <div class="quiz">
+    <script type="application/json">
+    {"type":"mc","q":"Why is the WebAssembly problem different in kind from the JavaScript one, rather than just easier?","options":["Because WebAssembly has no formal specification at all, so there is nothing to extract","Because WebAssembly already has a formal specification, so the problem moves from recovering one to keeping four separately maintained artifacts consistent with it","Because WebAssembly is small enough that a single person can check the whole standard by hand","Because the WebAssembly committee does not publish a prose description of the semantics"],"answer":1,"explain":"ECMA-262 gives you prose only, so a formal definition has to be extracted from it. WebAssembly requires a formal specification, a prose specification, a reference interpreter and a test suite for every proposal, all written by hand, with nothing but careful reading linking them together."}
+    </script>
+  </div>
+
+  <h3 id="mkr2-spectec">SpecTec</h3>
+
+  <div class="callout key"><p><span class="co-tag">Key idea</span> SpecTec is a framework for mechanizing the specification of WebAssembly. It embraces both the declarative and the algorithmic styles of the semantics, it provides a domain-specific language in which the syntax, the type system and the execution semantics of Wasm can be defined directly, and it is the single source of truth from which the various artifacts can be auto-generated: a LaTeX backend, a prose backend, an interpreter backend, and more <button type="button" class="slide-ref" data-slide="ryu2:26" title="Open this slide">slide 26</button>.</p></div>
+
+  <p>Two of those clauses carry most of the weight. "Both declarative and algorithmic styles" is the reason the pipeline has as many stages as it does: the formal rules are declarative, written as relations, while the prose and the reference interpreter are algorithmic, written as ordered steps that push and pop a stack. Getting from one to the other automatically is the technical content of the work. "Single source of truth" is the reason the artifacts stop drifting: if they are all outputs of the same definition, an inconsistency between them is a bug in a compiler rather than a bug that a reviewer has to notice.</p>
+
+  <p>The later WEST slides add one more description that is worth recording, because it explains why so much becomes possible at once: SpecTec is the official tool for handling the specification itself as data, and it is written in OCaml <button type="button" class="slide-ref" data-slide="ryu2:70" title="Open this slide">slide 70</button>. Once the specification is a data structure inside a program, anything you can write a traversal for becomes available.</p>
+
+  <p>The work was published as <em>Bringing the WebAssembly Standard up to Speed with SpecTec</em> at PLDI 2024, by Dongjun Youn, Wonho Shin, Jaehyun Lee and Sukyoung Ryu together with Joachim Breitner, Philippa Gardner, Sam Lindley, Matija Pretnar, Xiaojia Rao, Conrad Watt and Andreas Rossberg <button type="button" class="slide-ref" data-slide="ryu2:17" title="Open this slide">slide 17</button>. The shape of that author list matters for the adoption story below: the KAIST group and people from the WebAssembly community wrote the paper together, which is a different relationship from the one section 15 described with TC39.</p>
+
+  <h3 id="mkr2-dsl">What a definition looks like</h3>
+
+  <p>The DSL is designed to describe the Wasm specification concisely, and it deliberately stays close to pen-and-paper notation, so that someone who can read the LaTeX rules can read the DSL without a manual <button type="button" class="slide-ref" data-slide="ryu2:31" title="Open this slide">slides 31, 70</button>. A definition of the relational operators, the same instruction used above, has four kinds of declaration in it.</p>
+
+<pre class="algo"><code>syntax instr =                              &lt;- syntax
+  | CONST numtype num_(numtype)
+  | UNOP numtype unop_(numtype)
+  | BINOP numtype binop_(numtype)
+  | TESTOP numtype testop_(numtype)
+  | RELOP numtype relop_(numtype)
+  | ...
+
+def $relop(numtype, relop, num, num) : num_(I32)      &lt;- auxiliary function
+def $relop(inn, EQ, iN_1, iN_2) = $ieq($size(inn), iN_1, iN_2)
+def $relop(inn, NE, iN_1, iN_2) = $ine($size(inn), iN_1, iN_2)
+
+rule Instr_ok/relop:                        &lt;- relation: validation rule
+  C |- RELOP nt relop_nt : nt nt -> I32
+
+rule Step_pure/relop:                       &lt;- relation: execution semantics
+  (CONST nt c_1) (CONST nt c_2) (RELOP nt relop) ~> (CONST I32 c)
+  -- if c = $relop(nt, relop, c_1, c_2)</code></pre>
+
+  <p>A <code>syntax</code> declaration gives an abstract grammar. A <code>def</code> declaration gives an auxiliary function, here the meta-level function that says what a relational operator computes on two integers of a given width. Two <code>rule</code> declarations give relations: the validation rule, which is the typing rule saying that a relational operator consumes two operands of the numeric type and produces an <code>i32</code>, and the execution rule, which is the small-step reduction. The premise on the last line, written after a double dash, is a side condition. Nothing here is new notation for a Wasm reader, which is the design goal.</p>
+
+  <details class="reveal"><summary>If the notation is that familiar, where is the cost?</summary><p>The summary slide at the very end of the deck names it directly. For the JavaScript work the burden falls on the ESMeta team, who maintain the extraction as the standard changes. For the WebAssembly work the burden falls the other way, on the community, who have to learn a specification language <button type="button" class="slide-ref" data-slide="ryu2:87" title="Open this slide">slide 87</button>. Keeping the DSL close to the notation the committee already writes on paper is what makes that burden payable. It is a deliberate design constraint, not a cosmetic one.</p></details>
+
+  <h3 id="mkr2-pipeline">From the DSL to the backends</h3>
+
+  <p>Between the DSL a human writes and the artifacts a backend emits there are several intermediate forms, each one more explicit than the last. The reason for the chain is the declarative-to-algorithmic gap: a reduction rule states a relation, while a prose step or an interpreter line has to say which value to pop first.</p>
+
+  <div class="stepper" data-title="SpecTec: from one definition to every artifact">
+    <div class="step" data-label="Write the DSL"><p>The specification is written once in the DSL, as syntax declarations, auxiliary function definitions and relations for validation and execution <button type="button" class="slide-ref" data-slide="ryu2:31" title="Open this slide">slide 31</button>. This is the only file a human edits.</p></div>
+    <div class="step" data-label="Parse into EL"><p>The definitions are parsed into a representation called the External Language, or EL <button type="button" class="slide-ref" data-slide="ryu2:32" title="Open this slide">slide 32</button>. EL is close to what was written, so it keeps the notation the author chose. That matters later: the formal LaTeX backend renders from EL, because EL still knows how the rule was meant to look on the page.</p></div>
+    <div class="step" data-label="Elaborate EL into IL"><p>EL is elaborated into the Internal Language, or IL, which is more explicit and unambiguous <button type="button" class="slide-ref" data-slide="ryu2:34" title="Open this slide">slide 34</button>. Four things happen here: type checking, dimension inference, binding and recursion analysis, and type-driven resolution of notational overloading. Dimension inference is the one worth seeing. Written naively, a premise comparing a sequence with another sequence plus one fails to type check; inference turns <code>x* &lt; y* + 1</code> into <code>(x &lt; y + 1)*</code>, that is, a comparison performed pointwise across the two sequences.</p></div>
+    <div class="step" data-label="Simplify IL to IL"><p>A number of transformations then run on the IL <button type="button" class="slide-ref" data-slide="ryu2:36" title="Open this slide">slide 36</button>: infer implicit side conditions, lift partial function types into option types, introduce auxiliary variables for those options, turn subsumption into explicit injections, and identify variable bindings while reordering premises. The inferred side condition is the illustrative case: comparing two sequences pointwise only makes sense if they have the same length, so the transformation adds the premise that the two lengths are equal, which nobody wrote down.</p></div>
+    <div class="step" data-label="Anti-unify the left-hand sides"><p>The first of two preprocessing steps before the algorithmic view. If two reduction rules for the same instruction have different left-hand sides, they have to be anti-unified into a common pattern with the difference pushed into premises <button type="button" class="slide-ref" data-slide="ryu2:40" title="Open this slide">slide 40</button>. The branch instruction is the example: rules for <code>br 0</code> and <code>br n+1</code> become two rules both matching <code>br m</code>, one with the premise that <code>m</code> is zero and one with the premises that <code>m</code> is greater than zero and that <code>n</code> is <code>m - 1</code>. An algorithm cannot dispatch on two different shapes at once, so the shapes have to be merged first.</p></div>
+    <div class="step" data-label="Identify binding occurrences"><p>The second preprocessing step decides, for each equality premise, whether it binds a variable or checks a value, so that every variable is bound exactly once where that is possible <button type="button" class="slide-ref" data-slide="ryu2:41" title="Open this slide">slide 41</button>. A premise that destructures a pair becomes a <code>where</code> binding; a premise that compares two already-bound variables becomes an equality test. In a relation the distinction does not exist; in an imperative algorithm it is the difference between a let and an if.</p></div>
+    <div class="step" data-label="Translate IL into AL"><p>With the preprocessing done, translating IL definitions into the Algorithmic Language, AL, is mostly straightforward <button type="button" class="slide-ref" data-slide="ryu2:38" title="Open this slide">slides 38-39</button>. AL represents the runtime semantics in an imperative style: pop from the stack, let a variable be something, branch, push, execute. A rule of the form left-hand side reduces to right-hand side under some premises becomes a numbered sequence of those operations, which is exactly the shape both the prose and an interpreter need.</p></div>
+    <div class="step" data-label="Run the backends"><p>The backends read the intermediate forms and emit the artifacts <button type="button" class="slide-ref" data-slide="ryu2:42" title="Open this slide">slides 42-46</button>. The formal backend renders EL as LaTeX, the prose backend renders AL as reStructuredText, and the interpreter backend executes AL. All three see the same definition, so all three say the same thing.</p></div>
+  </div>
+
+  <h3 id="mkr2-backends">What is generated</h3>
+
+  <p>The generated documents are not produced wholesale. The source of the standard stays a document with structure, and the parts that used to be hand-written become splice directives that name a rule <button type="button" class="slide-ref" data-slide="ryu2:43" title="Open this slide">slide 43</button>. A directive like <code>$${rule-prose: exec/relop}</code> is filled in from the AL form of that rule, and a directive like <code>$${rule: Step_pure/relop}</code> is filled in from the EL form. The editors keep control of the surrounding text, section order and cross-references, and give up only the parts that were a translation exercise.</p>
+
+  <div class="tabs">
+    <div class="tab" data-label="Formal backend"><p>The formal backend emits the LaTeX that renders as the reduction rule and the typing rule <button type="button" class="slide-ref" data-slide="ryu2:43" title="Open this slide">slides 43-45</button>. It reads EL rather than IL, which is why the rendered output keeps the notation the specification author chose instead of the more explicit form the elaborator produces internally. Filling the <code>$${rule: ...}</code> directive produces exactly the displayed math block that a reader of the standard sees today.</p></div>
+    <div class="tab" data-label="Prose backend"><p>The prose backend emits the reStructuredText for the numbered English steps <button type="button" class="slide-ref" data-slide="ryu2:43" title="Open this slide">slides 43-45</button>. It reads AL, because the numbered steps and the imperative form of AL are the same thing: assert that validation guarantees something is on the stack, pop it, let a variable be the result of the auxiliary function, push the result. This is the artifact whose hand-written version the deck called laborious, tedious and error-prone, and it is now output.</p></div>
+    <div class="tab" data-label="Interpreter backend"><p>The interpreter backend gives what the deck calls an <strong>indirect interpreter</strong>: Wasm is interpreted by interpreting the specification written in AL <button type="button" class="slide-ref" data-slide="ryu2:46" title="Open this slide">slide 46</button>. The Wasm code and the AL definitions both go in, an AL interpreter runs, and the result comes out. It is the same meta-level move as ESMeta's generated JavaScript interpreter, arrived at from the other direction: nobody writes an interpreter for Wasm, they write an interpreter for the language the semantics is written in.</p></div>
+  </div>
+
+  <div class="callout def"><p><span class="co-tag">Definition</span> An <em>indirect interpreter</em> does not implement the language. It implements the metalanguage in which the language is defined, and then runs the definition on the program. Its conformance to the standard is therefore not something to be tested and maintained; it holds by construction, as long as the AL interpreter itself is right.</p></div>
+
+  <div class="quiz">
+    <script type="application/json">
+    {"type":"fill","q":"What is the name of the imperative intermediate form in SpecTec, the one the prose backend and the interpreter backend both read? Give the abbreviation or its expansion.","accept":["al","algorithmic language","the algorithmic language","al (algorithmic language)"],"explain":"AL, the Algorithmic Language, represents the runtime semantics in an imperative style with stack operations, lets and branches. Prose and the interpreter are both easy to generate from it, whereas the declarative IL rules do not say which operand to pop first."}
+    </script>
+  </div>
+
+  <h3 id="mkr2-eval">Does it work</h3>
+
+  <p>The evaluation asks three questions, one for each thing that could reasonably go wrong <button type="button" class="slide-ref" data-slide="ryu2:47" title="Open this slide">slide 47</button>: is the generated output correct, does the framework catch bugs during standard development, and can it cope with features that do not exist yet.</p>
+
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Question</th><th>What was done</th><th>Result</th></tr></thead>
+      <tbody>
+        <tr><td>Correctness</td><td>Auto-generate the formal and prose specifications, and the indirect interpreter, for Wasm 2.0</td><td>Both specifications generated, and the generated interpreter passes 100 percent of the official test suite <button type="button" class="slide-ref" data-slide="ryu2:48" title="Open this slide">slide 48</button></td></tr>
+        <tr><td>Bug prevention</td><td>Inject 13 retrospective specification bugs into the specification written in the DSL</td><td>All 13 detected, at various phases of SpecTec <button type="button" class="slide-ref" data-slide="ryu2:49" title="Open this slide">slide 49</button></td></tr>
+        <tr><td>Forward compatibility</td><td>Run SpecTec on five proposals slated for inclusion in Wasm 3.0</td><td>All five handled, and 10 bugs found and reported in the proposals <button type="button" class="slide-ref" data-slide="ryu2:50" title="Open this slide">slide 50</button></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>The phrase "at various phases" in the second row is the interesting one. A bug injected into a DSL definition can be caught by the elaborator's type checking, by dimension inference, by the inferred side conditions, or only later when the generated interpreter fails a test. Different mistakes surface at different points in the chain, which is what you would expect from a compiler and is precisely what four hand-maintained documents cannot offer.</p>
+
+  <p>The bugs the project has found in real specifications and proposals fall into four groups <button type="button" class="slide-ref" data-slide="ryu2:51" title="Open this slide">slide 51</button>. Type errors are missing immediates or missing record fields in the formal rules. Semantic errors are missing stack operands, mishandling of the stack, and index errors in the formal rules. Prose errors are unbound variables, missing steps and other mistranslations, which is exactly the failure mode you get when a human copies a rule into English. Editorial errors are typos, layout problems and wrong hyperlinks.</p>
+
+  <p>Three further slides show why the problem is getting harder rather than easier, and none of them is about a single rule being wrong <button type="button" class="slide-ref" data-slide="ryu2:52" title="Open this slide">slides 52-54</button>. Proposals are tested individually, but they interact: a construct from the garbage collection proposal combined with one from the SIMD proposal produced a bug in JavaScriptCore. Wasm interoperates with other languages, and that boundary produced a bug in V8. And implementations support different subsets of the features at any given time, so there is no single specification that every engine is even trying to satisfy.</p>
+
+  <h3 id="mkr2-west">WEST: generating the tests as well</h3>
+
+  <p>The fourth required artifact, the test suite, is the one the PLDI work did not generate. That is the subject of <em>WEST: Specification-Based Test Generation for WebAssembly</em>, by Dongjun Youn, Wonho Shin and Sukyoung Ryu, at ASE 2025 <button type="button" class="slide-ref" data-slide="ryu2:62" title="Open this slide">slide 62</button>.</p>
+
+  <p>Testing is what establishes conformance between implementations and the specification, so the tests carry real weight <button type="button" class="slide-ref" data-slide="ryu2:63" title="Open this slide">slide 63</button>. Maintaining them by hand runs into two problems. As Wasm grows, keeping the tests current becomes hard, and interactions between features multiply the cases combinatorially; the deck illustrates this with exception handling combined with garbage collection, and points at a CVE and a Chromium issue that came out of that combination <button type="button" class="slide-ref" data-slide="ryu2:67" title="Open this slide">slide 67</button>. Separately, each implementation supports a different set of features, so a single fixed test suite is the wrong shape for the target <button type="button" class="slide-ref" data-slide="ryu2:68" title="Open this slide">slide 68</button>. The question the paper asks is how to generate Wasm tests for an evolving specification and diverging implementations <button type="button" class="slide-ref" data-slide="ryu2:69" title="Open this slide">slide 69</button>.</p>
+
+  <p>SpecTec is what makes an answer possible, for the reason given earlier: the specification is available as data, and the DSL already expresses the syntax, the validation rules and the execution semantics <button type="button" class="slide-ref" data-slide="ryu2:70" title="Open this slide">slide 70</button>. WEST's design goals follow directly from those three <button type="button" class="slide-ref" data-slide="ryu2:72" title="Open this slide">slide 72</button>. Generate tests automatically from a given specification, including specifications with features added or removed, which is how the divergence problem is handled. Generate syntactically correct and valid programs systematically, using the mechanized syntax and validation rules. And produce semantically rich, diverse tests that include various features and their interactions.</p>
+
+  <figure class="fig">
+    <svg viewBox="0 0 660 224" role="img" aria-label="The WEST pipeline. The syntax and validation rules of the SpecTec specification drive a program generator, which runs either top-down or bottom-up. Its valid program is passed to a result extractor driven by the execution semantics. The test generator then emits a test program together with its assertions.">
+      <defs>
+        <marker id="mkr2-ah2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="var(--ink-2)"/></marker>
+      </defs>
+      <text x="14" y="16" font-size="11" font-weight="600" fill="var(--ink)">Specification in the SpecTec DSL</text>
+      <rect x="14" y="26" width="132" height="30" rx="5" fill="var(--surface)" stroke="var(--accent)"/>
+      <text x="80" y="45" font-size="11" text-anchor="middle" fill="var(--ink)">Syntax</text>
+      <rect x="14" y="64" width="132" height="30" rx="5" fill="var(--surface)" stroke="var(--accent)"/>
+      <text x="80" y="83" font-size="11" text-anchor="middle" fill="var(--ink)">Validation rules</text>
+      <rect x="14" y="118" width="132" height="30" rx="5" fill="var(--surface)" stroke="var(--accent)"/>
+      <text x="80" y="137" font-size="11" text-anchor="middle" fill="var(--ink)">Execution semantics</text>
+
+      <path d="M148,41 L166,41 L166,58 L182,58" fill="none" stroke="var(--ink-2)" stroke-width="1.5" marker-end="url(#mkr2-ah2)"/>
+      <path d="M148,79 L166,79 L166,66 L182,66" fill="none" stroke="var(--ink-2)" stroke-width="1.5" marker-end="url(#mkr2-ah2)"/>
+      <line x1="148" y1="133" x2="338" y2="133" stroke="var(--ink-2)" stroke-width="1.5" marker-end="url(#mkr2-ah2)"/>
+
+      <rect x="186" y="38" width="130" height="50" rx="6" fill="var(--surface)" stroke="var(--hairline)"/>
+      <text x="251" y="58" font-size="11" text-anchor="middle" fill="var(--ink)">Program generator</text>
+      <text x="251" y="74" font-size="10" text-anchor="middle" fill="var(--muted)">top-down or bottom-up</text>
+
+      <path d="M316,63 L332,63 L332,110 L348,110" fill="none" stroke="var(--ink-2)" stroke-width="1.5" marker-end="url(#mkr2-ah2)"/>
+      <text x="336" y="88" font-size="10" fill="var(--muted)">valid program</text>
+
+      <rect x="352" y="86" width="130" height="50" rx="6" fill="var(--surface)" stroke="var(--hairline)"/>
+      <text x="417" y="106" font-size="11" text-anchor="middle" fill="var(--ink)">Result extractor</text>
+      <text x="417" y="122" font-size="10" text-anchor="middle" fill="var(--muted)">expected outcome</text>
+
+      <line x1="484" y1="111" x2="514" y2="111" stroke="var(--ink-2)" stroke-width="1.5" marker-end="url(#mkr2-ah2)"/>
+      <rect x="518" y="86" width="128" height="50" rx="6" fill="var(--surface)" stroke="var(--hairline)"/>
+      <text x="582" y="116" font-size="11" text-anchor="middle" fill="var(--ink)">Test generator</text>
+
+      <path d="M582,138 L582,160" fill="none" stroke="var(--ink-2)" stroke-width="1.5" marker-end="url(#mkr2-ah2)"/>
+      <rect x="518" y="164" width="128" height="46" rx="6" fill="var(--surface)" stroke="var(--good)"/>
+      <text x="582" y="183" font-size="11" text-anchor="middle" fill="var(--ink)">Test program</text>
+      <text x="582" y="199" font-size="11" text-anchor="middle" fill="var(--ink)">plus assertions</text>
+
+      <text x="14" y="176" font-size="10" fill="var(--muted)">Syntax and validation rules decide what a legal</text>
+      <text x="14" y="190" font-size="10" fill="var(--muted)">program is. The execution semantics decides what</text>
+      <text x="14" y="204" font-size="10" fill="var(--muted)">that program should do, which becomes the oracle.</text>
+    </svg>
+    <figcaption>WEST reuses the three parts of the SpecTec definition for three different jobs. The oracle problem, normally the hard part of test generation, is solved by running the semantics that is already there <button type="button" class="slide-ref" data-slide="ryu2:73" title="Open this slide">slide 73</button>.</figcaption>
+  </figure>
+
+  <p>Programs are generated in two complementary ways <button type="button" class="slide-ref" data-slide="ryu2:74" title="Open this slide">slide 74</button>. The <strong>top-down</strong> approach starts from the outermost structure, the top-level module, and recursively expands non-terminal symbols of the grammar, filtering out invalid immediate structures using the validation rules as it goes <button type="button" class="slide-ref" data-slide="ryu2:75" title="Open this slide">slides 75-76</button>. Expanding a module gives a function, expanding the function gives a block, expanding the block gives instructions, and the typing rule for an instruction such as <code>memory.grow</code> constrains what may be filled in. The deck says this approach is specialised for producing exceptional test cases that are often overlooked.</p>
+
+  <p>The <strong>bottom-up</strong> approach starts from the innermost structure, from individual instructions, and generates valid wrappers around them <button type="button" class="slide-ref" data-slide="ryu2:77" title="Open this slide">slides 77-78</button>. Constraints are collected gradually and used while the wrappers are built, so a pair of instructions such as <code>memory.grow</code> and <code>array.new</code> forces the surrounding module to declare a memory with the right address type and an array type of the right shape. This is the approach that guarantees a specific feature, or a specific combination of features, is actually present in the test rather than merely possible.</p>
+
+  <p>The evaluation ran against three browser engines, V8, SpiderMonkey and JavaScriptCore, and two standalone engines, Wasmtime and Wasmer, using a different sub-variant of the specification for each one with the unsupported features removed <button type="button" class="slide-ref" data-slide="ryu2:79" title="Open this slide">slide 79</button>. That per-engine specialisation is only affordable because the specification is data: removing a feature means removing declarations from the DSL, not maintaining a fifth test suite by hand. WEST found 16 bugs, 11 of them newly found and confirmed <button type="button" class="slide-ref" data-slide="ryu2:80" title="Open this slide">slide 80</button>.</p>
+
+  <div class="quiz">
+    <script type="application/json">
+    {"type":"mc","q":"In WEST, where does the expected result of a generated test program come from?","options":["From running the program on a reference engine such as V8 and recording what it does","From a human who inspects the generated program and writes the assertion","From the execution semantics in the SpecTec definition, which the result extractor runs on the generated program","From comparing several engines and taking the majority answer"],"answer":2,"explain":"The syntax and validation rules drive the program generator, and the execution semantics drives the result extractor, which produces the expected outcome. The oracle is the specification itself, so a disagreement between an engine and the generated assertion is a disagreement between the engine and the standard."}
+    </script>
+  </div>
+
+  <h3 id="mkr2-adoption">Getting it into the standard</h3>
+
+  <p>The adoption route was different from the TC39 one. The KAIST group did not arrive with a finished tool and a list of defects; they went to a Dagstuhl seminar, presented early at a WebAssembly Community Group meeting, published jointly with people from that community, and then asked the group to vote on a plan <button type="button" class="slide-ref" data-slide="ryu2:55" title="Open this slide">slides 55, 86</button>.</p>
+
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>When</th><th>What</th></tr></thead>
+      <tbody>
+        <tr><td>March 2023</td><td>Dagstuhl seminar</td></tr>
+        <tr><td>October 2023</td><td>First presentation at a Wasm Community Group meeting</td></tr>
+        <tr><td>June 2024</td><td>PLDI paper on SpecTec</td></tr>
+        <tr><td>June 2024</td><td>Conditional acceptance of the adoption plan at a Wasm CG meeting</td></tr>
+        <tr><td>March 2025</td><td>Official acceptance of the adoption plan at a Wasm CG meeting</td></tr>
+        <tr><td>September 2025</td><td>Wasm 3.0</td></tr>
+        <tr><td>November 2025</td><td>ASE paper on WEST, ACM SIGSOFT Distinguished Paper Award</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>Two features of that sequence are worth noting. First, the presentation to the community came before the paper, which is the opposite order from the JavaScript story, and it is possible because the community was already committed to having a formal specification. Second, adoption was a plan that had to be conditionally accepted and then officially accepted, at two separate meetings nine months apart. A group that ships a specification by consensus does not silently start generating it. The WebAssembly site published a news post about SpecTec in March 2025, at the same time as the official acceptance <button type="button" class="slide-ref" data-slide="ryu2:58" title="Open this slide">slide 58</button>, and Wasm 3.0 followed that September.</p>
+
+  <div class="callout key"><p><span class="co-tag">Key idea</span> Both adoption stories succeeded, and neither succeeded by arguing that formal methods are good. The JavaScript route worked by reporting defects that the editors were already obliged to care about. The WebAssembly route worked by removing work that the committee members were already doing by hand, and by doing it with them as co-authors rather than for them.</p></div>
+
+  <h3 id="mkr2-compare">The two projects side by side</h3>
+
+  <p>The closing slide of the deck puts ESMeta and SpecTec in one table, and reading across the rows is the clearest summary of why the same group produced two quite different tools <button type="button" class="slide-ref" data-slide="ryu2:87" title="Open this slide">slide 87</button>.</p>
+
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th></th><th>JavaScript, ESMeta</th><th>WebAssembly, SpecTec</th></tr></thead>
+      <tbody>
+        <tr><td>Problem</td><td>Bugs in the specification, and diverse implementations</td><td>Bugs and inconsistencies across the four artifacts</td></tr>
+        <tr><td>Requirement</td><td>ECMA-262, a prose standard published every year</td><td>Four artifacts per proposal, formal specification included</td></tr>
+        <tr><td>Solution</td><td>Type checking of the specification, and rich test generation</td><td>Automatic generation of the artifacts</td></tr>
+        <tr><td>Burden</td><td>The ESMeta team's maintenance</td><td>The community learning a specification language</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>The burden row is the honest one. Neither approach is free. In the JavaScript case the standard stays exactly as it was and one research group carries the cost of tracking it, which works until that group stops. In the WebAssembly case the cost moves onto the committee, who must write their semantics in a DSL, and in exchange the artifacts stop being able to disagree with each other. Which trade is available to you is decided by the standards body, not by the technique.</p>
+
+  <p>There is also a point where the two meet. The deck shows the W3C WebAssembly JavaScript Interface, the document that specifies how Wasm and JavaScript talk to each other, with one part marked as Wasm-SpecTec territory and the other as ESMeta territory <button type="button" class="slide-ref" data-slide="ryu2:81" title="Open this slide">slide 81</button>. A specification written across two standards bodies in two different formalisms is the natural next problem, and it is a reminder that the boundary between "this language's semantics" and "that language's semantics" is not where the bugs stop.</p>
+
+  <details class="reveal"><summary>What carries forward to the next lecture</summary><p>The series continues with P4 and P4-SpecTec, then with other programming languages and non-PL software <button type="button" class="slide-ref" data-slide="ryu2:2" title="Open this slide">slide 2</button>. The question to hold on to is which of the two positions a new domain is in. If it has a prose standard and no formal semantics, the JavaScript playbook applies: extract, find defects, and earn a place in the build. If it already has formal rules alongside documents that restate them, the WebAssembly playbook applies: make the formal rules the source and generate the rest. The name SpecTec appearing in P4-SpecTec is the first hint about which answer the next lecture gives.</p></details>
+</section>

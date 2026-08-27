@@ -1,0 +1,1731 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Marktoberdorf Summer School 2026 Tutorial</title>
+<style>
+/* ============ design tokens ============ */
+:root{
+  --bg:#f9f9f7; --surface:#fcfcfb; --ink:#0b0b0b; --ink-2:#52514e; --muted:#898781;
+  --hairline:#e1e0d9; --border:rgba(11,11,11,0.10); --accent:#2a78d6; --accent-ink:#1c5cab;
+  --c-blue:#2a78d6; --c-aqua:#1baf7a; --c-yellow:#eda100; --c-green:#008300;
+  --c-violet:#4a3aa7; --c-red:#e34948; --c-magenta:#e87ba4; --c-orange:#eb6834;
+  --good:#0ca30c; --warn:#fab219; --serious:#ec835a; --crit:#d03b3b;
+  --good-ink:#006300; --crit-ink:#a32222; --warn-ink:#8a5a00;
+  --wash-blue:rgba(42,120,214,0.08); --wash-green:rgba(12,163,12,0.08);
+  --wash-red:rgba(227,73,72,0.09); --wash-yellow:rgba(237,161,0,0.12);
+  --shadow:0 1px 3px rgba(11,11,11,0.06);
+  --mono:ui-monospace,"SF Mono",Menlo,Consolas,"Liberation Mono",monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    --bg:#0d0d0d; --surface:#1a1a19; --ink:#ffffff; --ink-2:#c3c2b7; --muted:#898781;
+    --hairline:#2c2c2a; --border:rgba(255,255,255,0.10); --accent:#3987e5; --accent-ink:#86b6ef;
+    --c-blue:#3987e5; --c-aqua:#199e70; --c-yellow:#c98500; --c-green:#008300;
+    --c-violet:#9085e9; --c-red:#e66767; --c-magenta:#d55181; --c-orange:#d95926;
+    --good-ink:#4fc24f; --crit-ink:#ef8f8f; --warn-ink:#e8b45a;
+    --wash-blue:rgba(57,135,229,0.16); --wash-green:rgba(12,163,12,0.16);
+    --wash-red:rgba(230,103,103,0.16); --wash-yellow:rgba(201,133,0,0.18);
+    --shadow:none;
+  }
+}
+:root[data-theme="light"]{
+  --bg:#f9f9f7; --surface:#fcfcfb; --ink:#0b0b0b; --ink-2:#52514e; --muted:#898781;
+  --hairline:#e1e0d9; --border:rgba(11,11,11,0.10); --accent:#2a78d6; --accent-ink:#1c5cab;
+  --c-blue:#2a78d6; --c-aqua:#1baf7a; --c-yellow:#eda100; --c-green:#008300;
+  --c-violet:#4a3aa7; --c-red:#e34948; --c-magenta:#e87ba4; --c-orange:#eb6834;
+  --good-ink:#006300; --crit-ink:#a32222; --warn-ink:#8a5a00;
+  --wash-blue:rgba(42,120,214,0.08); --wash-green:rgba(12,163,12,0.08);
+  --wash-red:rgba(227,73,72,0.09); --wash-yellow:rgba(237,161,0,0.12);
+  --shadow:0 1px 3px rgba(11,11,11,0.06);
+}
+:root[data-theme="dark"]{
+  --bg:#0d0d0d; --surface:#1a1a19; --ink:#ffffff; --ink-2:#c3c2b7; --muted:#898781;
+  --hairline:#2c2c2a; --border:rgba(255,255,255,0.10); --accent:#3987e5; --accent-ink:#86b6ef;
+  --c-blue:#3987e5; --c-aqua:#199e70; --c-yellow:#c98500; --c-green:#008300;
+  --c-violet:#9085e9; --c-red:#e66767; --c-magenta:#d55181; --c-orange:#d95926;
+  --good-ink:#4fc24f; --crit-ink:#ef8f8f; --warn-ink:#e8b45a;
+  --wash-blue:rgba(57,135,229,0.16); --wash-green:rgba(12,163,12,0.16);
+  --wash-red:rgba(230,103,103,0.16); --wash-yellow:rgba(201,133,0,0.18);
+  --shadow:none;
+}
+
+/* ============ base ============ */
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--bg);color:var(--ink);
+  font:16px/1.65 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  -webkit-font-smoothing:antialiased;}
+h1,h2,h3,h4{line-height:1.25;color:var(--ink)}
+h1{font-size:1.9rem;margin:.2em 0 .4em}
+h2{font-size:1.6rem;margin:1.6em 0 .6em}
+h3{font-size:1.22rem;margin:2em 0 .5em}
+h4{font-size:1.02rem;margin:1.6em 0 .4em}
+h2,h3,h4{scroll-margin-top:24px}
+p{margin:.8em 0}
+a{color:var(--accent);text-decoration:none}
+a:hover{text-decoration:underline}
+code{font-family:var(--mono);font-size:.9em;background:var(--wash-blue);
+  padding:.08em .35em;border-radius:5px;}
+ul,ol{padding-left:1.4em}
+li{margin:.3em 0}
+strong{color:var(--ink)}
+em{color:inherit}
+.hidden{display:none !important}
+
+/* ============ layout ============ */
+.layout{display:grid;grid-template-columns:280px minmax(0,1fr)}
+.sidebar{position:sticky;top:0;height:100vh;overflow-y:auto;
+  border-right:1px solid var(--hairline);padding:22px 18px 40px;}
+.side-title{font-weight:700;font-size:.95rem;margin-bottom:2px}
+.side-sub{font-size:.78rem;color:var(--muted);margin-bottom:18px}
+main{min-width:0;max-width:860px;padding:0 clamp(18px,4vw,52px) 90px;margin:0 auto;}
+/* Below this width the sidebar stops being a column and becomes a drawer over the page.
+   Leaving it in the flow, which is what it did before, meant a phone reader scrolled past the
+   entire menu before reaching the first word of the tutorial. */
+/* Phone-sized. Mostly a matter of giving the text the width back. */
+/* ============ toc: school > group > section > subsection, all collapsible ============ */
+#toc a{display:block;padding:5px 10px;border-radius:8px;color:var(--ink-2);
+  font-size:.86rem;line-height:1.35}
+#toc a:hover{background:var(--wash-blue);text-decoration:none}
+#toc a.active{background:var(--wash-blue);color:var(--accent-ink)}
+.toc-num{display:inline-block;min-width:2.4em;color:var(--accent);font-weight:700}
+
+/* the twisty that every collapsible header carries */
+.tw{flex:0 0 auto;width:13px;height:13px;position:relative;color:var(--muted)}
+.tw::before{content:"";position:absolute;top:3px;left:4px;width:5px;height:5px;
+  border-right:1.6px solid currentColor;border-bottom:1.6px solid currentColor;
+  transform:rotate(45deg);transition:transform .15s ease}
+.collapsed>.tw::before,.collapsed .tw::before{transform:rotate(-45deg)}
+
+/* school */
+.toc-school{margin-bottom:6px}
+.toc-school+.toc-school{margin-top:14px;padding-top:12px;border-top:1px solid var(--hairline)}
+.toc-school-hd{display:flex;align-items:center;gap:8px;width:100%;font:inherit;
+  font-size:.74rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;
+  color:var(--accent-ink);background:var(--wash-blue);border:1px solid transparent;
+  border-radius:9px;padding:7px 10px;cursor:pointer;text-align:left}
+.toc-school-hd:hover{border-color:var(--accent)}
+.toc-school-count{margin-left:auto;font-weight:600;letter-spacing:0;text-transform:none;
+  color:var(--muted);font-size:.72rem}
+.toc-school.collapsed>.toc-school-body{display:none}
+
+/* group of sections inside a school (a day, or a lecture series). With one school these sit
+   at the top level of the menu, where they need a little more room than when nested. */
+.toc-group{margin-top:8px}
+#toc>.toc-group{margin-top:2px}
+#toc>.toc-group>.toc-group-hd{color:var(--accent-ink);padding:8px}
+.toc-group-hd{display:flex;align-items:center;gap:7px;width:100%;font:inherit;
+  font-size:.73rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;
+  color:var(--muted);background:none;border:none;padding:6px 8px;cursor:pointer;text-align:left}
+.toc-group-hd:hover{color:var(--accent-ink)}
+.toc-group.collapsed>.toc-group-body{display:none}
+
+/* one section, with its subsections nested under it */
+.toc-sec-row{display:flex;align-items:center;gap:4px;padding-right:6px;border-radius:8px}
+.toc-sec-row:hover{background:var(--wash-blue)}
+.toc-sec-row .tw-btn{flex:0 0 auto;display:flex;align-items:center;justify-content:center;
+  width:20px;height:24px;background:none;border:none;padding:0;cursor:pointer;color:var(--muted)}
+.toc-sec-row .tw-btn:hover{color:var(--accent)}
+.toc-sec-row .tw-btn.empty{visibility:hidden}
+#toc .toc-sec-row a.toc-h2{flex:1 1 auto;min-width:0;font-weight:600;color:var(--ink);
+  padding:5px 4px}
+#toc .toc-sec-row a.toc-h2:hover{background:none}
+.toc-sec.collapsed>.toc-sub{display:none}
+.toc-sub{margin:1px 0 4px 22px;padding-left:9px;border-left:1px solid var(--hairline)}
+#toc .toc-sub a.toc-h3{font-size:.79rem;padding:4px 9px}
+
+.toc-hit{background:var(--wash-yellow)}
+
+/* ============ toc tools: search + reading progress ============ */
+.toc-tools{margin:2px 0 14px;display:grid;gap:11px}
+.toc-search{width:100%;font:inherit;font-size:.85rem;padding:7px 12px;border-radius:9px;
+  border:1px solid var(--border);background:var(--surface);color:var(--ink)}
+.toc-search:focus{outline:2px solid var(--accent);border-color:var(--accent)}
+.toc-search::placeholder{color:var(--muted)}
+.toc-empty{font-size:.82rem;color:var(--muted);padding:4px 10px}
+.read-progress{font-size:.78rem;color:var(--ink-2)}
+.read-progress-bar{height:6px;border-radius:999px;background:var(--hairline);overflow:hidden;margin-bottom:5px}
+.read-progress-bar span{display:block;height:100%;width:0;background:var(--good);
+  border-radius:999px;transition:width .25s ease}
+.read-progress-txt{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.read-tools{display:flex;gap:9px;flex-wrap:wrap;margin-left:auto}
+.read-tools .linkbtn{font:inherit;font-size:.74rem;color:var(--accent-ink);background:none;
+  border:none;padding:0;cursor:pointer;text-decoration:underline;line-height:1}
+.read-tools .linkbtn:hover{color:var(--accent)}
+
+/* toc read state */
+.toc-label{flex:1 1 auto;min-width:0}
+.toc-check{flex:0 0 auto;width:16px;height:16px;border-radius:50%;border:1.5px solid var(--hairline);
+  display:inline-flex;align-items:center;justify-content:center;font-size:.68rem;color:transparent;
+  background:var(--surface);cursor:pointer}
+.toc-check::after{content:"\2713"}
+.toc-check:hover{border-color:var(--accent)}
+.toc-sec-row.read .toc-check{background:var(--good);border-color:var(--good);color:#fff}
+.toc-sec-row.read:not(.has-active) a.toc-h2 .toc-label{color:var(--muted)}
+
+/* ============ user highlights ============ */
+mark.user-hl{background:var(--wash-yellow);color:inherit;border-radius:3px;
+  padding:0 .08em;box-shadow:inset 0 -1px 0 var(--warn);cursor:pointer;
+  -webkit-box-decoration-break:clone;box-decoration-break:clone}
+mark.user-hl:hover{background:var(--wash-red);box-shadow:inset 0 -1px 0 var(--crit)}
+.hl-bar{position:absolute;z-index:90;display:flex;gap:6px;padding:5px 6px;
+  background:var(--surface);border:1px solid var(--border);border-radius:10px;
+  box-shadow:0 3px 12px rgba(11,11,11,.22)}
+.hl-bar button{font:inherit;font-size:.78rem;font-weight:600;padding:3px 10px;
+  border-radius:7px;border:1px solid var(--border);background:var(--bg);
+  color:var(--ink);cursor:pointer;white-space:nowrap}
+.hl-bar button:hover{border-color:var(--accent);background:var(--wash-blue);
+  color:var(--accent-ink)}
+@media print{.hl-bar{display:none !important}
+  mark.user-hl{background:transparent;box-shadow:inset 0 -1px 0 #999}}
+
+/* per-section mark-as-read button */
+.lec-read-btn{margin-top:10px;font:inherit;font-size:.78rem;font-weight:600;padding:5px 13px;
+  border-radius:999px;cursor:pointer;border:1px solid var(--border);background:var(--surface);
+  color:var(--ink-2);display:inline-flex;align-items:center;gap:6px}
+.lec-read-btn:hover{border-color:var(--accent);color:var(--accent-ink)}
+.lec-read-btn.read{background:var(--wash-green);border-color:var(--good);color:var(--good-ink)}
+@media print{.toc-tools,.lec-read-btn,.toc-check{display:none !important}}
+
+/* ============ hero ============ */
+.hero{padding:44px 0 8px}
+.hero .kicker{font-size:.8rem;letter-spacing:.12em;text-transform:uppercase;
+  color:var(--accent);font-weight:700;margin:0 0 6px}
+.hero .sub{color:var(--ink-2);max-width:60ch}
+.sched{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));
+  gap:10px;margin:10px 0 8px;padding:0}
+.sched-day{margin:24px 0 0;font-size:.72rem;font-weight:700;letter-spacing:.09em;
+  text-transform:uppercase;color:var(--muted)}
+.toc-day{margin:16px 0 0;padding:0 10px;font-size:.68rem;font-weight:700;
+  letter-spacing:.09em;text-transform:uppercase;color:var(--muted)}
+.sched a{display:block;background:var(--surface);border:1px solid var(--border);
+  border-radius:12px;padding:12px 14px;box-shadow:var(--shadow)}
+.sched a:hover{border-color:var(--accent);text-decoration:none}
+.sched .time{font-size:.74rem;color:var(--muted);font-family:var(--mono)}
+.sched .num{color:var(--accent);font-weight:700;margin-right:6px}
+.sched .who{font-size:.8rem;color:var(--ink-2)}
+.sched .t{font-weight:600;font-size:.92rem;color:var(--ink);margin:2px 0}
+.sched-note{font-size:.83rem;color:var(--muted);margin:6px 0 0}
+
+/* one card per school on the front page */
+.school-card{margin-top:34px;padding-top:18px;border-top:1px solid var(--hairline)}
+.school-card:first-of-type{border-top:none;padding-top:0}
+.school-card h2{margin:.1em 0 .3em;font-size:1.35rem}
+.school-blurb{color:var(--ink-2);max-width:62ch;margin:.2em 0 0}
+
+/* ============ sections ============ */
+section.lecture{margin-top:84px;padding-top:10px;border-top:2px solid var(--hairline)}
+.lec-head{display:flex;gap:16px;align-items:flex-start;margin-top:26px}
+.lec-head h2{margin:.1em 0 .2em}
+.lec-num{flex:0 0 auto;font-size:1.3rem;font-weight:800;color:var(--accent);
+  background:var(--wash-blue);border-radius:12px;padding:10px 14px;margin-top:4px}
+.lec-meta{color:var(--muted);font-size:.85rem;margin:0}
+.lead{font-size:1.08rem;color:var(--ink-2)}
+
+/* the divider that announces which school the sections below belong to */
+.school-banner{margin-top:96px;padding:22px 24px;border-radius:16px;
+  background:linear-gradient(var(--wash-blue),var(--wash-blue)) var(--surface);
+  border:1px solid var(--border)}
+.school-banner:first-of-type{margin-top:56px}
+.school-banner h2{margin:.15em 0 .2em;font-size:1.5rem}
+.school-banner p{margin:0;color:var(--ink-2);font-size:.9rem}
+.school-banner-tag{display:block;font-size:.7rem;font-weight:700;letter-spacing:.1em;
+  text-transform:uppercase;color:var(--accent)}
+.school-banner+section.lecture{margin-top:44px;border-top:none}
+
+/* collapsing a whole lecture from its heading */
+.lec-collapse{flex:0 0 auto;font:inherit;font-size:.78rem;padding:4px 10px;border-radius:8px;
+  border:1px solid var(--border);background:var(--surface);color:var(--muted);cursor:pointer;
+  margin-top:6px}
+.lec-collapse:hover{border-color:var(--accent);color:var(--accent-ink)}
+section.lecture.collapsed>*:not(.lec-head){display:none}
+section.lecture.collapsed .lec-head{margin-bottom:18px}
+
+/* ============ content blocks ============ */
+.callout{border:1px solid var(--border);border-left:4px solid var(--c-blue);
+  background:var(--surface);border-radius:10px;padding:12px 16px;margin:1.2em 0;
+  box-shadow:var(--shadow)}
+.callout>:first-child{margin-top:.2em}.callout>:last-child{margin-bottom:.2em}
+.callout.def{border-left-color:var(--c-blue);background:linear-gradient(var(--wash-blue),var(--wash-blue)) var(--surface)}
+.callout.key{border-left-color:var(--good);background:linear-gradient(var(--wash-green),var(--wash-green)) var(--surface)}
+.callout.warn{border-left-color:var(--warn);background:linear-gradient(var(--wash-yellow),var(--wash-yellow)) var(--surface)}
+.callout .co-tag{display:block;font-size:.72rem;font-weight:700;letter-spacing:.09em;
+  text-transform:uppercase;color:var(--muted);margin-bottom:2px}
+
+.anecdote{position:relative;margin:1.4em 0;padding:14px 18px 10px;border:1px dashed var(--hairline);
+  border-radius:12px;background:var(--surface);font-style:italic;color:var(--ink-2)}
+.anecdote::before{content:"🎙 from the lecture";font-style:normal;display:block;
+  font-size:.72rem;font-weight:700;letter-spacing:.09em;text-transform:uppercase;
+  color:var(--muted);margin-bottom:4px}
+.anecdote footer{font-style:normal;font-size:.8rem;color:var(--muted);text-align:right;margin-top:4px}
+.anecdote p{margin:.4em 0}
+
+.formula{display:block;text-align:center;font-size:1.06rem;background:var(--surface);
+  border:1px solid var(--hairline);border-radius:10px;padding:12px 16px;margin:1.1em 0;
+  overflow-x:auto;color:var(--ink)}
+
+.algo{border:1px solid var(--border);border-radius:12px;background:var(--surface);
+  margin:1.3em 0;padding:0 16px 10px;box-shadow:var(--shadow)}
+.algo::before{content:attr(data-title);display:block;font-weight:700;font-size:.9rem;
+  padding:10px 0 8px;border-bottom:1px solid var(--hairline);margin-bottom:6px}
+.algo ol{margin:.5em 0;font-family:var(--mono);font-size:.86rem;line-height:1.7}
+
+.slide-ref{display:inline-block;font-family:inherit;font-size:.7rem;font-weight:600;
+  padding:1px 9px;border:1px solid transparent;border-radius:999px;
+  background:var(--wash-blue);color:var(--accent-ink);
+  vertical-align:middle;white-space:nowrap;margin-left:6px}
+button.slide-ref{cursor:pointer;line-height:1.5}
+button.slide-ref::before{content:"⛶ ";font-weight:400;opacity:.75}
+button.slide-ref:hover,button.slide-ref:focus-visible{border-color:var(--accent);
+  background:var(--accent);color:#fff}
+
+.grid-2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+@media (max-width:720px){.grid-2{grid-template-columns:1fr}}
+
+.fig{background:var(--surface);border:1px solid var(--border);border-radius:12px;
+  padding:14px;margin:1.3em 0;box-shadow:var(--shadow)}
+.fig svg{display:block;max-width:100%;height:auto;margin:0 auto}
+/* A diagram drawn for a 700px column becomes illegible squeezed into a phone. Those are
+   marked .fig-wide at load and keep a readable width, scrolling inside their own box
+   rather than shrinking. Narrow diagrams are left alone. */
+.fig img{display:block;max-width:100%;height:auto;margin:0 auto;border-radius:6px}
+.slide-fig img{border:1px solid var(--hairline)}
+.fig-caption{font-size:.83rem;color:var(--muted);text-align:center;margin:.7em 0 0}
+
+.table-wrap{overflow-x:auto;margin:1.1em 0;border:1px solid var(--border);
+  border-radius:10px;background:var(--surface)}
+.table-wrap table{width:100%;border-collapse:collapse;font-size:.9rem}
+.table-wrap th{text-align:left;font-size:.72rem;letter-spacing:.08em;text-transform:uppercase;
+  color:var(--muted);padding:9px 12px;border-bottom:1px solid var(--hairline)}
+.table-wrap td{padding:8px 12px;border-bottom:1px solid var(--hairline);vertical-align:top}
+.table-wrap tr:last-child td{border-bottom:none}
+
+.pill{display:inline-block;font-size:.74rem;font-weight:600;padding:1px 10px;
+  border-radius:999px;background:var(--wash-blue);color:var(--accent-ink)}
+.pill.good{background:var(--wash-green);color:var(--good-ink)}
+.pill.warn{background:var(--wash-yellow);color:var(--warn-ink)}
+.pill.crit{background:var(--wash-red);color:var(--crit-ink)}
+
+details.reveal{border:1px solid var(--border);border-radius:10px;background:var(--surface);
+  padding:10px 16px;margin:1.1em 0}
+details.reveal summary{cursor:pointer;font-weight:600;color:var(--accent-ink);font-size:.93rem}
+details.reveal[open] summary{margin-bottom:8px}
+
+.btn{font:inherit;font-size:.88rem;padding:6px 14px;border-radius:9px;cursor:pointer;
+  border:1px solid var(--border);background:var(--surface);color:var(--ink)}
+.btn:hover{background:var(--wash-blue);border-color:var(--accent)}
+.btn:disabled{opacity:.45;cursor:default}
+.btn:disabled:hover{background:var(--surface);border-color:var(--border)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn.primary:hover{filter:brightness(1.08)}
+
+/* ============ quiz ============ */
+.quiz{border:1px solid var(--border);border-radius:12px;background:var(--surface);
+  padding:14px 18px;margin:1.3em 0;box-shadow:var(--shadow)}
+.quiz::before{content:"✏️ check yourself";display:block;font-size:.72rem;font-weight:700;
+  letter-spacing:.09em;text-transform:uppercase;color:var(--muted);margin-bottom:6px}
+.quiz-group{display:grid;gap:12px}
+.quiz-group .quiz{margin:0}
+.quiz-q{font-weight:600;margin:0 0 10px}
+.quiz-opts{display:grid;gap:7px}
+.quiz-opt{text-align:left;font:inherit;font-size:.92rem;padding:8px 13px;border-radius:9px;
+  border:1px solid var(--border);background:var(--bg);color:var(--ink);cursor:pointer}
+.quiz-opt:hover{border-color:var(--accent);background:var(--wash-blue)}
+.quiz-opt.correct{background:var(--wash-green);border-color:var(--good);color:var(--good-ink);font-weight:600}
+.quiz-opt.incorrect{background:var(--wash-red);border-color:var(--crit);color:var(--crit-ink)}
+.quiz-opt:disabled{cursor:default;opacity:.75}
+.quiz-opt.correct:disabled{opacity:1}
+.quiz-fill{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.quiz-fill input{font:inherit;font-size:.92rem;padding:7px 12px;border-radius:9px;
+  border:1px solid var(--border);background:var(--bg);color:var(--ink);min-width:220px}
+.quiz-fill input:focus{outline:2px solid var(--accent);border-color:var(--accent)}
+.quiz-fill input.ok{border-color:var(--good);background:var(--wash-green)}
+.quiz-fill input.no{border-color:var(--crit);background:var(--wash-red)}
+.quiz-explain{margin-top:10px;padding:10px 13px;border-radius:9px;background:var(--wash-green);
+  font-size:.9rem;color:var(--ink-2)}
+.quiz-explain::before{content:"✓ ";color:var(--good-ink);font-weight:700}
+.quiz-nudge{margin-top:8px;font-size:.85rem;color:var(--crit-ink)}
+
+/* ============ cnf playground ============ */
+.cnf-play{border:1px solid var(--border);border-radius:12px;background:var(--surface);
+  padding:14px 18px;margin:1.3em 0;box-shadow:var(--shadow)}
+.cnf-caption{font-size:.9rem;color:var(--ink-2);margin:0 0 10px}
+.cnf-vars{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px}
+.cnf-var{font-family:var(--mono);font-size:.92rem;padding:6px 13px;border-radius:9px;
+  border:1px solid var(--border);background:var(--bg);color:var(--ink);cursor:pointer}
+.cnf-var:hover{border-color:var(--accent)}
+.cnf-var.v-true{background:var(--wash-green);border-color:var(--good);color:var(--good-ink);font-weight:700}
+.cnf-var.v-false{background:var(--wash-red);border-color:var(--crit);color:var(--crit-ink);font-weight:700}
+.cnf-clauses{display:flex;flex-wrap:wrap;gap:8px}
+.cnf-clause{font-family:var(--mono);font-size:.9rem;padding:5px 11px;border-radius:9px;
+  border:1px solid var(--hairline);background:var(--bg)}
+.cnf-clause.c-sat{background:var(--wash-green);border-color:var(--good)}
+.cnf-clause.c-sat::after{content:" ✓";color:var(--good-ink);font-weight:700}
+.cnf-clause.c-fals{background:var(--wash-red);border-color:var(--crit)}
+.cnf-clause.c-fals::after{content:" ✗";color:var(--crit-ink);font-weight:700}
+.cnf-lit.lit-true{color:var(--good-ink);font-weight:700}
+.cnf-lit.lit-false{color:var(--muted);text-decoration:line-through}
+.cnf-status{margin-top:12px;font-size:.92rem;font-weight:600;display:flex;gap:12px;
+  align-items:center;flex-wrap:wrap}
+.cnf-status .st-sat{color:var(--good-ink)}
+.cnf-status .st-fals{color:var(--crit-ink)}
+
+/* ============ stepper ============ */
+.stepper{border:1px solid var(--border);border-radius:12px;background:var(--surface);
+  margin:1.3em 0;box-shadow:var(--shadow);overflow:hidden}
+.stepper-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap;
+  padding:10px 16px;border-bottom:1px solid var(--hairline);background:var(--bg)}
+.stepper-title{font-weight:700;font-size:.92rem;flex:1 1 auto;min-width:0}
+.stepper-ctrls{display:flex;align-items:center;gap:10px;margin-left:auto;flex-wrap:nowrap}
+.stepper-count{font-size:.8rem;color:var(--muted);font-family:var(--mono);white-space:nowrap}
+.stepper-label{font-size:.85rem;font-weight:600;color:var(--accent-ink)}
+.stepper .step{display:none;padding:14px 18px;animation:stepin .25s ease}
+.stepper .step.active{display:block}
+@keyframes stepin{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+.stepper-dots{display:flex;gap:5px;padding:0 16px 12px}
+.stepper-dot{width:8px;height:8px;border-radius:50%;background:var(--hairline);
+  border:none;cursor:pointer;padding:0}
+.stepper-dot.on{background:var(--accent)}
+
+/* ============ tabs ============ */
+.tabs{border:1px solid var(--border);border-radius:12px;background:var(--surface);
+  margin:1.3em 0;box-shadow:var(--shadow);overflow:hidden}
+.tab-bar{display:flex;flex-wrap:wrap;border-bottom:1px solid var(--hairline);background:var(--bg)}
+.tab-btn{font:inherit;font-size:.88rem;font-weight:600;padding:9px 16px;border:none;
+  background:none;color:var(--ink-2);cursor:pointer;border-bottom:2px solid transparent}
+.tab-btn:hover{color:var(--accent)}
+.tab-btn.on{color:var(--accent-ink);border-bottom-color:var(--accent)}
+.tabs .tab{display:none;padding:12px 18px}
+.tabs .tab.active{display:block}
+
+/* ============ lightbox ============ */
+.fig img.zoomable{cursor:zoom-in}
+.lightbox{position:fixed;inset:0;z-index:100;background:rgba(0,0,0,.82);
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:12px;cursor:zoom-out;padding:24px;overflow:auto;-webkit-overflow-scrolling:touch}
+.lightbox img{max-width:96vw;max-height:88vh;border-radius:8px;background:#fff;cursor:zoom-in}
+/* Enlarged: the picture is drawn at a width you can actually read and the overlay scrolls in
+   both directions around it. 240vw is about twice a phone screen, which is what a 720px slide
+   needs before its body text is legible; the cap keeps it sensible on a desktop. */
+.lightbox.zoomed{align-items:flex-start;justify-content:flex-start;cursor:default}
+.lightbox.zoomed img{max-width:none;max-height:none;width:min(1400px,240vw);cursor:zoom-out}
+.lightbox.zoomed .lb-cap{position:sticky;left:0}
+.lb-tools{position:fixed;top:12px;right:14px;z-index:101;display:flex;gap:8px}
+.lb-btn{font:inherit;font-size:.8rem;font-weight:600;padding:7px 13px;border-radius:9px;
+  cursor:pointer;border:1px solid rgba(255,255,255,.45);background:rgba(0,0,0,.55);color:#fff}
+.lb-btn:hover{background:rgba(0,0,0,.8);border-color:#fff}
+.lightbox .lb-cap{color:#fff;font-size:.84rem;text-align:center;max-width:70ch;
+  text-shadow:0 1px 3px rgba(0,0,0,.8)}
+.lightbox .lb-cap:empty{display:none}
+
+/* ============ ask Claude ============ */
+.ask-fab{position:fixed;right:16px;bottom:16px;z-index:60;font:inherit;font-size:.82rem;
+  font-weight:600;padding:9px 16px;border-radius:999px;cursor:pointer;
+  border:1px solid var(--accent);background:var(--accent);color:#fff;
+  box-shadow:0 3px 14px rgba(0,0,0,.22)}
+.ask-fab:hover{filter:brightness(1.08)}
+.ask-panel{position:fixed;right:16px;bottom:62px;z-index:60;width:min(410px,calc(100vw - 32px));
+  background:var(--surface);border:1px solid var(--border);border-radius:14px;
+  padding:14px 16px;box-shadow:0 8px 34px rgba(0,0,0,.26);display:grid;gap:9px}
+.ask-head{display:flex;align-items:center;gap:10px}
+.ask-head strong{flex:1 1 auto;font-size:.95rem}
+.ask-head .linkbtn{font:inherit;font-size:.76rem;color:var(--accent-ink);background:none;
+  border:none;padding:0;cursor:pointer;text-decoration:underline}
+.ask-ctx{margin:0;font-size:.78rem;color:var(--muted);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ask-text{font:inherit;font-size:.9rem;width:100%;padding:9px 11px;border-radius:9px;
+  resize:vertical;border:1px solid var(--border);background:var(--bg);color:var(--ink)}
+.ask-text:focus{outline:2px solid var(--accent);border-color:var(--accent)}
+.ask-note{margin:0;font-size:.75rem;color:var(--muted);line-height:1.45}
+.ask-note.done{color:var(--good-ink);font-weight:600}
+.ask-btns{display:flex;gap:8px;flex-wrap:wrap}
+.ask-saved{display:grid;gap:6px;max-height:190px;overflow-y:auto}
+.ask-saved:empty{display:none}
+.ask-q{display:flex;gap:8px;align-items:flex-start;font-size:.79rem;color:var(--ink-2);
+  background:var(--bg);border:1px solid var(--hairline);border-radius:9px;padding:7px 10px}
+.ask-q span{flex:1 1 auto;min-width:0}
+.ask-q small{display:block;color:var(--muted);font-size:.72rem;margin-top:2px}
+.ask-q button{flex:0 0 auto;font:inherit;font-size:.72rem;background:none;border:none;
+  color:var(--muted);cursor:pointer;text-decoration:underline;padding:0}
+.ask-q button:hover{color:var(--crit-ink)}
+@media print{.ask-fab,.ask-panel{display:none !important}}
+
+/* ============ misc chrome ============ */
+#theme-btn{position:fixed;top:14px;right:16px;z-index:50;font-size:.8rem}
+.foot{margin-top:80px;padding-top:20px;border-top:1px solid var(--hairline);
+  font-size:.82rem;color:var(--muted)}
+.foot a{color:var(--muted);text-decoration:underline}
+noscript .callout{margin:20px}
+/* ============================================================================
+   Small screens.
+   This layer has to come after every rule it overrides. A media query adds no
+   specificity, so a plain base rule declared further down the file beats it on
+   source order alone, and the override is lost with no warning: that is exactly
+   how the menu button ended up invisible on phones. Keeping the whole layer here,
+   last except for print, is what makes it reliable. check.py enforces the order.
+   ============================================================================ */
+.menu-backdrop{position:fixed;inset:0;z-index:65;background:rgba(0,0,0,.45);
+  opacity:0;pointer-events:none;transition:opacity .22s ease}
+.menu-backdrop.on{opacity:1;pointer-events:auto}
+#menu-btn{display:none;position:fixed;top:14px;left:16px;z-index:80;
+  align-items:center;gap:7px;font-size:.8rem}
+
+
+@media (max-width:900px){
+  .layout{display:block}
+  .sidebar{position:fixed;top:0;left:0;z-index:70;width:min(330px,86vw);
+    height:100vh;height:100dvh;background:var(--bg);
+    border-right:1px solid var(--hairline);padding:64px 16px 40px;
+    transform:translateX(-100%);transition:transform .22s ease;
+    -webkit-overflow-scrolling:touch}
+  .sidebar.open{transform:none;box-shadow:0 0 40px rgba(0,0,0,.34)}
+  body.menu-open{overflow:hidden}
+  #menu-btn{display:inline-flex}
+  main{padding:0 16px 56px}       /* the ask button is hidden here, so no room reserved */
+  .hero{padding:58px 0 6px}        /* clear the menu button, the only one left floating */
+  /* The vertical rhythm is drawn for a wide column. On a phone the same gaps read as page
+     after page of nothing between one lecture and the next, so they are pulled in. */
+  section.lecture{margin-top:44px}
+  .school-banner{margin-top:40px;padding:16px 18px}
+  h2{margin:1.1em 0 .5em}
+  h3{margin:1.35em 0 .4em}
+  .fig{margin:1.1em 0}
+  /* A long identifier or URL with no break opportunity pushes the whole page sideways, and
+     then the reader is panning a column that should have fitted. */
+  body{overflow-wrap:break-word}
+  /* thumbs are not mouse pointers: every row in the menu gets a real tap target */
+  #toc a{padding:9px 10px;font-size:.9rem}
+  .toc-sec-row .tw-btn{width:34px;height:34px}
+  .toc-check{width:20px;height:20px}
+  .toc-group-hd,.toc-school-hd{padding:10px 8px}
+  /* The theme toggle stops floating over the text and becomes the first control in the
+     drawer. One button over the page, the menu, is enough on a phone. */
+  #theme-btn{position:static;display:block;width:100%;margin:0 0 14px;text-align:center}
+  /* export and import move files around, which is awkward at best on a phone, and reset and
+     clear are one mis-tap from throwing away every read flag or highlight. The counts they
+     sit beside stay visible; the tools themselves belong on a desktop. */
+  .read-tools{display:none}
+  /* Ask Claude builds a prompt for you to paste into Claude somewhere else. That is a
+     two-window job, so it is desktop only. */
+  .ask-fab,.ask-panel{display:none !important}
+}
+@media (max-width:640px){
+  .fig-wide{overflow-x:auto}
+  .fig-wide>svg{min-width:520px;max-width:none}
+}
+@media (max-width:560px){
+  h1{font-size:1.42rem}
+  h2{font-size:1.28rem}
+  h3{font-size:1.08rem}
+  .hero .sub{font-size:.95rem}
+  .lec-head{gap:10px;margin-top:20px}
+  .lec-num{font-size:1.05rem}
+  .school-banner{padding:16px 16px;margin-top:56px}
+  .sched{grid-template-columns:1fr}
+  /* Give the text back the width the desktop gutters were taking. */
+  main{padding:0 12px 48px}
+  section.lecture{margin-top:36px;padding-top:8px}
+  .lec-head{gap:10px;margin-top:16px}
+  ul,ol{padding-left:1.1em}
+  .lightbox{padding:10px}
+  .lightbox img{max-width:98vw;max-height:78vh}
+  .lb-btn{padding:9px 15px;font-size:.85rem}
+  .lb-tools{top:10px;right:10px}
+  .fig{padding:10px}
+  blockquote{margin-left:0;margin-right:0}
+}
+
+@media print{
+  .sidebar,#theme-btn,#menu-btn,.menu-backdrop{display:none}
+  .layout{display:block}
+  .fig-wide{overflow:visible}
+  .fig-wide>svg{min-width:0;max-width:100%}
+  section.lecture{break-before:page}
+  .stepper .step{animation:none}
+}
+</style>
+</head>
+<body>
+<button class="btn" id="menu-btn" type="button" aria-label="show or hide the menu"
+        aria-controls="sidebar" aria-expanded="false">&#9776; Menu</button>
+<div class="menu-backdrop" id="menu-backdrop"></div>
+<div class="layout">
+<aside class="sidebar" id="sidebar">
+  <div class="side-title">Summer School Notes 2026</div>
+  <div class="side-sub">Marktoberdorf · August 2026</div>
+  <button class="btn" id="theme-btn" aria-label="toggle color theme">&#9790; dark</button>
+  <div class="toc-tools">
+    <input id="toc-search" class="toc-search" type="search" autocomplete="off"
+           placeholder="Search the menu (press /)" aria-label="search the table of contents">
+    <div class="read-progress">
+      <div class="read-progress-bar"><span id="read-progress-fill"></span></div>
+      <div class="read-progress-txt">
+        <span><span id="read-progress-num">0</span> / <span id="read-progress-den">0</span> read</span>
+        <span class="read-tools">
+          <button id="read-export" class="linkbtn" type="button" title="Save your progress and highlights to a file">export</button>
+          <label id="read-import-lbl" class="linkbtn" for="read-import" title="Load progress and highlights from a file">import</label>
+          <input id="read-import" class="hidden" type="file" accept="application/json,.json">
+          <button id="read-reset" class="linkbtn" type="button" title="Clear all read flags">reset</button>
+        </span>
+      </div>
+      <div class="read-progress-txt" style="margin-top:5px">
+        <span><span id="hl-count">0</span> highlights</span>
+        <span class="read-tools">
+          <button id="hl-clear" class="linkbtn hidden" type="button" title="Remove every highlight">clear</button>
+        </span>
+      </div>
+    </div>
+  </div>
+  <nav id="toc" aria-label="table of contents"></nav>
+  <div id="toc-empty" class="toc-empty hidden">No matching sections.</div>
+</aside>
+<main>
+<header class="hero">
+  <p class="kicker">Marktoberdorf · August 2026</p>
+  <h1>Formal Methods Summer School: an Interactive Study Companion</h1>
+  <p class="sub">Interactive notes for the lectures of the Marktoberdorf summer school, built
+  from the speakers' slide decks and from recordings of the talks. Play with the widgets, step
+  through the algorithms, and use the quizzes to check yourself. Every section can be
+  marked as read, and you can highlight any passage you want to come back to.</p>
+  <noscript><div class="callout warn"><span class="co-tag">note</span>
+  The interactive widgets and quizzes need JavaScript; the text works without it.</div></noscript>
+
+<!-- SCHEDULE -->
+</header>
+
+<!-- SECTIONS -->
+
+<footer class="foot">
+  <p><strong>About this page.</strong> A personal study companion for the Marktoberdorf
+  Summer School of August 2026. It was put together from the lectures and their materials, and
+  it is not an official publication of the school.</p>
+  <p><strong>Acknowledgements.</strong> The sections on deductive verification
+  follow the lectures and the slide deck <em>The Why and How of Deductive Program
+  Verification</em> by Jean-Christophe Filli&acirc;tre (CNRS). The section on separation logic
+  follows the lecture and the deck <em>Automating Separation Logic Proofs with Viper</em> by
+  Peter M&uuml;ller (ETH Zurich). The sections on constrained Horn clauses follow the lectures
+  and the decks <em>Constrained Horn Clauses and their Applications</em> by Orna Grumberg
+  (Technion), including joint work with Omer Rappoport, Yakir Vizel, Bat-chen Rothenberg,
+  Eytan Singher and Mishel Carelli. The sections on AI
+  systems follow the lectures and the deck <em>Evaluation and Security of AI-Based Systems</em>
+  by John C. Mitchell (Stanford University). The sections on testing follow the lectures and
+  the decks <em>Integration Testing</em> and <em>Scenario-Based Tests for Cyber-Physical
+  Systems</em> by Alexander Pretschner (TUM, fortiss and bidt), which report joint work with
+  Michael Wolf, Florian Hauer, Nicola Kolb, Tabea Schmidt and Thomas Hutzelmann. The section on
+  mechanized language semantics follows the lecture and the deck <em>Mechanized Specifications
+  Adopted by Real-World PLs</em> by Sukyoung Ryu (KAIST), reporting joint work with Jihyeok Park
+  and colleagues. The sections on saturation, superposition and
+  lambda-superposition follow the lectures and the decks of Jasmin Blanchette (LMU Munich); his
+  fourth lecture had no deck and is reconstructed from the recording alone. The sections on
+  linearity and on verifying Rust follow the lectures and the deck <em>Linearity, Rust and
+  Verification</em> by Jonathan Protzenko (Google), reporting joint work with Son Ho, Guillaume
+  Boisseau, Aymeric Fromherz and the Aeneas collaborators. The sections on Lean follow the
+  lectures and the decks of Leonardo de Moura; his introductory deck was circulated only as page
+  images, so the first of those sections cites no slides. The
+  sections on proof in industry follow the lectures and the deck <em>Doing Proof: Today, Tomorrow,
+  Next Year</em> by Mike Dodds. The notes cover the lectures only. The school's discussion sessions, the questions asked from
+  the floor, and any conversation caught on the same recordings are deliberately left out, and no
+  student or attendee is named or quoted. Where a name appears it is a lecturer, a published
+  author of work being cited, or a figure from the history of the subject. All slide images remain &copy; their authors
+  and are reproduced with attribution for private study only. Warm thanks to all the lecturers
+  and to the school organizers.</p>
+</footer>
+</main>
+</div>
+
+<!-- SCHOOLMETA -->
+
+<button class="ask-fab" id="ask-fab" type="button" title="Ask Claude about what you are reading">
+  <span aria-hidden="true">✻</span> Ask Claude
+</button>
+<div class="ask-panel hidden" id="ask-panel" role="dialog" aria-label="ask a question about the tutorial">
+  <div class="ask-head">
+    <strong>Ask about this tutorial</strong>
+    <button class="linkbtn" id="ask-close" type="button">close</button>
+  </div>
+  <p class="ask-ctx" id="ask-ctx">Reading: the front page</p>
+  <textarea id="ask-text" class="ask-text" rows="4"
+            placeholder="What is not clear? For example: why does the loop invariant need the ghost variables?"></textarea>
+  <p class="ask-note" id="ask-note">Your question is bundled with the section you are reading, plus
+  any text you have selected, so Claude has the context without you pasting it.</p>
+  <div class="ask-btns">
+    <button class="btn primary" id="ask-copy" type="button">Copy prompt</button>
+    <button class="btn" id="ask-save" type="button">Save for later</button>
+  </div>
+  <div class="ask-saved" id="ask-saved"></div>
+</div>
+
+<!-- SLIDEBANK -->
+
+<script>
+(function(){
+'use strict';
+
+/* ---------- theme toggle ---------- */
+var root=document.documentElement;
+function isDark(){
+  var t=root.getAttribute('data-theme');
+  if(t) return t==='dark';
+  return window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches;
+}
+function paintBtn(){
+  var b=document.getElementById('theme-btn');
+  if(b) b.textContent=isDark()?'☀ light':'☾ dark';
+}
+try{
+  var saved=localStorage.getItem('tut-theme');
+  if(saved==='dark'||saved==='light') root.setAttribute('data-theme',saved);
+}catch(e){}
+paintBtn();
+var tb=document.getElementById('theme-btn');
+if(tb) tb.addEventListener('click',function(){
+  var next=isDark()?'light':'dark';
+  root.setAttribute('data-theme',next);
+  try{localStorage.setItem('tut-theme',next);}catch(e){}
+  paintBtn();
+});
+
+/* ---------- menu drawer (small screens only) ---------- */
+/* The sidebar is a normal column on a wide screen and a drawer over the page on a narrow one.
+   Only the open/closed state lives here; the breakpoint itself is in the CSS, so the two
+   cannot disagree about where the layout changes. */
+var sideEl=document.getElementById('sidebar');
+var menuBtn=document.getElementById('menu-btn');
+var backdrop=document.getElementById('menu-backdrop');
+function drawerOpen(){return !!sideEl&&sideEl.classList.contains('open');}
+function setDrawer(open){
+  if(!sideEl) return;
+  sideEl.classList.toggle('open',open);
+  if(backdrop) backdrop.classList.toggle('on',open);
+  document.body.classList.toggle('menu-open',open);
+  if(menuBtn) menuBtn.setAttribute('aria-expanded',open?'true':'false');
+}
+if(menuBtn) menuBtn.addEventListener('click',function(){setDrawer(!drawerOpen());});
+if(backdrop) backdrop.addEventListener('click',function(){setDrawer(false);});
+document.addEventListener('keydown',function(e){if(e.key==='Escape'&&drawerOpen())setDrawer(false);});
+/* Following a link inside the drawer should take you there, not leave the menu covering it. */
+if(sideEl) sideEl.addEventListener('click',function(e){
+  if(e.target.closest&&e.target.closest('a[href^="#"]')) setDrawer(false);
+});
+/* Rotating a phone or widening a window can cross the breakpoint while the drawer is open,
+   which would otherwise leave body scrolling locked with no visible drawer to close. */
+window.addEventListener('resize',function(){
+  if(window.innerWidth>900&&drawerOpen()) setDrawer(false);
+});
+
+/* ---------- menu: school > group > section > subsection, every level collapsible ----------
+   The tree is built from the sections themselves. Each section carries data-school and
+   data-day; schools.json supplies the human labels through the school-meta JSON island that
+   build.py writes. Collapsed state is remembered per node in localStorage. */
+var toc=document.getElementById('toc');
+var tocLinks=[];   /* every link in the menu, used by search and by the scrollspy */
+var secLinks={};   /* section id -> {link, check, row, box} */
+var tocNodes=[];   /* every collapsible node, used by search to open what it matches */
+
+var COLLAPSE_KEY='tut-collapsed';
+var collapsed={};
+try{var cRaw=localStorage.getItem(COLLAPSE_KEY); if(cRaw) collapsed=JSON.parse(cRaw)||{};}catch(e){}
+function collapseSave(){
+  try{localStorage.setItem(COLLAPSE_KEY,JSON.stringify(collapsed));}catch(e){}
+}
+function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,function(c){
+  return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];});}
+
+var schoolMeta=[];
+try{
+  var smEl=document.getElementById('school-meta');
+  if(smEl) schoolMeta=JSON.parse(smEl.textContent)||[];
+}catch(e){}
+function metaFor(key){
+  for(var i=0;i<schoolMeta.length;i++) if(schoolMeta[i].key===key) return schoolMeta[i];
+  return null;
+}
+
+/* wire one collapsible node: clicking the header folds the body away and remembers it */
+function collapsible(box,head,key,defaultClosed){
+  var shut=collapsed.hasOwnProperty(key)?!!collapsed[key]:!!defaultClosed;
+  var paint=function(){
+    box.classList.toggle('collapsed',shut);
+    head.setAttribute('aria-expanded',shut?'false':'true');
+  };
+  paint();
+  head.addEventListener('click',function(e){
+    e.preventDefault();e.stopPropagation();
+    shut=!shut;
+    if(shut)collapsed[key]=1;else delete collapsed[key];
+    collapseSave();paint();
+  });
+  var auto=false;      /* opened by the scrollspy rather than by the reader */
+  var node={box:box,
+    open:function(){if(shut){shut=false;delete collapsed[key];paint();}},
+    /* the spy opens the path to wherever the reader is, and closes it again when they
+       leave, but only if it was the one that opened it in the first place */
+    autoOpen:function(){if(shut){shut=false;auto=true;delete collapsed[key];paint();}},
+    autoClose:function(){if(!shut&&auto){shut=true;auto=false;paint();}}};
+  head.addEventListener('click',function(){auto=false;});
+  tocNodes.push(node);
+  return node;
+}
+
+if(toc){
+  /* group the sections by school, then by day, keeping document order throughout */
+  var groupsOf=[],bySchool={};
+  document.querySelectorAll('section.lecture').forEach(function(sec){
+    if(!sec.id||!sec.querySelector('h2')) return;
+    var sk=sec.getAttribute('data-school')||'other';
+    var school=bySchool[sk];
+    if(!school){school={key:sk,days:[],byDay:{}};bySchool[sk]=school;groupsOf.push(school);}
+    var dk=sec.getAttribute('data-day')||'';
+    var day=school.byDay[dk];
+    if(!day){day={key:dk,secs:[]};school.byDay[dk]=day;school.days.push(day);}
+    day.secs.push(sec);
+  });
+
+  var frag=document.createDocumentFragment();
+  /* With a single school the school row names something every section already belongs to, so
+     it is a level of nesting that carries no information. Drop it and let the lecture series
+     be the top level. The level comes back on its own if a second school is ever added. */
+  var oneSchool=groupsOf.length<2;
+  groupsOf.forEach(function(school){
+    var meta=metaFor(school.key);
+    var count=0;
+    school.days.forEach(function(d){count+=d.secs.length;});
+
+    var sBox=null,sBody=null,schoolNode=null,dayHome=frag;
+    if(!oneSchool){
+      sBox=mk('div','toc-school');
+      sBox.setAttribute('data-school',school.key);
+      var sHead=mk('button','toc-school-hd',
+        '<span class="tw"></span><span>'+esc(meta?meta.short:school.key)+
+        '</span><span class="toc-school-count">'+count+'</span>');
+      sHead.type='button';
+      sHead.title=meta?(meta.name+', '+meta.where+', '+meta.when):school.key;
+      sBody=mk('div','toc-school-body');
+      sBox.appendChild(sHead);sBox.appendChild(sBody);
+      schoolNode=collapsible(sBox,sHead,'school:'+school.key,true);
+      dayHome=sBody;
+    }
+
+    school.days.forEach(function(day){
+      var label=(meta&&meta.groups&&meta.groups[day.key])||day.key||'Sections';
+      var gBox=mk('div','toc-group');
+      var gHead=mk('button','toc-group-hd','<span class="tw"></span><span>'+esc(label)+'</span>');
+      gHead.type='button';
+      var gBody=mk('div','toc-group-body');
+      gBox.appendChild(gHead);gBox.appendChild(gBody);
+      var groupNode=collapsible(gBox,gHead,'group:'+school.key+':'+day.key,true);
+
+      day.secs.forEach(function(sec){
+        var h2=sec.querySelector('h2');
+        var secBox=mk('div','toc-sec');
+        var row=mk('div','toc-sec-row');
+
+        var subs=[];
+        sec.querySelectorAll('h3[id]').forEach(function(h3){subs.push(h3);});
+
+        var twist=mk('button','tw-btn'+(subs.length?'':' empty'),'<span class="tw"></span>');
+        twist.type='button';
+        twist.setAttribute('aria-label','show or hide the parts of this section');
+
+        var a=document.createElement('a');
+        a.className='toc-h2';a.href='#'+sec.id;
+        a.appendChild(mk('span','toc-label','<span class="toc-num">'+
+          esc(sec.getAttribute('data-num')||'')+'</span>'+
+          esc(sec.getAttribute('data-title')||h2.textContent)));
+        a.dataset.target=sec.id;
+
+        var chk=mk('span','toc-check','');
+        chk.setAttribute('role','button');chk.setAttribute('tabindex','0');
+        chk.setAttribute('aria-label','toggle read for this section');chk.title='mark as read';
+
+        row.appendChild(twist);row.appendChild(a);row.appendChild(chk);
+        secBox.appendChild(row);
+        tocLinks.push(a);
+        secLinks[sec.id]={link:a,check:chk,row:row,box:secBox};
+
+        var subBox=mk('div','toc-sub');
+        subs.forEach(function(h3){
+          var clone=h3.cloneNode(true);
+          clone.querySelectorAll('.slide-ref').forEach(function(x){x.parentNode.removeChild(x);});
+          var s=document.createElement('a');
+          s.className='toc-h3';s.href='#'+h3.id;s.textContent=clone.textContent.trim();
+          s.dataset.target=h3.id;
+          subBox.appendChild(s);tocLinks.push(s);
+        });
+        secBox.appendChild(subBox);
+        /* every level starts folded, so the menu opens as a short list of schools.
+           The scrollspy needs the whole chain to reveal where the reader is. */
+        var node=collapsible(secBox,twist,'sec:'+sec.id,true);
+        secLinks[sec.id].node=node;
+        secLinks[sec.id].chain=(schoolNode?[schoolNode]:[]).concat([groupNode,node]);
+
+        gBody.appendChild(secBox);
+      });
+      dayHome.appendChild(gBox);
+    });
+    if(sBox)frag.appendChild(sBox);
+  });
+  toc.appendChild(frag);
+}
+
+/* ---------- menu search ---------- */
+/* Filtering hides links that do not match, then hides any group or school left with nothing
+   visible, and opens every node on the way to a hit so matches are never buried. */
+var searchInput=document.getElementById('toc-search');
+var tocEmpty=document.getElementById('toc-empty');
+if(searchInput&&toc){
+  var runFilter=function(){
+    var q=searchInput.value.toLowerCase().replace(/\s+/g,' ').trim();
+    var any=false;
+    if(q) tocNodes.forEach(function(n){n.open();});
+
+    toc.querySelectorAll('.toc-sec').forEach(function(secBox){
+      var link=secBox.querySelector('a.toc-h2');
+      var secHit=!q||link.textContent.toLowerCase().indexOf(q)>=0;
+      var subHit=false;
+      secBox.querySelectorAll('a.toc-h3').forEach(function(s){
+        var m=!q||s.textContent.toLowerCase().indexOf(q)>=0;
+        /* when the section title itself matches, keep all of its parts on screen */
+        var show=m||(secHit&&!!q)||!q;
+        s.classList.toggle('hidden',!show);
+        s.classList.toggle('toc-hit',!!q&&m);
+        if(m)subHit=true;
+      });
+      link.classList.toggle('toc-hit',!!q&&secHit);
+      var show=secHit||subHit;
+      secBox.classList.toggle('hidden',!show);
+      if(show)any=true;
+    });
+
+    toc.querySelectorAll('.toc-group').forEach(function(g){
+      var vis=g.querySelectorAll('.toc-sec:not(.hidden)').length>0;
+      g.classList.toggle('hidden',!vis);
+    });
+    toc.querySelectorAll('.toc-school').forEach(function(s){
+      var vis=s.querySelectorAll('.toc-group:not(.hidden)').length>0;
+      s.classList.toggle('hidden',!vis);
+    });
+    if(tocEmpty)tocEmpty.classList.toggle('hidden',any);
+  };
+  searchInput.addEventListener('input',runFilter);
+  searchInput.addEventListener('keydown',function(e){
+    if(e.key==='Escape'){searchInput.value='';runFilter();searchInput.blur();}
+  });
+  document.addEventListener('keydown',function(e){
+    if(e.key!=='/')return;
+    var t=((document.activeElement&&document.activeElement.tagName)||'').toLowerCase();
+    if(t==='input'||t==='textarea'||t==='select')return;
+    e.preventDefault();searchInput.focus();
+  });
+}
+
+/* ---------- reading progress (saved to localStorage, exportable to a file) ---------- */
+var readSecs=Array.prototype.slice.call(document.querySelectorAll('section.lecture'))
+  .filter(function(s){return s.id;});
+var READ_KEY='tut-read';
+var readState={};
+try{var rr=localStorage.getItem(READ_KEY);
+  if(rr)JSON.parse(rr).forEach(function(id){readState[id]=1;});}catch(e){}
+function readSave(){try{localStorage.setItem(READ_KEY,JSON.stringify(Object.keys(readState)));}catch(e){}}
+var secBtns={};
+var pFill=document.getElementById('read-progress-fill');
+var pNum=document.getElementById('read-progress-num');
+var pDen=document.getElementById('read-progress-den');
+function readRender(){
+  var n=0;
+  readSecs.forEach(function(sec){
+    var on=!!readState[sec.id];if(on)n++;
+    var b=secBtns[sec.id];
+    if(b){b.classList.toggle('read',on);b.textContent=on?'✓ Marked as read':'Mark as read';}
+    var l=secLinks[sec.id];
+    if(l)l.row.classList.toggle('read',on);
+  });
+  if(pFill)pFill.style.width=(readSecs.length?100*n/readSecs.length:0)+'%';
+  if(pNum)pNum.textContent=n;
+  if(pDen)pDen.textContent=readSecs.length;
+}
+function readToggle(id){
+  if(readState[id])delete readState[id];else readState[id]=1;
+  readSave();readRender();
+}
+readSecs.forEach(function(sec){
+  var h2=sec.querySelector('.lec-head h2')||sec.querySelector('h2');
+  var box=h2?h2.parentNode:sec.querySelector('.lec-head');
+  if(!box)return;
+  var btn=mk('button','lec-read-btn','Mark as read');
+  btn.type='button';
+  btn.addEventListener('click',function(){readToggle(sec.id);});
+  box.appendChild(btn);
+  secBtns[sec.id]=btn;
+});
+Object.keys(secLinks).forEach(function(id){
+  var chk=secLinks[id].check;
+  var hit=function(e){e.preventDefault();e.stopPropagation();readToggle(id);};
+  chk.addEventListener('click',hit);
+  chk.addEventListener('keydown',function(e){if(e.key==='Enter'||e.key===' ')hit(e);});
+});
+var exportBtn=document.getElementById('read-export');
+var importInput=document.getElementById('read-import');
+var resetBtn=document.getElementById('read-reset');
+if(exportBtn)exportBtn.addEventListener('click',function(){
+  var payload=JSON.stringify({app:'summer-school-tutorial',read:Object.keys(readState),
+    highlights:hlState,questions:qState,saved:new Date().toISOString()},null,2);
+  var blob=new Blob([payload],{type:'application/json'});
+  var url=URL.createObjectURL(blob);
+  var a=document.createElement('a');a.href=url;a.download='reading-progress.json';
+  document.body.appendChild(a);a.click();
+  setTimeout(function(){document.body.removeChild(a);URL.revokeObjectURL(url);},0);
+});
+if(importInput)importInput.addEventListener('change',function(){
+  var f=importInput.files&&importInput.files[0];if(!f)return;
+  var rd=new FileReader();
+  rd.onload=function(){
+    try{
+      var obj=JSON.parse(rd.result);
+      var ids=(obj&&obj.read)?obj.read:(Array.isArray(obj)?obj:null);
+      if(!ids)throw new Error('bad');
+      readState={};ids.forEach(function(id){readState[id]=1;});
+      readSave();readRender();
+      if(obj&&Array.isArray(obj.highlights)){
+        hlState=obj.highlights;hlSave();hlApplyAll();
+      }
+      if(obj&&Array.isArray(obj.questions)){
+        qState=obj.questions;qSave();askPaint();
+      }
+    }catch(e){if(window.alert)alert('That file is not a valid progress export.');}
+    importInput.value='';
+  };
+  rd.readAsText(f);
+});
+if(resetBtn)resetBtn.addEventListener('click',function(){
+  readState={};readSave();readRender();
+});
+readRender();
+
+/* ---------- fold a whole lecture away from its heading ---------- */
+/* Uses the same collapsed map as the menu, under a body: key, so a folded lecture stays
+   folded on the next visit. Following a link into a folded lecture unfolds it. */
+readSecs.forEach(function(sec){
+  var head=sec.querySelector('.lec-head');
+  if(!head)return;
+  var key='body:'+sec.id;
+  var shut=!!collapsed[key];
+  var btn=mk('button','lec-collapse','');
+  btn.type='button';
+  var paint=function(){
+    sec.classList.toggle('collapsed',shut);
+    btn.textContent=shut?'expand':'collapse';
+    btn.setAttribute('aria-expanded',shut?'false':'true');
+    btn.title=shut?'show this lecture again':'fold this lecture away';
+  };
+  paint();
+  btn.addEventListener('click',function(){
+    shut=!shut;
+    if(shut)collapsed[key]=1;else delete collapsed[key];
+    collapseSave();paint();
+  });
+  head.appendChild(btn);
+  sec._unfold=function(){if(shut){shut=false;delete collapsed[key];collapseSave();paint();}};
+});
+function unfoldFor(hash){
+  if(!hash||hash.length<2)return;
+  var el=document.getElementById(hash.slice(1));
+  while(el&&el!==document.body){
+    if(el.classList&&el.classList.contains('lecture')){if(el._unfold)el._unfold();return;}
+    el=el.parentNode;
+  }
+}
+document.addEventListener('click',function(e){
+  var a=e.target&&e.target.closest?e.target.closest('a[href^="#"]'):null;
+  if(a)unfoldFor(a.getAttribute('href'));
+});
+window.addEventListener('hashchange',function(){unfoldFor(location.hash);});
+unfoldFor(location.hash);
+
+/* ---------- text highlighting (saved to localStorage, travels with export) ---------- */
+/* A highlight is anchored to the top-level block it sits in (its index among the
+   section's children) plus a character offset into that block's text. On restore we
+   re-find the text, falling back to a search for the exact string if the offset moved. */
+var HL_KEY='tut-highlights';
+var hlState=[];
+try{var hs=localStorage.getItem(HL_KEY); if(hs) hlState=JSON.parse(hs)||[];}catch(e){}
+if(!Array.isArray(hlState)) hlState=[];
+function hlSave(){try{localStorage.setItem(HL_KEY,JSON.stringify(hlState));}catch(e){}}
+var hlCount=document.getElementById('hl-count');
+var hlClear=document.getElementById('hl-clear');
+function hlRender(){
+  if(hlCount) hlCount.textContent=hlState.length;
+  if(hlClear) hlClear.classList.toggle('hidden',!hlState.length);
+}
+/* the top-level block of a node: the ancestor whose parent is the section itself */
+function hlBlock(node){
+  var el=node.nodeType===3?node.parentNode:node;
+  var sec=null;
+  while(el&&el!==document.body){
+    if(el.classList&&el.classList.contains('lecture')){sec=el;break;}
+    el=el.parentNode;
+  }
+  if(!sec) return null;
+  var b=node.nodeType===3?node.parentNode:node;
+  while(b&&b.parentNode!==sec) b=b.parentNode;
+  if(!b) return null;
+  var idx=Array.prototype.indexOf.call(sec.children,b);
+  return {sec:sec,block:b,index:idx};
+}
+/* every text node inside el, skipping scripts and existing controls */
+function hlTextNodes(el){
+  var out=[],walk=document.createTreeWalker(el,NodeFilter.SHOW_TEXT,{
+    acceptNode:function(n){
+      var p=n.parentNode;
+      while(p&&p!==el){
+        var t=p.nodeName;
+        if(t==='SCRIPT'||t==='STYLE'||t==='BUTTON') return NodeFilter.FILTER_REJECT;
+        p=p.parentNode;
+      }
+      return n.nodeValue&&n.nodeValue.length?NodeFilter.FILTER_ACCEPT:NodeFilter.FILTER_REJECT;
+    }},false);
+  var n;while((n=walk.nextNode())) out.push(n);
+  return out;
+}
+/* wrap [start,start+len) of the block's text in <mark>, across element boundaries */
+function hlWrap(block,start,len){
+  var nodes=hlTextNodes(block),pos=0,end=start+len,made=0;
+  for(var i=0;i<nodes.length&&pos<end;i++){
+    var n=nodes[i],L=n.nodeValue.length,nodeStart=pos;pos+=L;
+    if(pos<=start) continue;
+    var a=Math.max(0,start-nodeStart),b=Math.min(L,end-nodeStart);
+    if(a>=b) continue;
+    if(n.parentNode&&n.parentNode.classList&&n.parentNode.classList.contains('user-hl')){made++;continue;}
+    var mid=n;
+    if(a>0) mid=mid.splitText(a);
+    if(b-a<mid.nodeValue.length) mid.splitText(b-a);
+    var mk2=document.createElement('mark');
+    mk2.className='user-hl';
+    mid.parentNode.replaceChild(mk2,mid);
+    mk2.appendChild(mid);
+    made++;
+  }
+  return made>0;
+}
+function hlApply(rec){
+  var secs=document.getElementById(rec.s);
+  if(!secs) return false;
+  var block=secs.children[rec.p];
+  if(!block) return false;
+  var text=block.textContent||'';
+  if(text.substr(rec.o,rec.t.length)===rec.t) return hlWrap(block,rec.o,rec.t.length);
+  var at=text.indexOf(rec.t);                      /* content shifted: search for it */
+  if(at<0) return false;
+  return hlWrap(block,at,rec.t.length);
+}
+function hlApplyAll(){
+  document.querySelectorAll('mark.user-hl').forEach(function(m){
+    var p=m.parentNode;
+    while(m.firstChild) p.insertBefore(m.firstChild,m);
+    p.removeChild(m);p.normalize();
+  });
+  hlState=hlState.filter(hlApply);
+  hlSave();hlRender();
+}
+/* floating toolbar */
+var hlBar=mk('div','hl-bar hidden');
+var hlAddBtn=mk('button','','Highlight');
+var hlDelBtn=mk('button','','Remove');
+hlAddBtn.type='button';hlDelBtn.type='button';
+hlBar.appendChild(hlAddBtn);hlBar.appendChild(hlDelBtn);
+document.body.appendChild(hlBar);
+var hlTargetMark=null;
+function hlHideBar(){hlBar.classList.add('hidden');hlTargetMark=null;}
+function hlShowBar(rect,mode){
+  hlAddBtn.classList.toggle('hidden',mode!=='add');
+  hlDelBtn.classList.toggle('hidden',mode!=='del');
+  hlBar.classList.remove('hidden');
+  var top=rect.top+window.pageYOffset-hlBar.offsetHeight-8;
+  if(top<window.pageYOffset+4) top=rect.bottom+window.pageYOffset+8;
+  var left=rect.left+window.pageXOffset+rect.width/2-hlBar.offsetWidth/2;
+  left=Math.max(8,Math.min(left,window.pageXOffset+document.documentElement.clientWidth-hlBar.offsetWidth-8));
+  hlBar.style.top=top+'px';hlBar.style.left=left+'px';
+}
+document.addEventListener('mouseup',function(e){
+  if(hlBar.contains(e.target)) return;
+  setTimeout(function(){
+    var sel=window.getSelection();
+    if(!sel||sel.isCollapsed||!sel.rangeCount){
+      if(!hlTargetMark) hlHideBar();
+      return;
+    }
+    var range=sel.getRangeAt(0);
+    var text=String(sel).replace(/\s+/g,' ').trim();
+    if(text.length<2){hlHideBar();return;}
+    var info=hlBlock(range.startContainer);
+    if(!info||info.index<0){hlHideBar();return;}
+    if(hlBlock(range.endContainer)===null){hlHideBar();return;}
+    hlTargetMark=null;
+    hlShowBar(range.getBoundingClientRect(),'add');
+  },0);
+});
+hlAddBtn.addEventListener('click',function(){
+  var sel=window.getSelection();
+  if(!sel||!sel.rangeCount) return;
+  var range=sel.getRangeAt(0);
+  var info=hlBlock(range.startContainer);
+  if(!info||info.index<0) return;
+  /* character offset of the selection start within the block */
+  var pre=document.createRange();
+  pre.selectNodeContents(info.block);
+  pre.setEnd(range.startContainer,range.startOffset);
+  var start=pre.toString().length;
+  var raw=range.toString();
+  if(!raw.trim()) return;
+  var rec={s:info.sec.id,p:info.index,o:start,t:raw};
+  if(hlWrap(info.block,start,raw.length)){
+    hlState.push(rec);hlSave();hlRender();
+  }
+  sel.removeAllRanges();hlHideBar();
+});
+hlDelBtn.addEventListener('click',function(){
+  if(!hlTargetMark) return;
+  var txt=hlTargetMark.textContent;
+  var info=hlBlock(hlTargetMark);
+  if(info){
+    for(var i=0;i<hlState.length;i++){
+      if(hlState[i].s===info.sec.id&&hlState[i].p===info.index&&hlState[i].t.indexOf(txt)>=0){
+        hlState.splice(i,1);break;
+      }
+    }
+  }
+  hlSave();hlApplyAll();hlHideBar();
+});
+document.addEventListener('click',function(e){
+  var m=e.target;
+  while(m&&m!==document.body&&!(m.classList&&m.classList.contains('user-hl'))) m=m.parentNode;
+  if(m&&m.classList&&m.classList.contains('user-hl')){
+    hlTargetMark=m;
+    hlShowBar(m.getBoundingClientRect(),'del');
+  }else if(!hlBar.contains(e.target)){
+    hlHideBar();
+  }
+});
+if(hlClear) hlClear.addEventListener('click',function(){
+  hlState=[];hlSave();hlApplyAll();hlHideBar();
+});
+hlApplyAll();
+
+var spyTargets=tocLinks.map(function(a){return document.getElementById(a.dataset.target);})
+  .filter(Boolean);
+var spyTick=false;
+var spySection=null;   /* the section the reader is currently inside */
+function spy(){
+  spyTick=false;
+  var y=120,cur=null;
+  for(var i=0;i<spyTargets.length;i++){
+    if(spyTargets[i].getBoundingClientRect().top<=y) cur=spyTargets[i].id;
+  }
+  tocLinks.forEach(function(a){
+    a.classList.toggle('active',a.dataset.target===cur);
+  });
+
+  /* find which section that heading belongs to, and open it in the menu */
+  var el=cur?document.getElementById(cur):null;
+  var sec=null;
+  while(el&&el!==document.body){
+    if(el.classList&&el.classList.contains('lecture')){sec=el;break;}
+    el=el.parentNode;
+  }
+  var id=sec?sec.id:null;
+  if(id!==spySection){
+    /* Clicking a menu entry starts a smooth scroll that travels over every section in
+       between. The spy runs on each frame of that animation, so opening the menu path here
+       meant one click could expand a dozen groups on the way past and leave the sidebar
+       showing a completely different part of the tree. During such a scroll the active link
+       still follows the page; only the folding is held back, and navTo has already opened
+       the destination. */
+    if(navScroll){
+      tocLinks.forEach(function(a){a.classList.toggle('active',a.dataset.target===cur);});
+      return;
+    }
+    var prev=spySection?secLinks[spySection]:null;
+    spySection=id;
+    Object.keys(secLinks).forEach(function(k){
+      secLinks[k].row.classList.toggle('has-active',k===id);
+    });
+    var entry=id?secLinks[id]:null;
+    if(entry&&entry.chain) entry.chain.forEach(function(n){n.autoOpen();});
+    /* fold the section the reader has left, so reading straight through does not end with
+       every group in the menu expanded */
+    if(prev&&prev.chain&&prev!==entry){
+      prev.chain.forEach(function(n){if(entry&&entry.chain.indexOf(n)>=0)return;n.autoClose();});
+    }
+  }
+}
+
+/* Opening the destination up front, then holding the spy off until the scroll settles. */
+var navScroll=false,navTimer=null;
+function navTo(targetId){
+  var el=document.getElementById(targetId),sec=null;
+  while(el&&el!==document.body){
+    if(el.classList&&el.classList.contains('lecture')){sec=el;break;}
+    el=el.parentNode;
+  }
+  if(!sec||!secLinks[sec.id]) return;
+  var entry=secLinks[sec.id];
+  if(entry.chain) entry.chain.forEach(function(n){n.autoOpen();});
+  spySection=sec.id;
+  Object.keys(secLinks).forEach(function(k){
+    secLinks[k].row.classList.toggle('has-active',k===sec.id);
+  });
+  navScroll=true;
+  clearTimeout(navTimer);
+  navTimer=setTimeout(function(){navScroll=false;},1200);   /* backstop if no scroll follows */
+}
+if(toc) toc.addEventListener('click',function(e){
+  var a=e.target.closest&&e.target.closest('a[href^="#"]');
+  if(a&&a.dataset.target) navTo(a.dataset.target);
+});
+
+window.addEventListener('scroll',function(){
+  if(navScroll){                      /* the smooth scroll has settled once events stop */
+    clearTimeout(navTimer);
+    navTimer=setTimeout(function(){navScroll=false;spy();},140);
+  }
+  if(!spyTick){spyTick=true;requestAnimationFrame(spy);}
+},{passive:true});
+spy();
+
+/* ---------- helpers ---------- */
+function readJSON(el){
+  var s=el.querySelector('script[type="application/json"]');
+  if(!s) return null;
+  try{return JSON.parse(s.textContent);}catch(e){return null;}
+}
+function mk(tag,cls,html){
+  var el=document.createElement(tag);
+  if(cls) el.className=cls;
+  if(html!==undefined) el.innerHTML=html;
+  return el;
+}
+
+/* ---------- quiz ---------- */
+document.querySelectorAll('.quiz').forEach(function(q){
+  var d=readJSON(q);
+  if(!d){q.appendChild(mk('p','quiz-nudge','⚠ quiz data failed to load'));return;}
+  q.appendChild(mk('div','quiz-q',d.q||''));
+  var explain=mk('div','quiz-explain hidden',d.explain||'Correct!');
+  var wrongs=0;
+  if(d.type==='fill'){
+    var wrap=mk('div','quiz-fill');
+    var inp=document.createElement('input');
+    inp.type='text';inp.placeholder='type your answer…';
+    inp.setAttribute('aria-label','quiz answer');
+    var btn=mk('button','btn primary','Check');
+    var revealB=mk('button','btn hidden','Show answer');
+    var nudge=mk('div','quiz-nudge hidden','Not quite. Try again.');
+    function norm(s){return String(s).toLowerCase().replace(/\s+/g,' ').trim().replace(/[.]$/,'');}
+    /* sections author this as "accept"; "answers" is also honoured so either key works */
+    var accList=d.accept||d.answers||[];
+    var accepted=accList.map(norm);
+    function check(){
+      if(inp.classList.contains('ok'))return;
+      if(accepted.indexOf(norm(inp.value))>=0){
+        inp.classList.remove('no');inp.classList.add('ok');inp.readOnly=true;
+        nudge.classList.add('hidden');revealB.classList.add('hidden');
+        explain.classList.remove('hidden');
+      }else{
+        inp.classList.add('no');nudge.classList.remove('hidden');
+        if(++wrongs>=2) revealB.classList.remove('hidden');
+      }
+    }
+    btn.addEventListener('click',check);
+    inp.addEventListener('keydown',function(e){if(e.key==='Enter')check();});
+    inp.addEventListener('input',function(){inp.classList.remove('no');});
+    revealB.addEventListener('click',function(){
+      inp.value=accList[0]||'';
+      inp.classList.remove('no');inp.classList.add('ok');inp.readOnly=true;
+      nudge.classList.add('hidden');revealB.classList.add('hidden');
+      explain.classList.remove('hidden');
+    });
+    wrap.appendChild(inp);wrap.appendChild(btn);wrap.appendChild(revealB);
+    q.appendChild(wrap);q.appendChild(nudge);q.appendChild(explain);
+  }else{
+    var opts=(d.type==='tf')?['True','False']:(d.options||[]);
+    var answer=(d.type==='tf')?(d.answer===true?0:1):d.answer;
+    var box=mk('div','quiz-opts');
+    var btns=[];
+    opts.forEach(function(o,i){
+      var b=mk('button','quiz-opt',o);
+      b.addEventListener('click',function(){
+        if(i===answer){
+          b.classList.add('correct');
+          btns.forEach(function(x){x.disabled=true;});
+          explain.classList.remove('hidden');
+        }else{
+          b.classList.add('incorrect');
+        }
+      });
+      btns.push(b);box.appendChild(b);
+    });
+    q.appendChild(box);q.appendChild(explain);
+  }
+});
+
+/* ---------- cnf playground ---------- */
+document.querySelectorAll('.cnf-play').forEach(function(box){
+  var d=readJSON(box);
+  if(!d||!d.vars||!d.clauses){box.appendChild(mk('p','quiz-nudge','⚠ CNF data failed to load'));return;}
+  if(d.caption) box.appendChild(mk('p','cnf-caption',d.caption));
+  var n=d.vars.length;
+  var state=new Array(n).fill(0); /* 0 unassigned, 1 true, -1 false */
+  var varsRow=mk('div','cnf-vars');
+  var clRow=mk('div','cnf-clauses');
+  var status=mk('div','cnf-status');
+  var vbtns=[];
+  d.vars.forEach(function(v,i){
+    var b=mk('button','cnf-var');
+    b.setAttribute('aria-label','toggle variable '+v);
+    b.addEventListener('click',function(){
+      state[i]=state[i]===0?1:(state[i]===1?-1:0);
+      update();
+    });
+    vbtns.push(b);varsRow.appendChild(b);
+  });
+  var chips=[],litSpans=[];
+  d.clauses.forEach(function(cl){
+    var chip=mk('span','cnf-clause');
+    chip.appendChild(document.createTextNode('('));
+    var spans=[];
+    cl.forEach(function(lit,k){
+      if(k>0) chip.appendChild(document.createTextNode(' ∨ '));
+      var sp=mk('span','cnf-lit',(lit<0?'¬':'')+d.vars[Math.abs(lit)-1]);
+      spans.push({el:sp,lit:lit});chip.appendChild(sp);
+    });
+    chip.appendChild(document.createTextNode(')'));
+    chips.push(chip);litSpans.push(spans);clRow.appendChild(chip);
+  });
+  var reset=mk('button','btn','Reset');
+  reset.addEventListener('click',function(){state.fill(0);update();});
+  function update(){
+    vbtns.forEach(function(b,i){
+      b.classList.toggle('v-true',state[i]===1);
+      b.classList.toggle('v-false',state[i]===-1);
+      b.textContent=d.vars[i]+(state[i]===0?' = ?':(state[i]===1?' = 1':' = 0'));
+    });
+    var sat=0,fals=0;
+    d.clauses.forEach(function(cl,ci){
+      var anyTrue=false,allAssigned=true;
+      litSpans[ci].forEach(function(o){
+        var s=state[Math.abs(o.lit)-1];
+        var val=s===0?0:(o.lit>0?s:-s); /* 1 lit true, -1 lit false, 0 unknown */
+        o.el.classList.toggle('lit-true',val===1);
+        o.el.classList.toggle('lit-false',val===-1);
+        if(val===1)anyTrue=true;
+        if(s===0)allAssigned=false;
+      });
+      chips[ci].classList.toggle('c-sat',anyTrue);
+      chips[ci].classList.toggle('c-fals',!anyTrue&&allAssigned);
+      if(anyTrue)sat++;else if(allAssigned)fals++;
+    });
+    var m=d.clauses.length;
+    var msg;
+    if(sat===m) msg='<span class="st-sat">✓ All '+m+' clauses satisfied: the formula is SAT under this assignment!</span>';
+    else if(fals>0) msg='<span class="st-fals">✗ '+fals+' clause'+(fals>1?'s':'')+' falsified</span> · '+sat+'/'+m+' satisfied';
+    else msg=sat+'/'+m+' clauses satisfied';
+    status.innerHTML='';
+    status.appendChild(mk('span','',msg));
+    status.appendChild(reset);
+  }
+  box.appendChild(varsRow);box.appendChild(clRow);box.appendChild(status);
+  if(d.hint){
+    var det=mk('details','reveal');
+    det.appendChild(mk('summary','','Hint'));
+    det.appendChild(mk('div','',d.hint));
+    box.appendChild(det);
+  }
+  update();
+});
+
+/* ---------- stepper ---------- */
+document.querySelectorAll('.stepper').forEach(function(st){
+  var steps=Array.prototype.slice.call(st.querySelectorAll(':scope > .step'));
+  if(!steps.length) return;
+  var head=mk('div','stepper-head');
+  var title=mk('span','stepper-title',st.getAttribute('data-title')||'Walkthrough');
+  var label=mk('span','stepper-label','');
+  var count=mk('span','stepper-count','');
+  var prev=mk('button','btn','‹ Prev');
+  var next=mk('button','btn primary','Next ›');
+  var ctrls=mk('span','stepper-ctrls');
+  ctrls.appendChild(label);ctrls.appendChild(count);
+  ctrls.appendChild(prev);ctrls.appendChild(next);
+  head.appendChild(title);head.appendChild(ctrls);
+  st.insertBefore(head,st.firstChild);
+  var dots=mk('div','stepper-dots');
+  var dbs=steps.map(function(_,i){
+    var b=mk('button','stepper-dot');
+    b.setAttribute('aria-label','go to step '+(i+1));
+    b.addEventListener('click',function(){show(i);});
+    dots.appendChild(b);return b;
+  });
+  st.appendChild(dots);
+  var cur=0;
+  function show(i){
+    cur=Math.max(0,Math.min(steps.length-1,i));
+    steps.forEach(function(s,k){s.classList.toggle('active',k===cur);});
+    dbs.forEach(function(b,k){b.classList.toggle('on',k===cur);});
+    count.textContent=(cur+1)+' / '+steps.length;
+    label.textContent=steps[cur].getAttribute('data-label')||'';
+    prev.disabled=cur===0;next.disabled=cur===steps.length-1;
+  }
+  prev.addEventListener('click',function(){show(cur-1);});
+  next.addEventListener('click',function(){show(cur+1);});
+  show(0);
+});
+
+/* ---------- tabs ---------- */
+document.querySelectorAll('.tabs').forEach(function(tb){
+  var tabs=Array.prototype.slice.call(tb.querySelectorAll(':scope > .tab'));
+  if(!tabs.length) return;
+  var bar=mk('div','tab-bar');
+  var btns=tabs.map(function(t,i){
+    var b=mk('button','tab-btn',t.getAttribute('data-label')||('Tab '+(i+1)));
+    b.addEventListener('click',function(){act(i);});
+    bar.appendChild(b);return b;
+  });
+  tb.insertBefore(bar,tb.firstChild);
+  function act(i){
+    tabs.forEach(function(t,k){t.classList.toggle('active',k===i);});
+    btns.forEach(function(b,k){b.classList.toggle('on',k===i);});
+  }
+  act(0);
+});
+
+/* ---------- image lightbox (figures and slide-reference popups) ---------- */
+/* A slide is a 720x405 landscape picture. Fitted to a portrait phone that is about 380px
+   wide, which is all the old lightbox did, the writing on it is far too small to read, and
+   because any click closed the overlay there was no way to get a better look. So the viewer
+   has two states: fitted, and enlarged to a readable width with the overlay scrolling in both
+   directions. Double-tapping the picture switches between them, which is the gesture people
+   already expect from a photo viewer. */
+var lb=mk('div','lightbox hidden');
+var lbImg=document.createElement('img');
+var lbCap=mk('div','lb-cap','');
+var lbTools=mk('div','lb-tools','');
+var lbZoom=mk('button','lb-btn','Enlarge');
+lbZoom.type='button';lbZoom.setAttribute('aria-label','enlarge or fit the slide');
+var lbClose=mk('button','lb-btn','\u2715');
+lbClose.type='button';lbClose.setAttribute('aria-label','close');
+lbTools.appendChild(lbZoom);lbTools.appendChild(lbClose);
+lb.appendChild(lbTools);lb.appendChild(lbImg);lb.appendChild(lbCap);
+document.body.appendChild(lb);
+
+function lbSetZoom(on){
+  lb.classList.toggle('zoomed',on);
+  lbZoom.textContent=on?'Fit':'Enlarge';
+  if(on){lb.scrollTop=0;lb.scrollLeft=Math.max(0,(lbImg.offsetWidth-lb.clientWidth)/2);}
+}
+function closeLb(){
+  lb.classList.add('hidden');lbSetZoom(false);
+  lbImg.removeAttribute('src');lbCap.textContent='';
+}
+function openLb(src,alt,caption){
+  lbImg.src=src;lbImg.alt=alt||'';lbCap.textContent=caption||'';
+  lbSetZoom(false);
+  lb.classList.remove('hidden');
+}
+/* Only a tap on the backdrop closes it. Tapping the picture used to dismiss the thing you
+   were trying to look at, which is the opposite of what a reader wants. */
+lb.addEventListener('click',function(e){if(e.target===lb)closeLb();});
+lbClose.addEventListener('click',function(e){e.stopPropagation();closeLb();});
+lbZoom.addEventListener('click',function(e){
+  e.stopPropagation();lbSetZoom(!lb.classList.contains('zoomed'));
+});
+lbImg.addEventListener('dblclick',function(e){
+  e.preventDefault();lbSetZoom(!lb.classList.contains('zoomed'));
+});
+/* Touch devices do not send dblclick reliably, so recognise the double tap directly. */
+var lbLastTap=0;
+lbImg.addEventListener('touchend',function(e){
+  var now=e.timeStamp||0;
+  if(now-lbLastTap<320){e.preventDefault();lbSetZoom(!lb.classList.contains('zoomed'));}
+  lbLastTap=now;
+});
+document.addEventListener('keydown',function(e){
+  if(e.key==='Escape')closeLb();
+  else if((e.key==='z'||e.key==='Z')&&!lb.classList.contains('hidden')){
+    var t=((document.activeElement&&document.activeElement.tagName)||'').toLowerCase();
+    if(t!=='input'&&t!=='textarea') lbSetZoom(!lb.classList.contains('zoomed'));
+  }
+});
+document.querySelectorAll('.fig img').forEach(function(im){
+  im.classList.add('zoomable');
+  im.addEventListener('click',function(){openLb(im.src,im.alt,'');});
+});
+
+/* ---------- keeping wide things inside the page on a narrow screen ---------- */
+/* Most tables in the sections are wrapped in a scrolling box by hand, but not all of them,
+   and one unwrapped table is enough to make the whole page scroll sideways on a phone. Wrap
+   whatever was missed rather than relying on every section remembering. */
+document.querySelectorAll('table').forEach(function(t){
+  if(t.closest('.table-wrap')) return;
+  var box=document.createElement('div');
+  box.className='table-wrap';
+  t.parentNode.insertBefore(box,t);
+  box.appendChild(t);
+});
+/* A diagram drawn for a wide column is unreadable squeezed into 360px, so mark the wide ones
+   and let the CSS scroll them at a legible size. The threshold is the drawn width from the
+   viewBox, which is the only honest measure available before layout. */
+document.querySelectorAll('.fig>svg').forEach(function(sv){
+  var vb=(sv.getAttribute('viewBox')||'').split(/[\s,]+/);
+  if(vb.length===4&&parseFloat(vb[2])>=520) sv.parentNode.classList.add('fig-wide');
+});
+
+/* slide-reference pills open the slide they cite, from the generated bank */
+var slideBank={};
+try{
+  var bankEl=document.getElementById('slide-bank');
+  if(bankEl) slideBank=JSON.parse(bankEl.textContent)||{};
+}catch(e){}
+document.querySelectorAll('button.slide-ref[data-slide]').forEach(function(b){
+  var key=b.getAttribute('data-slide');
+  var uri=slideBank[key];
+  if(!uri){b.removeAttribute('title');return;}
+  b.addEventListener('click',function(e){
+    e.preventDefault();e.stopPropagation();
+    var label=b.textContent.trim();
+    openLb(uri,'Slide cited as '+label,label);
+  });
+});
+
+/* ---------- ask Claude about what you are reading ----------
+   The page is a local file with no network access, so it cannot call a model itself. What it
+   can do is assemble the question together with the context that makes it answerable: which
+   school, which section, which subsection, and any text currently selected. That prompt goes
+   to the clipboard for you to paste into Claude. Unanswered questions can be parked here and
+   travel with the progress export. */
+var askFab=document.getElementById('ask-fab');
+var askPanel=document.getElementById('ask-panel');
+var askText=document.getElementById('ask-text');
+var askCtx=document.getElementById('ask-ctx');
+var askNote=document.getElementById('ask-note');
+var askSavedBox=document.getElementById('ask-saved');
+var Q_KEY='tut-questions';
+var qState=[];
+try{var qRaw=localStorage.getItem(Q_KEY); if(qRaw) qState=JSON.parse(qRaw)||[];}catch(e){}
+if(!Array.isArray(qState)) qState=[];
+function qSave(){try{localStorage.setItem(Q_KEY,JSON.stringify(qState));}catch(e){}}
+
+var askNoteDefault=askNote?askNote.textContent:'';
+var askSel='';
+function askFlash(msg){
+  if(!askNote)return;
+  askNote.textContent=msg;askNote.classList.add('done');
+  setTimeout(function(){askNote.textContent=askNoteDefault;askNote.classList.remove('done');},2600);
+}
+
+/* where the reader is: the section from the scrollspy, plus the nearest subsection heading */
+function askWhere(){
+  var sec=spySection?document.getElementById(spySection):null;
+  if(!sec) return {section:'',school:'',sub:'',id:''};
+  var schoolKey=sec.getAttribute('data-school')||'';
+  var meta=metaFor(schoolKey);
+  var sub='';
+  var heads=sec.querySelectorAll('h3[id]');
+  for(var i=0;i<heads.length;i++){
+    if(heads[i].getBoundingClientRect().top<=140) sub=heads[i].textContent.trim();
+  }
+  return {
+    section:(sec.getAttribute('data-num')?sec.getAttribute('data-num')+'. ':'')+
+            (sec.getAttribute('data-title')||''),
+    school:meta?meta.name:schoolKey,
+    sub:sub,id:sec.id
+  };
+}
+function askPaint(){
+  var w=askWhere();
+  if(askCtx){
+    askCtx.textContent=w.section?('Reading: '+w.section+(w.sub?' · '+w.sub:'')):
+      'Reading: the front page';
+    askCtx.title=w.school||'';
+  }
+  if(askSavedBox){
+    askSavedBox.innerHTML='';
+    qState.forEach(function(q,i){
+      var row=mk('div','ask-q','<span>'+esc(q.q)+'<small>'+esc(q.where||'')+'</small></span>');
+      var del=document.createElement('button');
+      del.type='button';del.textContent='remove';
+      del.addEventListener('click',function(){qState.splice(i,1);qSave();askPaint();});
+      row.appendChild(del);
+      askSavedBox.appendChild(row);
+    });
+  }
+}
+function askPrompt(text){
+  var w=askWhere();
+  var sel=askSel.trim();
+  var out=['I am reading an offline study companion built from the lectures of the 2026'+
+           ' Marktoberdorf formal methods summer school, and I have a question about it.',''];
+  if(w.school) out.push('School: '+w.school);
+  if(w.section) out.push('Section: '+w.section);
+  if(w.sub) out.push('Subsection: '+w.sub);
+  if(sel) out.push('','Passage I am looking at:','"""',sel.slice(0,1200),'"""');
+  out.push('','My question:',text.trim());
+  out.push('','Please answer in the same register as the notes: plain, complete sentences, no'+
+           ' em-dashes. If the notes look wrong, say so.');
+  return out.join('\n');
+}
+function askCopy(str){
+  if(navigator.clipboard&&navigator.clipboard.writeText){
+    return navigator.clipboard.writeText(str);
+  }
+  return new Promise(function(res,rej){
+    try{
+      var ta=document.createElement('textarea');
+      ta.value=str;ta.setAttribute('readonly','');
+      ta.style.position='fixed';ta.style.top='-1000px';
+      document.body.appendChild(ta);ta.select();
+      document.execCommand('copy');document.body.removeChild(ta);res();
+    }catch(e){rej(e);}
+  });
+}
+if(askFab&&askPanel){
+  /* remember what was selected before the click into the panel cleared it */
+  document.addEventListener('selectionchange',function(){
+    var s=window.getSelection?String(window.getSelection()):'';
+    if(s&&s.trim()&&!askPanel.contains(document.activeElement)) askSel=s;
+  });
+  var askOpen=function(on){
+    askPanel.classList.toggle('hidden',!on);
+    if(on){askPaint();if(askText)askText.focus();}
+  };
+  askFab.addEventListener('click',function(){askOpen(askPanel.classList.contains('hidden'));});
+  var askCloseBtn=document.getElementById('ask-close');
+  if(askCloseBtn)askCloseBtn.addEventListener('click',function(){askOpen(false);});
+  document.addEventListener('keydown',function(e){
+    if(e.key==='Escape'&&!askPanel.classList.contains('hidden'))askOpen(false);
+  });
+  var copyBtn=document.getElementById('ask-copy');
+  if(copyBtn)copyBtn.addEventListener('click',function(){
+    var t=(askText&&askText.value||'').trim();
+    if(!t){askFlash('Type a question first.');return;}
+    askCopy(askPrompt(t)).then(function(){
+      askFlash('Prompt copied. Paste it into Claude.');
+    },function(){askFlash('Could not reach the clipboard in this browser.');});
+  });
+  var saveBtn=document.getElementById('ask-save');
+  if(saveBtn)saveBtn.addEventListener('click',function(){
+    var t=(askText&&askText.value||'').trim();
+    if(!t){askFlash('Type a question first.');return;}
+    var w=askWhere();
+    qState.push({q:t,where:w.section||'front page',id:w.id,
+                 sel:askSel.trim().slice(0,600),at:new Date().toISOString()});
+    qSave();askText.value='';askPaint();askFlash('Saved. It travels with your export.');
+  });
+  askPaint();
+}
+
+})();
+</script>
+</body>
+</html>

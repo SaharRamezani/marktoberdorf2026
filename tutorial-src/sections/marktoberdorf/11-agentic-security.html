@@ -1,0 +1,326 @@
+<section class="lecture" id="sec-mk-9" data-num="9" data-day="mk-ai"
+         data-title="Security for Agentic Systems" data-lecturer="John C. Mitchell">
+  <header class="lec-head">
+    <div class="lec-num">9</div>
+    <div>
+      <h2 id="mk9-top">Security for Agentic Systems: Attacks and Vulnerabilities</h2>
+      <p class="lec-meta">John C. Mitchell (Stanford University), from the deck <em>Evaluation and Security of AI-Based Systems</em>, day 3.</p>
+    </div>
+  </header>
+
+  <p class="lead">The previous section defined direct and indirect prompt injection. This one
+  follows what happens when the same weakness is placed inside a system that plans, delegates
+  and executes code. The argument runs along a ladder: a chatbot can be talked into breaking
+  its own rules, a single agent with tools can be fed instructions through the tools, and a
+  multi-agent system can have its control flow rewritten by content it merely read. At each
+  rung the attacker gains more, and the defences that worked one rung down stop being
+  sufficient.</p>
+
+  <h3 id="mk9-model">How to state a security question properly</h3>
+
+  <p>Before describing any attack, the lecture insists on a habit that is easy to skip. A
+  security claim only means something once three things are written down
+  <button type="button" class="slide-ref" data-slide="mitchell3:8" title="Open this slide">slide 8</button>. First, the system of interest. Second, the desirable
+  property, which is usually the intended function of the system, though in practice it is
+  often scaled back to the most essential protection the user needs. Third, the interface and
+  capabilities of the attacker, which is what people mean by a threat model. Only then can you
+  ask the actual question: can an attacker with that interface make the desirable property
+  fail?</p>
+
+  <div class="callout key">
+    <p><span class="co-tag">Key idea</span> Every attack below is stated as a triple: who the
+    victim is, what interface the attacker has, and what the attacker is trying to make the
+    system do. If you cannot fill in all three, you do not yet have a threat model, you have a
+    worry.</p>
+  </div>
+
+  <h3 id="mk9-direct">Rung one: the chatbot and the SQL analogy</h3>
+
+  <p>The simplest case is a chatbot with a system prompt. The system prompt defines the scope
+  of the conversation and acts as the guardrail. The loop is short: user input is appended to
+  the conversation history, the history goes to the model, and the response comes back
+  <button type="button" class="slide-ref" data-slide="mitchell3:9" title="Open this slide">slide 9</button>. Here the victim is the system, the attacker interface
+  is the ordinary user input box, and the goal is to obtain responses the system prompt
+  forbids <button type="button" class="slide-ref" data-slide="mitchell3:10" title="Open this slide">slide 10</button>.</p>
+
+  <p>Three properties make this work <button type="button" class="slide-ref" data-slide="mitchell3:11" title="Open this slide">slide 11</button>. Trusted input,
+  meaning the system prompt, and untrusted input, meaning whatever the user typed, are
+  concatenated and handed to the model as one text. The model has been fine-tuned to follow
+  instructions, so it follows the instructions it finds, wherever they came from. And the
+  user's text can therefore modify or override the system prompt. This was recognised early,
+  and filtering input and output gives partial mitigation, but only partial.</p>
+
+  <p>The lecture spends real time on the comparison with SQL injection, because the comparison
+  is instructive in both directions <button type="button" class="slide-ref" data-slide="mitchell3:12" title="Open this slide">slides 12-15</button>. A login page
+  that builds its query by pasting the submitted username into a string has exactly the same
+  shape: a trusted query template, an untrusted value, and one flat string handed to an
+  interpreter that cannot tell which part it is supposed to trust. An attacker who supplies a
+  value containing query syntax rather than a name changes the meaning of the statement rather
+  than its data, and the server executes the result.</p>
+
+  <p>What matters is the fix and why it does not carry over. SQL injection is solved by
+  parameterized queries <button type="button" class="slide-ref" data-slide="mitchell3:16" title="Open this slide">slide 16</button>. The application sends the
+  query template and the argument values through separate channels, so the database engine
+  never has to guess where the template stops and the data begins. The structure of SQL is what
+  makes this possible: there is a grammar, so there is a boundary to enforce.</p>
+
+  <div class="callout warn">
+    <p><span class="co-tag">Careful</span> There is no parameterized natural language. A prompt
+    has no grammar that separates instruction from data, so there is no equivalent of binding a
+    parameter. This is the reason prompt injection has no clean fix while SQL injection does,
+    and it is the single most important point to carry into the rest of this section.</p>
+  </div>
+
+  <div class="quiz">
+    <script type="application/json">
+    {"type":"mc",
+     "q":"Why does the standard fix for SQL injection not transfer to prompt injection?",
+     "options":["Language models are too slow to check their input","SQL is a compiled language and prompts are interpreted","Parameterized queries rely on a grammar that separates template from data, and natural language has no such boundary","Prompt injection attacks are too new for a fix to have been written"],
+     "answer":2,
+     "explain":"Binding a parameter works because the database can be told, structurally, which bytes are code and which are data. A prompt is one undifferentiated text, so the model has nothing to enforce a boundary with."}
+    </script>
+  </div>
+
+  <h3 id="mk9-indirect">Rung two: one agent, and the tools it trusts</h3>
+
+  <p>Now give the model tools. The lecture's example is an email and calendar manager
+  <button type="button" class="slide-ref" data-slide="mitchell3:18" title="Open this slide">slide 18</button>. The user states a goal such as reading their email
+  and scheduling meetings where needed. A planner turns that into a plan, including the
+  criteria for deciding when a meeting is required. An orchestrator carries the plan out: it
+  asks the email client to read messages, decides whether meetings are needed, then updates the
+  calendar and sends invitations. This is the agent plus tools pattern.</p>
+
+  <p>The attack does not touch the user's input at all <button type="button" class="slide-ref" data-slide="mitchell3:19" title="Open this slide">slide 19</button>.
+  The attacker simply sends the user an email whose body is addressed to the machine rather
+  than to the person, asking that certain instructions be passed back to the calling agent. The
+  email client reads it and returns the text to the orchestrator as tool output. The
+  orchestrator, or the planner it consults, treats that text as part of its working context and
+  may act on it. The victim is the system and its user, the attacker interface is simply the
+  ability to send an email, and the goal is an action harmful to the user, such as sending data
+  somewhere it should not go.</p>
+
+  <p>The structural point is that tool output arrives from a trusted component of the system,
+  the email client, but its content came from outside. The channel is trusted and the payload
+  is not, and nothing in the pipeline records the difference.</p>
+
+  <figure class="fig">
+    <svg viewBox="0 0 660 220" role="img" aria-label="Diagram of an agent trust boundary showing untrusted content entering through a tool">
+      <rect x="14" y="26" width="392" height="176" rx="14" fill="none"
+            stroke="var(--accent)" stroke-width="1.6" stroke-dasharray="7 5"/>
+      <text x="26" y="46" font-size="12" fill="var(--accent)">system trust boundary</text>
+      <rect x="42" y="66" width="112" height="44" rx="9" fill="var(--surface)"
+            stroke="var(--hairline)"/>
+      <text x="98" y="93" font-size="12" fill="currentColor" text-anchor="middle">Planner</text>
+      <rect x="42" y="132" width="112" height="44" rx="9" fill="var(--surface)"
+            stroke="var(--hairline)"/>
+      <text x="98" y="159" font-size="12" fill="currentColor" text-anchor="middle">Orchestrator</text>
+      <rect x="246" y="99" width="132" height="44" rx="9" fill="var(--surface)"
+            stroke="var(--hairline)"/>
+      <text x="312" y="126" font-size="12" fill="currentColor" text-anchor="middle">Email client</text>
+      <line x1="98" y1="110" x2="98" y2="132" stroke="var(--muted)" stroke-width="1.4"/>
+      <line x1="154" y1="154" x2="246" y2="126" stroke="var(--muted)" stroke-width="1.4"/>
+      <rect x="470" y="99" width="164" height="44" rx="9" fill="var(--surface)"
+            stroke="var(--crit)" stroke-width="1.6"/>
+      <text x="552" y="120" font-size="12" fill="var(--crit)" text-anchor="middle">Email server</text>
+      <text x="552" y="136" font-size="11" fill="var(--muted)" text-anchor="middle">attacker can write here</text>
+      <line x1="470" y1="121" x2="382" y2="121" stroke="var(--crit)" stroke-width="1.8"/>
+      <polygon points="382,121 391,117 391,125" fill="var(--crit)"/>
+      <text x="428" y="112" font-size="11" fill="var(--crit)" text-anchor="middle">content</text>
+      <text x="330" y="192" font-size="11" fill="var(--muted)">the channel is trusted, the bytes it carries are not</text>
+    </svg>
+    <figcaption class="fig-caption">Indirect prompt injection against an agent with tools. The
+    attacker never speaks to the agent directly. After the lecture's email and calendar example.</figcaption>
+  </figure>
+
+  <p>How common is this in the wild? The lecture cites an empirical study that analysed 1.2
+  billion URLs across 24.8 million hosts and validated 15,300 instances of injected
+  instructions on 11,700 pages <button type="button" class="slide-ref" data-slide="mitchell3:20" title="Open this slide">slide 20</button>. Two findings stand out.
+  A small number of reused templates account for most of what was found, which suggests copying
+  rather than invention. And roughly 70 percent of the instructions sit in parts of the page a
+  person never sees, such as headers, comments and metadata, with many of the remainder hidden
+  by rendering tricks. The text is written for machines, not for readers.</p>
+
+  <div class="quiz">
+    <script type="application/json">
+    {"type":"fill",
+     "q":"In the empirical study cited, roughly what share of injected instructions were placed in non-rendered parts of the page, such as comments and metadata? Answer as a percentage.",
+     "accept":["70","70%","about 70","around 70","70 percent"],
+     "explain":"About 70 percent were in non-rendered HTML. The instructions are aimed at whatever machine reads the page, not at a human visitor."}
+    </script>
+  </div>
+
+  <h3 id="mk9-multi">Rung three: agents that read each other</h3>
+
+  <p>Multi-agent systems add a specialised web surfer, a code runner and others, coordinated by
+  an orchestrator, often through a framework <button type="button" class="slide-ref" data-slide="mitchell3:22" title="Open this slide">slide 22</button>. They plan,
+  delegate, adapt and replan. The lecture draws out the consequence that matters
+  <button type="button" class="slide-ref" data-slide="mitchell3:23" title="Open this slide">slide 23</button>: agents now reason about each other's output rather
+  than about the environment directly, and they extend implicit trust to the other agents in
+  the system. That creates a threat vector that does not exist in a single-agent design, since
+  one agent's output can mislead another agent that reads it.</p>
+
+  <p>The walkthrough is worth following, because the attack is unusually mundane
+  <button type="button" class="slide-ref" data-slide="mitchell3:25" title="Open this slide">slides 25-34</button>. It is described here at the level of what each
+  component believes and does, which is what makes it instructive.</p>
+
+  <div class="stepper" data-title="Control flow hijacking, step by step">
+    <div class="step" data-label="A task is set">
+      <p>The user asks the agent to visit a page and report what it finds. In a realistic
+      setting the user does not name the page at all: an ordinary query leads to a search, which
+      leads to a site the attacker happens to control.</p>
+    </div>
+    <div class="step" data-label="A plan is made">
+      <p>The orchestrator forms a plan to visit the site and assigns the step to the web
+      surfer. Nothing unusual has happened yet.</p>
+    </div>
+    <div class="step" data-label="A false error comes back">
+      <p>The site does not serve the page. It serves something that looks like an access
+      control error, together with text presented as a helpful suggestion for how to obtain
+      access. The web surfer retrieves it and returns it to the orchestrator, exactly as it
+      would return any other page content.</p>
+    </div>
+    <div class="step" data-label="The plan is rewritten">
+      <p>This is the hinge. The orchestrator's whole purpose is to adapt when a step fails, so
+      it consults the plan and rewrites it in line with the error it was handed. The attacker
+      is now editing the plan, using the system's own recovery logic to do it.</p>
+    </div>
+    <div class="step" data-label="The new plan executes">
+      <p>The revised plan instructs the code runner to fetch the resource the false error
+      pointed at, and then to run it. The system was designed to be able to do both of these
+      things, and it does them, in the user's execution context.</p>
+    </div>
+  </div>
+
+  <p>The lecture then asks which agent capabilities the attack actually depends on
+  <button type="button" class="slide-ref" data-slide="mitchell3:35" title="Open this slide">slides 35-36</button>. There are three: the agent must be able to
+  retrieve information from resources other people control, it must update its plans in
+  response to unexpected errors or findings, and it must be able to write and run code to act
+  on what it discovers. The uncomfortable observation is that all three are reasonable
+  capabilities for an agentic system, and arguably the point of building one. Preventing this
+  class of attack is therefore not going to be easy.</p>
+
+  <div class="callout def">
+    <p><span class="co-tag">Definition</span> <strong>Confused deputy</strong>: a component that
+    holds legitimate authority is persuaded by a less privileged party to exercise that
+    authority on its behalf. The term comes from a 1988 paper, and it describes this situation
+    exactly <button type="button" class="slide-ref" data-slide="mitchell3:37" title="Open this slide">slide 37</button>. The web surfer reads an untrusted site and
+    reports to the orchestrator; the orchestrator receives that report from a trusted component
+    of its own system and acts with the user's authority.</p>
+  </div>
+
+  <h3 id="mk9-compare">Two failures that look alike and are not</h3>
+
+  <p>The lecture is careful to separate control flow hijacking from indirect prompt injection,
+  because they arrive through the same door <button type="button" class="slide-ref" data-slide="mitchell3:39" title="Open this slide">slides 39-40</button>. In
+  indirect prompt injection, a malicious prompt instructs the victim model to do something. In
+  control flow hijacking, malicious content reprograms the agent, which then reaches any tool
+  or resource that agent can reach. The difference is scope: the first subverts a response, the
+  second subverts a plan, and a plan commands the whole toolset.</p>
+
+  <div class="tabs">
+    <div class="tab" data-label="Direct injection">
+      <p><strong>Victim:</strong> the system. <strong>Attacker interface:</strong> the ordinary
+      user input box. <strong>Goal:</strong> responses the system prompt forbids.</p>
+      <p>Trusted and untrusted text are concatenated before the model sees them. Input and
+      output filtering helps, and it is genuinely partial.</p>
+    </div>
+    <div class="tab" data-label="Indirect injection">
+      <p><strong>Victim:</strong> the system and its user. <strong>Attacker interface:</strong>
+      any content the system's tools might fetch, such as an email or a web page.
+      <strong>Goal:</strong> actions harmful to the user, such as data exfiltration.</p>
+      <p>The attacker never interacts with the agent. Most instructions found in the wild are
+      hidden from human readers.</p>
+    </div>
+    <div class="tab" data-label="Control flow hijacking">
+      <p><strong>Victim:</strong> the system and its user. <strong>Attacker interface:</strong>
+      a site or file the agentic system visits. <strong>Goal:</strong> behaviour the design
+      forbids, up to running code in the user's execution context.</p>
+      <p>The content is not aimed at the model's answer but at the orchestrator's plan. The
+      recovery logic that makes the agent robust is the mechanism that is abused.</p>
+    </div>
+    <div class="tab" data-label="Agent meltdown">
+      <p>The fourth item on the lecture's outline: agents behaving exceptionally when they meet
+      conditions nobody anticipated <button type="button" class="slide-ref" data-slide="mitchell3:5" title="Open this slide">slides 5, 7</button>. The deck lists
+      it alongside monitoring and mitigation, asking whether agentic judges can detect the error
+      and whether conventional or AI-based repairs exist. It is posed as an open question rather
+      than answered.</p>
+    </div>
+  </div>
+
+  <h3 id="mk9-general">How far the problem generalises</h3>
+
+  <p>A single demonstration proves little, so the lecture reports how widely the effect holds
+  <button type="button" class="slide-ref" data-slide="mitchell3:41" title="Open this slide">slide 41</button>. It is not confined to one multi-agent framework, so
+  it is not simply a poor implementation. It is not confined to one model size or one
+  developer, so it is not an artefact of a single training recipe, and the models inside these
+  agents are mostly safety aligned. It is not confined to one orchestration method, one input
+  modality, one phrasing of the user's query, or one flavour of fake error, with fake Python and
+  web server errors working as well as a generic access denied message.</p>
+
+  <p>Two further results deserve emphasis. The attack carries across modalities, including
+  screenshots of errors, without needing carefully crafted adversarial images
+  <button type="button" class="slide-ref" data-slide="mitchell3:42" title="Open this slide">slide 42</button>. And, stated plainly on the same slide, more capable
+  models were found to be more vulnerable than less capable ones, which inverts the comfortable
+  assumption that capability and safety improve together.</p>
+
+  <p>On consequences, the lecture reports a tested data exfiltration goal against a framework
+  with a built-in memory module: build a profile of the user from what the memory holds and
+  forward it to the attacker <button type="button" class="slide-ref" data-slide="mitchell3:43" title="Open this slide">slide 43</button>. The lesson drawn is that
+  sandboxing and ephemeral execution environments are not sufficient protection when those
+  environments contain sensitive user data. At the top of the severity scale the deck places
+  complete adversarial control of the user's device or container, and full data exfiltration
+  <button type="button" class="slide-ref" data-slide="mitchell3:44" title="Open this slide">slides 44-45</button>.</p>
+
+  <div class="quiz">
+    <script type="application/json">
+    {"type":"mc",
+     "q":"Which agent capability does the control flow hijacking attack most directly exploit?",
+     "options":["The agent's ability to hold a long conversation history","The agent's willingness to revise its plan when a step reports an unexpected error","The agent's use of a large context window","The agent's ability to call more than one model"],
+     "answer":1,
+     "explain":"The falsified error is only useful because the orchestrator is built to recover from failures by replanning. The attacker supplies the failure and, with it, the direction of the new plan."}
+    </script>
+  </div>
+
+  <div class="quiz">
+    <script type="application/json">
+    {"type":"mc",
+     "q":"Why does the lecture argue that running an agent's code in a sandbox is not by itself an adequate defence?",
+     "options":["Sandboxes are too slow for agentic workloads","A sandbox that holds the user's data still allows that data to be gathered and sent out","Sandboxes cannot execute code written by a model","Sandboxes prevent the agent from replanning"],
+     "answer":1,
+     "explain":"Containment limits what the code can reach outside, but if sensitive user data lives inside the environment, exfiltration from within it is still possible. The tested attack profiled the user from a memory module."}
+    </script>
+  </div>
+
+  <h3 id="mk9-defence">Where this leaves the defender</h3>
+
+  <p>The honest summary is that this session is about attacks and vulnerabilities, and the
+  lecture keeps the defensive material deliberately modest. Filtering input and output helps
+  against direct injection and is explicitly described as partial. Monitoring and mitigation
+  appear as questions rather than as solutions: whether an agentic judge can reliably detect
+  that something has gone wrong, and whether repairs, conventional or AI-based, can be applied
+  once it has <button type="button" class="slide-ref" data-slide="mitchell3:7" title="Open this slide">slides 7, 17</button>.</p>
+
+  <p>What the material does support is a way of thinking. The three capabilities that make the
+  attack possible are the same three that make the agent useful, so the design question is not
+  how to remove them but how to bound them: which resources an agent may reach, which actions
+  need a human decision before they happen, and whether the system records where a piece of
+  text came from before acting on it. None of that is a solved problem, and the lecture does
+  not pretend otherwise.</p>
+
+  <div class="callout key">
+    <p><span class="co-tag">Key idea</span> The ladder from chatbot to multi-agent system is a
+    ladder of authority, not of cleverness. The attacks get more serious not because they become
+    more sophisticated, but because each rung hands the same trick a larger set of things it can
+    do.</p>
+  </div>
+
+  <details class="reveal">
+    <summary>Why is provenance so hard to keep once text enters a model?</summary>
+    <p>A conventional system can label data at its boundary and carry the label along, because
+    the data stays in identifiable pieces. Text handed to a language model is flattened into one
+    sequence, and the model's output is new text conditioned on all of it. There is no reliable
+    way to recover, from the output alone, which parts of the input drove which parts of the
+    answer. That is why the boundary has to be enforced around the model, by limiting what its
+    output is allowed to trigger, rather than inside it.</p>
+  </details>
+</section>

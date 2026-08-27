@@ -1,0 +1,486 @@
+<section class="lecture" id="sec-mk-1" data-num="1" data-day="mk-dv" data-title="Deductive Verification with Why3" data-lecturer="Jean-Christophe Filliatre">
+  <header class="lec-head">
+    <div class="lec-num">1</div>
+    <div>
+      <h2 id="mk1-top">The why and how of deductive program verification</h2>
+      <p class="lec-meta">Lecture by Jean-Christophe Filli&acirc;tre, CNRS. Companion deck:
+      <em>The Why and How of Deductive Program Verification</em>, lecture 1.</p>
+    </div>
+  </header>
+
+  <p class="lead">Deductive verification turns a question about a program into a set of mathematical
+  statements, and then proves those statements. This first lecture sets out that two step picture,
+  names the four design decisions that every deductive verification tool has to make, explains why
+  tools like Why3 put an intermediate language between the real programming language and the prover,
+  and then spends most of its time on a single live example: computing the maximum subarray sum in
+  linear time and proving that the answer really is the maximum. The example is small enough to
+  follow line by line, and it already exposes the two things that make verification hard in
+  practice, namely writing a specification you actually agree with and giving the solver enough
+  information to finish the proof on its own.</p>
+
+  <h3 id="mk1-what">What deductive verification is <button type="button" class="slide-ref" data-slide="filliatre1:4" title="Open this slide">slide 4</button></h3>
+
+  <p>The idea is simple and has two steps. You start with a program you wish to verify, and with a
+  <strong>formal specification</strong> of what that program is supposed to do, written in some
+  mathematical language. A tool then takes the program together with its specification and produces
+  a set of mathematical statements called <strong>verification conditions</strong>, usually
+  abbreviated to VCs. These are built so that if all of them are valid, the program is correct with
+  respect to that specification. That is the first step. In the second step you are no longer looking
+  at a program at all: you are looking at ordinary mathematical statements, and you prove them by
+  whatever means you have.</p>
+
+  <figure class="fig">
+    <svg viewBox="0 0 640 165" role="img" aria-label="A program and a specification are combined by a verification condition generator into verification conditions, which provers turn into a proof">
+      <g fill="var(--surface)" stroke="currentColor" stroke-width="1.5">
+        <rect x="8" y="18" width="140" height="42" rx="6"/>
+        <rect x="8" y="96" width="140" height="42" rx="6"/>
+        <rect x="250" y="57" width="170" height="42" rx="6"/>
+        <rect x="500" y="57" width="120" height="42" rx="6"/>
+      </g>
+      <g fill="none" stroke="var(--muted)" stroke-width="1.5">
+        <path d="M148 39 H170 V78 H250"/>
+        <path d="M148 117 H170"/>
+        <path d="M420 78 H500"/>
+      </g>
+      <g fill="var(--muted)">
+        <path d="M250 78 l-9 -4 v8 z"/>
+        <path d="M500 78 l-9 -4 v8 z"/>
+      </g>
+      <g fill="currentColor" font-size="13" text-anchor="middle">
+        <text x="78" y="44">program</text>
+        <text x="78" y="122">specification</text>
+        <text x="335" y="73">verification</text>
+        <text x="335" y="90">conditions</text>
+        <text x="560" y="83">proof</text>
+      </g>
+      <g fill="var(--accent)" font-size="12" text-anchor="middle">
+        <text x="210" y="70">VC generator</text>
+        <text x="460" y="70">provers</text>
+      </g>
+    </svg>
+    <figcaption class="fig-caption">The two step pipeline of deductive verification. After the
+    lecture's opening figure.</figcaption>
+  </figure>
+
+  <p>None of this is new. <button type="button" class="slide-ref" data-slide="filliatre1:5" title="Open this slide">slides 5-6</button> The lecture traces the method
+  back to Alan Turing's three page paper <em>Checking a large routine</em> from 1949, which already
+  contains the principle of deductive verification, the notion of loop invariant, and a discussion
+  of termination and of arithmetic overflow, illustrated on a routine that computes a factorial with
+  two nested loops and only additions. The paper was largely forgotten, and Filli&acirc;tre credits
+  Morris and Jones with bringing it back to the attention of the research community. In the meantime
+  the same ideas had been rediscovered about twenty years later, at the end of the 1960s, by Robert
+  Floyd in <em>Assigning Meanings to Programs</em> (1967) and by Tony Hoare in <em>An Axiomatic
+  Basis for Computer Programming</em>.</p>
+
+  <h3 id="mk1-questions">Four design questions <button type="button" class="slide-ref" data-slide="filliatre1:7" title="Open this slide">slides 7-12</button></h3>
+
+  <p>The picture above hides four decisions. Which programming language do we verify? Which language
+  do we write specifications in, and which logic do those specifications live in? How are the
+  verification conditions computed from the program and the specification? And which tool discharges
+  them? Every deductive verification system answers these four questions, and the answers largely
+  determine what the system feels like to use.</p>
+
+  <div class="tabs">
+    <div class="tab" data-label="Which program?">
+      <p><strong>Not C, and not Rust, at least not directly.</strong> <button type="button" class="slide-ref" data-slide="filliatre1:13" title="Open this slide">slide 13</button>
+      Attacking the deductive verification of a real programming language head on is a daunting task:
+      these are huge languages with many subtleties and a complicated semantics. The standard answer
+      is to introduce a small language designed for verification, an <strong>intermediate
+      verification language</strong>. The lecture lists Boogie, Why3, Viper and Coma, and follows
+      Why3.</p>
+    </div>
+    <div class="tab" data-label="Which logic?">
+      <p><strong>An extension of first order logic.</strong> <button type="button" class="slide-ref" data-slide="filliatre1:14" title="Open this slide">slide 14</button>
+      The options include first order logic, higher order logic, type theory, separation logic and
+      dynamic logic. Why3 stays close to first order logic, with additions such as polymorphic types
+      and algebraic data types. The point of staying near first order logic is that this is the
+      input language automated provers are good at.</p>
+    </div>
+    <div class="tab" data-label="How?">
+      <p><strong>Weakest preconditions.</strong> <button type="button" class="slide-ref" data-slide="filliatre1:15" title="Open this slide">slide 15</button> The
+      verification conditions are computed by a weakest precondition calculus, a systematic way of
+      pushing a postcondition backwards through the statements of a program. The lecture only names
+      the technique here and develops it in detail in the next lecture.</p>
+    </div>
+    <div class="tab" data-label="Which prover?">
+      <p><strong>Automated theorem provers, mostly SMT solvers.</strong> <button type="button" class="slide-ref" data-slide="filliatre1:16" title="Open this slide">slide 16</button>
+      An automated prover takes a mathematical statement and tries to establish its validity. It can
+      answer true or false, but because the logics involved are not decidable it can also answer that
+      it does not know, or simply run forever. Why3 can send its verification conditions to more than
+      25 provers, among them the SMT solvers Z3, CVC5, Alt-Ergo and Colibri&nbsp;2.</p>
+    </div>
+  </div>
+
+  <p>SMT stands for satisfiability modulo theories. <button type="button" class="slide-ref" data-slide="filliatre1:17" title="Open this slide">slide 17</button> An SMT
+  solver combines propositional logic, quantifiers, and a set of built in theories: uninterpreted
+  functions, equality, integer arithmetic, the theory of arrays, and others. The deck's illustration
+  is a small statement over an uninterpreted function <code>f</code> from integers to integers,
+  which any SMT solver discharges easily:</p>
+
+  <div class="formula">f : &#8484; &rarr; &#8484; &nbsp;&nbsp;
+  &forall;x. f(x) &gt; f(x&nbsp;&minus;&nbsp;1) + 1 &nbsp;&nbsp;
+  f(0) = 40 &or; f(1) = 40 &nbsp;&nbsp; &rArr; &nbsp;&nbsp; &exist;y. f(y) &gt; 42</div>
+
+  <div class="callout warn">
+    <span class="co-tag">Careful</span>
+    Such a combination of theories and quantifiers is <strong>undecidable</strong>. That is not a
+    detail: it means the solver runs on heuristics and is incomplete, so a failed proof attempt does
+    not tell you that your program is wrong. Making the verification conditions easy for the solver
+    is therefore part of the job of a verification tool, and part of the job of the person using it.
+  </div>
+
+  <div class="quiz">
+    <script type="application/json">
+    {"type":"mc","q":"Why does Why3 define its own programming language, WhyML, instead of generating verification conditions directly from C or Rust?","options":["WhyML programs execute faster than C programs, so the proof is faster too","Real programming languages are large and have subtle semantics, so verifying them directly is a daunting task, and an intermediate language lets that work be shared by several front ends","SMT solvers can only parse WhyML syntax","First order logic is unable to describe the behaviour of C programs"],"answer":1,
+     "explain":"The lecture's argument is one of engineering effort. Boogie, Why3, Viper and Coma are all intermediate verification languages: front ends compile a real language down to them, and the verification condition generator and the prover interface are written once."}
+    </script>
+  </div>
+
+  <h3 id="mk1-why3">Where Why3 sits <button type="button" class="slide-ref" data-slide="filliatre1:18" title="Open this slide">slide 18</button></h3>
+
+  <p>Why3 is built as a stack. At the bottom are the SMT solvers. Above them is the Why3 logic, and
+  above that the verification condition generator. The programming language on top of all this is
+  <strong>WhyML</strong>. Other tools then use WhyML as their target rather than talking to solvers
+  themselves: the deck names Creusot, Cameleer and GnatProve as front ends built on the Why3 stack.
+  This is the same layering idea as in compilers, where a shared intermediate representation sits
+  between many source languages and many machines.</p>
+
+  <p>The roadmap for the series is a short demo today, then weakest preconditions and the path from
+  programs to provers, then programs used to help logic, then a case study.
+  <button type="button" class="slide-ref" data-slide="filliatre1:19" title="Open this slide">slide 19</button></p>
+
+  <h3 id="mk1-problem">The demo: maximum subarray sum <button type="button" class="slide-ref" data-slide="filliatre1:20" title="Open this slide">slides 20-21</button></h3>
+
+  <p>The problem is the classic one. Given an array of integers, some positive and some negative,
+  find the largest sum of a contiguous range of elements. On the array used in the lecture the answer
+  is 6, obtained by the range containing 4, &minus;1, 2 and 1.</p>
+
+  <figure class="fig">
+    <svg viewBox="0 0 560 130" role="img" aria-label="An array with elements 2, 2, minus 5, 4, minus 1, 2, 1, minus 5, 4, with the range from index 3 to index 6 highlighted and summing to 6">
+      <g fill="var(--surface)" stroke="currentColor" stroke-width="1.2">
+        <rect x="16" y="30" width="56" height="44"/>
+        <rect x="72" y="30" width="56" height="44"/>
+        <rect x="128" y="30" width="56" height="44"/>
+        <rect x="184" y="30" width="56" height="44"/>
+        <rect x="240" y="30" width="56" height="44"/>
+        <rect x="296" y="30" width="56" height="44"/>
+        <rect x="352" y="30" width="56" height="44"/>
+        <rect x="408" y="30" width="56" height="44"/>
+        <rect x="464" y="30" width="56" height="44"/>
+      </g>
+      <rect x="182" y="24" width="228" height="56" fill="none" stroke="var(--accent)" stroke-width="2" rx="4"/>
+      <g fill="currentColor" font-size="14" text-anchor="middle">
+        <text x="44" y="58">2</text>
+        <text x="100" y="58">2</text>
+        <text x="156" y="58">&minus;5</text>
+        <text x="212" y="58">4</text>
+        <text x="268" y="58">&minus;1</text>
+        <text x="324" y="58">2</text>
+        <text x="380" y="58">1</text>
+        <text x="436" y="58">&minus;5</text>
+        <text x="492" y="58">4</text>
+      </g>
+      <g fill="var(--muted)" font-size="12" text-anchor="middle">
+        <text x="44" y="94">0</text>
+        <text x="100" y="94">1</text>
+        <text x="156" y="94">2</text>
+        <text x="212" y="94">3</text>
+        <text x="268" y="94">4</text>
+        <text x="324" y="94">5</text>
+        <text x="380" y="94">6</text>
+        <text x="436" y="94">7</text>
+        <text x="492" y="94">8</text>
+      </g>
+      <text x="296" y="118" font-size="12" fill="var(--accent)" text-anchor="middle">sum a 3 7 = 4 + (&minus;1) + 2 + 1 = 6</text>
+    </svg>
+    <figcaption class="fig-caption">The instance used in the lecture. Indices are shown below the
+    cells, and the best range is 3 included to 7 excluded. After the lecture's slide.</figcaption>
+  </figure>
+
+  <p>There is a divide and conquer solution running in time proportional to <em>n</em>&nbsp;log&nbsp;<em>n</em>,
+  but the well known solution is a single linear scan with two variables, and that is the one the
+  lecture implements and proves. The two variables are <code>maxsum</code>, the best sum found so
+  far anywhere in the part of the array already scanned, and <code>curmax</code>, the best sum of a
+  range that <em>ends at the current position</em>. At each step you extend the current range by the
+  new element. If that makes the running sum negative you throw the range away and start again from
+  the empty range, because a negative prefix can never help. Then, if the current sum beats the best
+  known sum, you record it.</p>
+
+  <p>In WhyML this is written as follows. <button type="button" class="slide-ref" data-slide="filliatre1:22" title="Open this slide">slides 22-23</button> The first two
+  lines import mathematical integers and arrays from the standard library. The function takes an
+  array of integers as a parameter and returns an integer, and the return value is given the name
+  <code>s</code> so that the specification can refer to it later.</p>
+
+<pre><code>use int.Int
+use array.Array
+
+let maximum_subarray (a: array int) : (s: int)
+= (* the maximum in a[0..i[ *)
+  let ref maxsum = 0 in
+  (* the maximum ending on i *)
+  let ref curmax = 0 in
+  for i = 0 to length a - 1 do
+    curmax &lt;- curmax + a[i];
+    if curmax &lt; 0 then ( curmax &lt;- 0 );
+    if curmax &gt; maxsum then ( maxsum &lt;- curmax )
+  done;
+  return maxsum</code></pre>
+
+  <p>Before verifying anything, the lecture runs the code on a few inputs. Testing a program a little
+  before embarking on its verification is not a waste of time, it saves time.</p>
+
+  <h3 id="mk1-spec">Agreeing on the specification <button type="button" class="slide-ref" data-slide="filliatre1:24" title="Open this slide">slides 24-26</button></h3>
+
+  <p>To say what the function computes we need to talk about sums of ranges. The Why3 standard
+  library provides a logical function <code>sum</code> for exactly this, imported with
+  <code>use array.ArraySum</code>:</p>
+
+  <div class="formula">sum a lo hi &nbsp;=&nbsp; &sum;<sub>lo &le; i &lt; hi</sub> a[i]</div>
+
+  <p>Note the convention: the lower bound is included and the upper bound is excluded. Ranges are
+  half open, so <code>sum a 3 7</code> adds the four elements at indices 3, 4, 5 and 6, and
+  <code>sum a l l</code> is 0 for any <code>l</code>.</p>
+
+  <p>Before writing the contract there are two modelling questions to settle.
+  <button type="button" class="slide-ref" data-slide="filliatre1:25" title="Open this slide">slide 25</button> Is the array allowed to be empty? And is the empty
+  subarray, whose sum is 0, an acceptable answer? The code above answers yes to both: it returns 0
+  on an empty array, and it never returns a negative number, because <code>maxsum</code> starts at 0
+  and only grows. Those two decisions have to be made explicit, because they change the
+  specification. The proposed contract is:</p>
+
+<pre><code>let maximum_subarray (a: array int) : (s: int)
+  ensures { forall l h. 0 &lt;= l &lt;= h &lt;= length a -&gt; sum a l h &lt;= s }
+  ensures { exists l h. 0 &lt;= l &lt;= h &lt;= length a /\ sum a l h = s }
+= ...</code></pre>
+
+  <p>There are no preconditions, since the function accepts any array. The two postconditions say
+  two different things and both are needed. The first says that <code>s</code> is an
+  <em>upper bound</em>: no legal range of the array has a sum bigger than <code>s</code>. The second
+  says that <code>s</code> is <em>reached</em>: there really is a legal range whose sum is exactly
+  <code>s</code>. Only together do they say that <code>s</code> is the maximum. Note also that
+  <code>l &lt;= h</code> rather than <code>l &lt; h</code> permits the empty range, which is the
+  formal counterpart of the decision made above.</p>
+
+  <div class="callout key">
+    <span class="co-tag">Key idea</span>
+    The specification is the one part of the exercise that no machine can check for you. It has to be
+    read and agreed on by a human, because if it does not mean what you think it means, then the
+    whole proof is a waste of time. This is takeaway number one of the lecture.
+    <button type="button" class="slide-ref" data-slide="filliatre1:31" title="Open this slide">slide 31</button>
+  </div>
+
+  <div class="quiz">
+    <script type="application/json">
+    {"type":"mc","q":"Suppose only the first postcondition were kept, the one saying forall l h. sum a l h <= s. What would go wrong?","options":["Nothing, that postcondition already says that s is the maximum","A function that returns any sufficiently large number, for instance a huge constant, would satisfy the contract","The proof would need one more loop invariant but the specification would still be correct","The logical function sum would become undefined on empty ranges"],"answer":1,
+     "explain":"An upper bound is not the least upper bound. The second postcondition, which says that some real range of the array reaches s, is what rules out answers that are simply too big. Both are needed."}
+    </script>
+  </div>
+
+  <h3 id="mk1-ghost">Why the first attempt fails, and what ghost code fixes</h3>
+
+  <p>Running Why3 on the code plus the contract gives a set of verification conditions, and the
+  graphical interface lets you split them and look at them one by one. Some are discharged
+  immediately. The safety of the array access <code>a[i]</code> is proved, because the loop bounds
+  guarantee that <code>i</code> is in range. The postconditions in the special case of an empty array
+  are proved as well, since the loop body is never entered and the function returns 0, which is
+  indeed the best sum available. The two postconditions in the general case are not proved: the
+  solvers time out.</p>
+
+  <p>The reason is that after the loop the prover knows nothing about the values of
+  <code>maxsum</code> and <code>curmax</code>. A weakest precondition calculus cannot invent that
+  information, so it has to be supplied, and the place to supply it is a
+  <strong>loop invariant</strong>: a property that holds before the loop starts and is preserved by
+  every iteration, so that it still holds when the loop finishes.</p>
+
+  <p>The natural first attempt is to write invariants that mirror the postconditions, with
+  <code>length a</code> replaced by the current index <code>i</code>. That works for the upper bound
+  parts, but the parts that mirror the second postcondition start with an existential quantifier:
+  <em>there exist</em> bounds <code>l</code> and <code>h</code> such that
+  <code>sum a l h = maxsum</code>. These make the solvers struggle badly. To prove a goal of that
+  shape, the solver has to come up with actual witness terms for <code>l</code> and <code>h</code>,
+  and it has no good way to guess them.</p>
+
+  <div class="quiz">
+    <script type="application/json">
+    {"type":"mc","q":"The first attempt at loop invariants stated existence, for example: there exist l and h with sum a l h = maxsum. Why did the SMT solvers struggle with that?","options":["The invariant was in fact false, so no solver could prove it","To prove a goal that begins with an existential quantifier, the solver must produce witness terms for l and h, and nothing in the problem tells it what they are","The logical function sum is higher order and SMT solvers only handle first order logic","The array might be empty, and sum is not defined in that case"],"answer":1,
+     "explain":"The property is true, but proving it requires exhibiting a witness. The program actually knows the witness at every point in the scan, so the fix is to write it down instead of asking the solver to rediscover it."}
+    </script>
+  </div>
+
+  <p>The fix is to stop asking the solver to guess and to record the witnesses in the program itself.
+  <button type="button" class="slide-ref" data-slide="filliatre1:27" title="Open this slide">slide 27</button> Three extra variables are added: <code>lo</code> and
+  <code>hi</code>, the bounds of the best range found so far, and <code>cl</code>, the left bound of
+  the best range ending at the current position. They are updated at exactly the two places where
+  the corresponding sums are updated. When <code>curmax</code> is reset to 0 the current range
+  becomes empty and starts just after <code>i</code>, so <code>cl</code> becomes
+  <code>i+1</code>. When <code>maxsum</code> is improved, the best range becomes the current one, so
+  <code>lo</code> becomes <code>cl</code> and <code>hi</code> becomes <code>i+1</code>.</p>
+
+  <div class="callout def">
+    <span class="co-tag">Definition</span>
+    <strong>Ghost code</strong> is code added to a program for the sake of its specification or its
+    proof, not for the sake of the result. In WhyML a variable is declared ghost with
+    <code>let ghost ref</code>, and assignments to ghost variables are then ghost code themselves.
+    Why3 checks that ghost code cannot influence ordinary computation: if you try to assign a ghost
+    value to a regular variable, the tool reports an error. Because of that guarantee, ghost code can
+    be erased when the program is compiled, so it costs nothing at run time.
+  </div>
+
+  <div class="quiz">
+    <script type="application/json">
+    {"type":"fill","q":"What is the name for code that exists only for the specification or the proof, that the tool checks cannot influence ordinary computation, and that is erased at compilation?","accept":["ghost code","ghost","ghost variables","ghost variable"],
+     "explain":"Ghost code. Here the ghost variables lo, hi and cl track the witnesses for the existential parts of the specification, so the solver never has to guess them."}
+    </script>
+  </div>
+
+  <h3 id="mk1-invariants">The loop invariants <button type="button" class="slide-ref" data-slide="filliatre1:28" title="Open this slide">slide 28</button></h3>
+
+  <p>With the ghost variables in place, four invariants finish the job:</p>
+
+<pre><code>let maximum_subarray (a: array int) : (s: int)
+= (* the maximum in a[0..i[ is a[lo..hi[ *)
+  let ref maxsum = 0 in
+  let ghost ref lo = 0 in
+  let ghost ref hi = 0 in
+  (* the maximum ending on i is a[cl..i[ *)
+  let ref curmax = 0 in
+  let ghost ref cl = 0 in
+  for i = 0 to length a - 1 do
+    invariant { forall l. 0 &lt;= l &lt;= i -&gt; sum a l i &lt;= curmax }
+    invariant { 0 &lt;= cl &lt;= i /\ sum a cl i = curmax }
+    invariant { forall l h. 0 &lt;= l &lt;= h &lt;= i -&gt; sum a l h &lt;= maxsum }
+    invariant { 0 &lt;= lo &lt;= hi &lt;= i /\ sum a lo hi = maxsum }
+    curmax &lt;- curmax + a[i];
+    if curmax &lt; 0 then ( curmax &lt;- 0; cl &lt;- i+1 );
+    if curmax &gt; maxsum then ( maxsum &lt;- curmax; lo &lt;- cl; hi &lt;- i+1 )
+  done;
+  return maxsum</code></pre>
+
+  <p>Read them in pairs. The first pair is about <code>curmax</code>: no range ending at
+  <code>i</code> has a sum greater than <code>curmax</code>, and the particular range from
+  <code>cl</code> to <code>i</code> attains it. The second pair is about <code>maxsum</code>: no
+  range inside the scanned part has a sum greater than <code>maxsum</code>, and the particular range
+  from <code>lo</code> to <code>hi</code> attains it. The second pair is exactly the two
+  postconditions with <code>length a</code> replaced by <code>i</code>, except that the existential
+  quantifier has been replaced by a named witness. When the loop terminates, <code>i</code> equals
+  <code>length a</code> and the second pair becomes the postcondition directly. With these four
+  invariants there are many more verification conditions than before, since each invariant has to be
+  established on entry and preserved by the body, but all of them are discharged easily by the SMT
+  solvers.</p>
+
+  <p>The table below traces the scan on the example array, showing the state after each iteration.
+  It makes visible what the ghost variables are for: <code>lo</code> and <code>hi</code> always
+  delimit a range whose sum is exactly <code>maxsum</code>, which is the witness the solver would
+  otherwise have to invent.</p>
+
+  <div class="table-wrap">
+    <table>
+      <tr><th>i</th><th>a[i]</th><th>curmax</th><th>cl (ghost)</th><th>maxsum</th><th>lo (ghost)</th><th>hi (ghost)</th></tr>
+      <tr><td>start</td><td></td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td></tr>
+      <tr><td>0</td><td>2</td><td>2</td><td>0</td><td>2</td><td>0</td><td>1</td></tr>
+      <tr><td>1</td><td>2</td><td>4</td><td>0</td><td>4</td><td>0</td><td>2</td></tr>
+      <tr><td>2</td><td>&minus;5</td><td>0</td><td>3</td><td>4</td><td>0</td><td>2</td></tr>
+      <tr><td>3</td><td>4</td><td>4</td><td>3</td><td>4</td><td>0</td><td>2</td></tr>
+      <tr><td>4</td><td>&minus;1</td><td>3</td><td>3</td><td>4</td><td>0</td><td>2</td></tr>
+      <tr><td>5</td><td>2</td><td>5</td><td>3</td><td>5</td><td>3</td><td>6</td></tr>
+      <tr><td>6</td><td>1</td><td>6</td><td>3</td><td>6</td><td>3</td><td>7</td></tr>
+      <tr><td>7</td><td>&minus;5</td><td>1</td><td>3</td><td>6</td><td>3</td><td>7</td></tr>
+      <tr><td>8</td><td>4</td><td>5</td><td>3</td><td>6</td><td>3</td><td>7</td></tr>
+    </table>
+  </div>
+
+  <details class="reveal">
+    <summary>Check the invariant at one row</summary>
+    <p>Take the row for i = 5, that is, the state after the sixth iteration has finished. At that
+    point the loop is about to run with i = 6, so the invariants must hold with i = 6. The second
+    invariant asks for <code>sum a cl 6 = curmax</code>, that is
+    <code>sum a 3 6 = 4 + (&minus;1) + 2 = 5</code>, and <code>curmax</code> is indeed 5. The fourth
+    invariant asks for <code>sum a lo hi = maxsum</code>, that is <code>sum a 3 6 = 5</code>, and
+    <code>maxsum</code> is 5. Both hold.</p>
+  </details>
+
+  <div class="stepper" data-title="The demo end to end">
+    <div class="step" data-label="1. The problem">
+      <p>Given an array of integers, return the largest sum over all contiguous ranges. On the
+      lecture's array the answer is 6. A divide and conquer solution runs in
+      <em>n</em>&nbsp;log&nbsp;<em>n</em> time, but a single left to right scan solves it in linear
+      time.</p>
+    </div>
+    <div class="step" data-label="2. The code">
+      <p>Two mutable variables. <code>curmax</code> holds the best sum of a range ending at the
+      current index, reset to 0 as soon as it goes negative. <code>maxsum</code> holds the best sum
+      seen anywhere so far, updated whenever <code>curmax</code> beats it. Both start at 0, so the
+      empty range is always an admissible answer.</p>
+    </div>
+    <div class="step" data-label="3. Test before proving">
+      <p>Run the function on a few arrays first. Verifying a program that is simply wrong wastes
+      more time than testing it does.</p>
+    </div>
+    <div class="step" data-label="4. Decide what correct means">
+      <p>Two questions have to be settled before any formula is written: may the array be empty, and
+      is the empty range with sum 0 an acceptable answer? This code says yes to both, and the
+      contract has to reflect that by writing <code>l &lt;= h</code> rather than
+      <code>l &lt; h</code>.</p>
+    </div>
+    <div class="step" data-label="5. Write the contract">
+      <p>Two postconditions using the library function <code>sum</code>, where ranges are half open.
+      One says that no legal range beats the result, the other says that some legal range achieves
+      it. Upper bound plus attained equals maximum.</p>
+    </div>
+    <div class="step" data-label="6. First run: partial success">
+      <p>Why3 proves the safety of the array access and both postconditions in the empty array case.
+      The two general postconditions time out, because after the loop the prover knows nothing about
+      the final values of <code>maxsum</code> and <code>curmax</code>.</p>
+    </div>
+    <div class="step" data-label="7. Invariants with existentials: still stuck">
+      <p>Mirroring the postconditions at index <code>i</code> gives invariants that assert the
+      existence of bounds. The solvers now have to guess witness terms for those bounds and they run
+      out of time. An existential goal is the hard direction for an SMT solver.</p>
+    </div>
+    <div class="step" data-label="8. Ghost variables carry the witness">
+      <p>Add <code>lo</code>, <code>hi</code> and <code>cl</code> as ghost variables and update them
+      at the same two points where the sums are updated. They are erased at compilation and cannot
+      affect the result, but they turn every existential claim into a plain equation about known
+      terms.</p>
+    </div>
+    <div class="step" data-label="9. Everything is discharged">
+      <p>Four invariants, two per variable: an upper bound statement and a witness equation. There
+      are many more verification conditions than before, and the SMT solvers close all of them
+      quickly.</p>
+    </div>
+  </div>
+
+  <p>The exercise the lecture leaves is to change the function so that empty ranges are no longer
+  allowed as answers. <button type="button" class="slide-ref" data-slide="filliatre1:29" title="Open this slide">slide 29</button> That requires adapting three things at
+  once: the contract, the code, and the loop invariants. It is a good test of whether the argument
+  above has been understood, because all three have to stay consistent.</p>
+
+  <h3 id="mk1-takeaways">Takeaways <button type="button" class="slide-ref" data-slide="filliatre1:31" title="Open this slide">slides 31-33</button></h3>
+
+  <p>The first takeaway has already appeared: a specification must be validated by a human, because
+  a machine can only check the program against what you wrote, never against what you meant.</p>
+
+  <p>The second is that good practice in verification is the same as good practice in programming.
+  <button type="button" class="slide-ref" data-slide="filliatre1:32" title="Open this slide">slide 32</button> The half open range convention is the example at hand.
+  Every interval in this development, in the code, in <code>sum</code>, and in the invariants, is
+  written with the left bound included and the right bound excluded, and everything lines up as a
+  result. If you know a good book about good practice in programming, most of it applies to
+  verification as well.</p>
+
+  <p>The third takeaway is the one that shaped the whole tool: deductive verification benefits from
+  intermediate languages, exactly as compilation does.
+  <button type="button" class="slide-ref" data-slide="filliatre1:33" title="Open this slide">slide 33</button></p>
+
+  <p>A last point, made while the invariants were still on the screen, is worth recording. Reading
+  the invariants is optional in a way that reading the specification is not, because the invariants
+  are checked mechanically. You may of course want to read them anyway, in the same way that you
+  read a mathematical proof rather than only its statement, since that is where the insight into
+  the algorithm lives, but that is a different motivation.</p>
+
+  <blockquote class="anecdote">
+    <p>It is important that you read and understand the specification. It is not important that you
+    read and understand the loop invariants, because those are going to be checked mechanically.
+    An invariant could even be AI generated and unreadable, and that would be fine.</p>
+    <footer>Jean-Christophe Filli&acirc;tre, closing the demo</footer>
+  </blockquote>
+</section>

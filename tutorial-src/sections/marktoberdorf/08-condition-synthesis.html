@@ -1,0 +1,312 @@
+<section class="lecture" id="sec-mk-g4" data-num="8" data-day="mk-chc" data-title="Condition Synthesis via CHC" data-lecturer="Orna Grumberg">
+  <header class="lec-head">
+    <div class="lec-num">8</div>
+    <div>
+      <h2 id="mkg4-top">CoSyn: Condition Synthesis and its Realizability via Constrained Horn Clauses</h2>
+      <p class="lec-meta">Lecture by Orna Grumberg (Technion). Deck: <em>Constrained Horn Clauses and their Applications</em>, lecture 4. The work presented is by Bat-chen Rothenberg, Orna Grumberg, Yakir Vizel and Eytan Singher, published at NFM 2023.</p>
+    </div>
+  </header>
+
+  <p class="lead">The previous two sections used constrained Horn clauses for verification. You hand the encoder a complete program and a specification, and a satisfying interpretation of the clause set is an inductive invariant. This lecture keeps the machinery and changes the question. Here the program is incomplete: the conditions of its <code>if</code> and <code>while</code> statements are missing, and the task is to fill them so that the assertions hold. The system is called CoSyn. The idea that makes the problem fit into CHC is a change of subject. Instead of asking directly whether a good set of conditions exists, which is a question about the existence of a function, CoSyn asks whether a hopeless initial state exists, which is a question about the existence of a state. The second question is a plain CHC satisfiability query, and the theorem is that the two questions have opposite answers.</p>
+
+  <h3 id="mkg4-problem">The condition synthesis problem <span class="slide-ref">slide 3</span></h3>
+
+  <p>The input is a <strong>partial program</strong>: a program in which the conditions of conditional branches, that is, of <code>if</code> and <code>while</code> statements, are missing and are written as holes. Alongside it comes a specification, given in the deck's setting as assertions placed in the code. A <strong>solution</strong> is a set of conditions, one per hole, such that the program obtained by filling the holes meets the specification.</p>
+
+  <p>The motivation the deck names is automated program repair. A repair tool often knows, or can guess, which branch condition is wrong, and the interesting part of the job is then not finding where the fault is but working out what the condition should have been. Note also what is <em>not</em> being synthesised. The control structure is fixed, the assignments are fixed, the assertions are fixed. Only the branch conditions are unknown, and that restriction is what buys the clean theory that follows.</p>
+
+  <h3 id="mkg4-contrast">Invariant existence against choice existence</h3>
+
+  <p>It is worth being precise about how this differs from what came before, because the clause sets look superficially alike.</p>
+
+  <p>In verification the unknowns are the predicates themselves. The encoder gives one uninterpreted predicate per location, meaning "this state is reachable here", and the solver is asked whether there is an interpretation, that is, a formula per predicate, that makes every clause valid. Satisfiability of the set <em>is</em> the existence of an inductive invariant.</p>
+
+  <p>In synthesis the unknown is of a different type. What we want is a <strong>choice function</strong>: for each hole, a predicate over the program state that decides, at that point, which way control goes. Stated naively this is a quantifier alternation, "there exist conditions such that for all inputs the assertions hold", and quantifier alternation is exactly what Horn clauses cannot express, since a CHC system is one big implicitly universally quantified conjunction whose only existential is the outer "is there an interpretation".</p>
+
+  <div class="callout key">
+    <p><span class="co-tag">Key idea</span> CoSyn dodges the alternation by negating the question. Rather than searching for a choice function that always succeeds, it searches for a single state that defeats every choice function. Searching for a state is an ordinary reachability-style question, and reachability-style questions are what CHC solvers do.</p>
+  </div>
+
+  <h3 id="mkg4-doomed">Doomed initial states, and the realizability theorem <span class="slide-ref">slide 4</span></h3>
+
+  <div class="callout def">
+    <p><span class="co-tag">Definition</span> An initial state is <strong>doomed</strong> if it eventually reaches an error state along <em>every</em> run of the program. More generally, a state is doomed at location &#8467; if along every path from &#8467; to the assertion, the assertion fails.</p>
+  </div>
+
+  <p>The force of the definition is in the word "every". Conditions in a partial program control which run the program takes, so filling a hole is a way of steering a state onto one path rather than another. For a doomed state &sigma; there is nothing to steer towards: whichever path the conditions push &sigma; down, it ends in failure. No assignment of conditions to holes can save it.</p>
+
+  <p>That observation is also a completeness argument in the other direction, and the deck states the resulting characterisation as one line:</p>
+
+  <div class="formula">The problem is unrealizable &nbsp;<strong>iff</strong>&nbsp; there exists a doomed initial state.</div>
+
+  <p>One half is the paragraph above: a doomed initial state means no solution. The other half says that if no initial state is doomed, then at every reachable point at least one successor avoids failure, and choosing those successors is precisely what a set of conditions can do. The problem of finding conditions has been converted into the problem of deciding a property of the state space.</p>
+
+  <div class="quiz">
+    <script type="application/json">
+    {"type":"fill","q":"An initial state that reaches an error on every run of the program, so that no choice of branch conditions can rescue it, is called a ______ initial state.","accept":["doomed","doomed state","a doomed state"],"explain":"Doomed. CoSyn's whole reduction rests on the equivalence: the condition synthesis problem is unrealizable exactly when a doomed initial state exists."}
+    </script>
+  </div>
+
+  <h3 id="mkg4-evidence">What CoSyn hands back in each case <span class="slide-ref">slide 5</span></h3>
+
+  <p>Before the mechanism, the interface. CoSyn takes a condition synthesis problem and returns one of two verdicts, and in both cases the verdict comes with evidence that can be checked independently of the tool.</p>
+
+  <div class="table-wrap">
+    <table>
+      <tr><th>Verdict</th><th>Evidence returned</th><th>What you can do with it</th></tr>
+      <tr><td><strong>Unrealizable</strong></td><td>a doomed initial state</td><td>Run the program from that state and watch it fail on every branch choice. The verdict is checkable and it is final: no condition in any language repairs this program.</td></tr>
+      <tr><td><strong>Realizable</strong></td><td>a range of conditions for each hole</td><td>Not one solution but the whole space of them, described by two bounds per hole. Any condition inside the range is a correct fill.</td></tr>
+    </table>
+  </div>
+
+  <p>The second row is the more unusual one, and it is what later lets CoSyn cooperate with a syntax-directed synthesiser. Returning a range rather than a witness is possible because the doomed sets computed by the reduction carry more information than a yes or no answer.</p>
+
+  <h3 id="mkg4-reduction">The reduction to CHC <span class="slide-ref">slides 6-7</span></h3>
+
+  <p>To decide whether a doomed initial state exists, CoSyn reduces the question to CHC satisfiability. The reduction runs <strong>backwards</strong>. Where the verification encoding of the earlier sections starts at the entry with the precondition and pushes reachability forwards along the edges, this one starts at the negation of the assertion and pushes doomedness backwards along the edges. The predicates therefore mean something different: D<sub>&#8467;</sub>(<em>v</em>) is read as "the state <em>v</em> at location &#8467; is doomed", not "is reachable".</p>
+
+  <div class="stepper" data-title="From a partial program to one CHC query">
+    <div class="step" data-label="1. One predicate per location"><p>Build the control flow graph of the partial program, including the error location that the failing assertion leads to. Introduce one uninterpreted predicate D<sub>&#8467;</sub> per location, with the program variables as arguments. As always in CHC encoding, the predicates are the unknowns and the solver's job is to interpret them.</p></div>
+    <div class="step" data-label="2. Seed at the error"><p>Add the fact <code>true &rarr; D<sub>err</sub>(v)</code>. Every state at the error location is already a failure, so every state there is doomed. This is the only clause with an empty body, and it is where the backward computation starts.</p></div>
+    <div class="step" data-label="3. Push back over ordinary edges"><p>For an edge from &#8467; to &#8467;&prime; whose transition relation is &rho;(<em>v</em>, <em>v</em>&prime;), add <code>D<sub>&#8467;&prime;</sub>(v&prime;) &and; &rho;(v, v&prime;) &rarr; D<sub>&#8467;</sub>(v)</code>. If the state you land in is doomed and the edge is the only way out, the state you started from is doomed too. An assignment <code>res := x</code> contributes the constraint <code>res&prime; = x</code>.</p></div>
+    <div class="step" data-label="4. Guards restrict rather than branch"><p>An edge into the error location carries the negation of the assertion as its guard. In the example below the assertion is <code>res &ge; 0</code>, so the edge into the error location is guarded by <code>res &lt; 0</code>, and that guard sits in the body next to D<sub>err</sub>. Where the guard fails there is simply no clause, which is correct: those states terminate safely and are not doomed.</p></div>
+    <div class="step" data-label="5. Holes become conjunctions"><p>This is the step that encodes the synthesis. At a location whose two outgoing edges are governed by a hole, both successors go into the body of a <em>single</em> clause: <code>D<sub>&#8467;2</sub>(v) &and; D<sub>&#8467;3</sub>(v) &rarr; D<sub>&#8467;1</sub>(v)</code>. The state is doomed at &#8467;<sub>1</sub> only if it is doomed whichever way the eventual condition sends it. Since the head still holds a single predicate application, the clause is Horn.</p></div>
+    <div class="step" data-label="6. The query"><p>Add <code>D<sub>i</sub>(v) &rarr; false</code>, where &#8467;<sub>i</sub> is the entry location, restricted to the initial states. This is the only clause whose head is not a predicate application. It asserts exactly the property we want: no initial state is doomed.</p></div>
+    <div class="step" data-label="7. Read the answer"><p><strong>SAT</strong> means the clause set has a model in which the entry predicate is empty, so no initial state is doomed and the problem is <em>realizable</em>. The model also gives, for each location, a formula describing the doomed states there, and those formulas are what the range computation consumes. <strong>UNSAT</strong> means every candidate interpretation forces some initial state into D<sub>i</sub>. The refutation exhibits that state, and it is the doomed initial state returned as evidence for <em>unrealizable</em>.</p></div>
+  </div>
+
+  <div class="callout key">
+    <p><span class="co-tag">Key idea</span> Look at the asymmetry between step 3 and step 5. In the forward verification encoding, a location with two incoming edges produces two clauses with the same head, which is a disjunction: reachable by this edge <em>or</em> by that one. In the backward doomed encoding, a hole produces one clause with two predicates in the body, which is a conjunction: doomed down this branch <em>and</em> down that one. The universal quantification over the synthesiser's choice has turned into a conjunction, and conjunction in the body is exactly what the Horn fragment allows for free. That is why the synthesis question fits in CHC at all.</p>
+  </div>
+
+  <div class="quiz">
+    <script type="application/json">
+    {"type":"mc","q":"The hole at location l1, with successors l2 and l3, produces the single clause 'D2(x,res) and D3(x,res) implies D1(x,res)'. Why one clause with a conjunction, rather than two clauses with the same head?","options":["Because a CHC system may not contain two clauses with the same head predicate","Because a state is doomed at l1 only if it is doomed whichever branch the synthesised condition sends it down, so both successors must be doomed","Because the two branches happen to assign to the same variable in this example","Because the conjunction is shorthand for the disjunction of the two branch guards"],"answer":1,"explain":"Two clauses with the same head would say 'doomed at l2 OR doomed at l3', which is wrong: if one branch escapes, the condition can be chosen to take it. Doomedness under a hole is a property of all branches at once, hence a conjunction in a single body."}
+    </script>
+  </div>
+
+  <h3 id="mkg4-example">The running example: abs(x) with one hole <span class="slide-ref">slides 8-10</span></h3>
+
+  <p>The deck carries a single example through the whole reduction. The partial program computes an absolute value, and the branch condition has been removed:</p>
+
+  <div class="algo" data-title="abs(x), with the condition of the if statement missing">
+    <ol>
+      <li><code>res = 0</code></li>
+      <li><code>if (?)</code></li>
+      <li>&nbsp;&nbsp;<code>res = x</code></li>
+      <li><code>else</code></li>
+      <li>&nbsp;&nbsp;<code>res = -x</code></li>
+      <li><code>assert (res &gt;= 0)</code></li>
+    </ol>
+  </div>
+
+  <p>Its control flow graph has six locations. &#8467;<sub>i</sub> is the entry, the edge to &#8467;<sub>1</sub> performs <code>res := 0</code>, and &#8467;<sub>1</sub> is the hole: the edge labelled <code>?</code> goes to &#8467;<sub>2</sub> and the edge labelled <code>&not;?</code> goes to &#8467;<sub>3</sub>. From &#8467;<sub>2</sub> the assignment <code>res := x</code> leads to &#8467;<sub>4</sub>, from &#8467;<sub>3</sub> the assignment <code>res := &minus;x</code> leads to the same place, and from &#8467;<sub>4</sub> an edge guarded by <code>res &lt; 0</code>, the negation of the assertion, leads to &#8467;<sub>err</sub>. Applying the steps above gives the seven clauses on the slide:</p>
+
+  <div class="formula">
+    D<sub>1</sub>(x, res&prime;) &and; res&prime; = 0 &nbsp;&rarr;&nbsp; D<sub>i</sub>(x, res)<br>
+    D<sub>3</sub>(x, res) &and; D<sub>2</sub>(x, res) &nbsp;&rarr;&nbsp; D<sub>1</sub>(x, res)<br>
+    D<sub>4</sub>(x, res&prime;) &and; res&prime; = x &nbsp;&rarr;&nbsp; D<sub>2</sub>(x, res)<br>
+    D<sub>4</sub>(x, res&prime;) &and; res&prime; = &minus;x &nbsp;&rarr;&nbsp; D<sub>3</sub>(x, res)<br>
+    D<sub>err</sub>(x, res) &and; res &lt; 0 &nbsp;&rarr;&nbsp; D<sub>4</sub>(x, res)<br>
+    true &nbsp;&rarr;&nbsp; D<sub>err</sub>(x, res)<br>
+    D<sub>i</sub>(x, res) &nbsp;&rarr;&nbsp; false
+  </div>
+
+  <p>Six of the seven are mechanical transcriptions of edges. The second is the interesting one, the hole clause, and it is the only place where the two branches meet.</p>
+
+  <figure class="fig">
+    <svg viewBox="0 0 660 366" role="img" aria-label="On the left, the control flow graph of abs with a hole at location l1 branching to l2 and l3 and rejoining at l4 before the error location. On the right, the backward computation of the doomed predicates, starting from D-err equals true and ending with D-i equals false and the verdict realizable.">
+      <defs>
+        <marker id="mkg4-ar1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" fill="var(--muted)"/>
+        </marker>
+      </defs>
+
+      <text x="14" y="14" font-size="10.5" fill="var(--muted)">control flow graph, one hole at &#8467;1</text>
+
+      <rect x="105" y="22" width="90" height="30" rx="8" fill="var(--surface)" stroke="var(--muted)" stroke-width="1.4"/>
+      <text x="150" y="42" text-anchor="middle" font-size="12" fill="currentColor">&#8467;<tspan font-size="9" dy="3">i</tspan></text>
+      <line x1="150" y1="52" x2="150" y2="86" stroke="var(--muted)" stroke-width="1.6" marker-end="url(#mkg4-ar1)"/>
+      <text x="158" y="73" font-size="10" fill="var(--muted)">res := 0</text>
+
+      <rect x="105" y="90" width="90" height="32" rx="8" fill="var(--surface)" stroke="var(--accent)" stroke-width="2"/>
+      <text x="150" y="106" text-anchor="middle" font-size="12" fill="currentColor">&#8467;<tspan font-size="9" dy="3">1</tspan></text>
+      <text x="150" y="118" text-anchor="middle" font-size="8.5" fill="var(--accent)">hole</text>
+
+      <line x1="122" y1="122" x2="80" y2="168" stroke="var(--muted)" stroke-width="1.6" marker-end="url(#mkg4-ar1)"/>
+      <text x="84" y="152" font-size="12" font-weight="700" fill="var(--accent)">?</text>
+      <line x1="178" y1="122" x2="220" y2="168" stroke="var(--muted)" stroke-width="1.6" marker-end="url(#mkg4-ar1)"/>
+      <text x="200" y="152" font-size="12" font-weight="700" fill="var(--accent)">&not;?</text>
+
+      <rect x="20" y="172" width="86" height="30" rx="8" fill="var(--surface)" stroke="var(--muted)" stroke-width="1.4"/>
+      <text x="63" y="192" text-anchor="middle" font-size="12" fill="currentColor">&#8467;<tspan font-size="9" dy="3">2</tspan></text>
+      <rect x="194" y="172" width="86" height="30" rx="8" fill="var(--surface)" stroke="var(--muted)" stroke-width="1.4"/>
+      <text x="237" y="192" text-anchor="middle" font-size="12" fill="currentColor">&#8467;<tspan font-size="9" dy="3">3</tspan></text>
+
+      <line x1="72" y1="202" x2="116" y2="246" stroke="var(--muted)" stroke-width="1.6" marker-end="url(#mkg4-ar1)"/>
+      <text x="8" y="230" font-size="10" fill="var(--muted)">res := x</text>
+      <line x1="228" y1="202" x2="184" y2="246" stroke="var(--muted)" stroke-width="1.6" marker-end="url(#mkg4-ar1)"/>
+      <text x="238" y="230" font-size="10" fill="var(--muted)">res := &minus;x</text>
+
+      <rect x="105" y="250" width="90" height="30" rx="8" fill="var(--surface)" stroke="var(--muted)" stroke-width="1.4"/>
+      <text x="150" y="270" text-anchor="middle" font-size="12" fill="currentColor">&#8467;<tspan font-size="9" dy="3">4</tspan></text>
+      <line x1="150" y1="280" x2="150" y2="316" stroke="var(--muted)" stroke-width="1.6" marker-end="url(#mkg4-ar1)"/>
+      <text x="158" y="302" font-size="10" fill="var(--muted)">res &lt; 0</text>
+
+      <rect x="105" y="320" width="90" height="30" rx="8" fill="var(--surface)" stroke="var(--crit)" stroke-width="1.8"/>
+      <text x="150" y="340" text-anchor="middle" font-size="12" fill="currentColor">&#8467;<tspan font-size="9" dy="3">err</tspan></text>
+
+      <line x1="320" y1="8" x2="320" y2="356" stroke="var(--hairline)" stroke-width="1"/>
+
+      <text x="344" y="14" font-size="10.5" fill="var(--muted)">the model, computed backwards from the error</text>
+
+      <rect x="344" y="26" width="280" height="34" rx="8" fill="var(--surface)" stroke="var(--crit)" stroke-width="1.5"/>
+      <text x="484" y="47" text-anchor="middle" font-size="11.5" fill="currentColor">D<tspan font-size="9" dy="3">err</tspan><tspan dy="-3"> = true</tspan></text>
+      <line x1="484" y1="60" x2="484" y2="72" stroke="var(--muted)" stroke-width="1.5" marker-end="url(#mkg4-ar1)"/>
+
+      <rect x="344" y="74" width="280" height="34" rx="8" fill="var(--surface)" stroke="var(--muted)" stroke-width="1.5"/>
+      <text x="484" y="95" text-anchor="middle" font-size="11.5" fill="currentColor">D<tspan font-size="9" dy="3">4</tspan><tspan dy="-3"> = res &lt; 0</tspan></text>
+      <line x1="484" y1="108" x2="410" y2="120" stroke="var(--muted)" stroke-width="1.5" marker-end="url(#mkg4-ar1)"/>
+      <line x1="484" y1="108" x2="558" y2="120" stroke="var(--muted)" stroke-width="1.5" marker-end="url(#mkg4-ar1)"/>
+
+      <rect x="344" y="122" width="132" height="34" rx="8" fill="var(--surface)" stroke="var(--muted)" stroke-width="1.5"/>
+      <text x="410" y="143" text-anchor="middle" font-size="11.5" fill="currentColor">D<tspan font-size="9" dy="3">2</tspan><tspan dy="-3"> = x &lt; 0</tspan></text>
+      <rect x="492" y="122" width="132" height="34" rx="8" fill="var(--surface)" stroke="var(--muted)" stroke-width="1.5"/>
+      <text x="558" y="143" text-anchor="middle" font-size="11.5" fill="currentColor">D<tspan font-size="9" dy="3">3</tspan><tspan dy="-3"> = x &gt; 0</tspan></text>
+      <line x1="410" y1="156" x2="484" y2="168" stroke="var(--muted)" stroke-width="1.5" marker-end="url(#mkg4-ar1)"/>
+      <line x1="558" y1="156" x2="484" y2="168" stroke="var(--muted)" stroke-width="1.5" marker-end="url(#mkg4-ar1)"/>
+
+      <rect x="344" y="170" width="280" height="34" rx="8" fill="var(--surface)" stroke="var(--accent)" stroke-width="1.7"/>
+      <text x="484" y="191" text-anchor="middle" font-size="11.5" fill="currentColor">D<tspan font-size="9" dy="3">1</tspan><tspan dy="-3"> = D</tspan><tspan font-size="9" dy="3">2</tspan><tspan dy="-3"> &and; D</tspan><tspan font-size="9" dy="3">3</tspan><tspan dy="-3"> = false</tspan></text>
+      <line x1="484" y1="204" x2="484" y2="216" stroke="var(--muted)" stroke-width="1.5" marker-end="url(#mkg4-ar1)"/>
+
+      <rect x="344" y="218" width="280" height="34" rx="8" fill="var(--surface)" stroke="var(--muted)" stroke-width="1.5"/>
+      <text x="484" y="239" text-anchor="middle" font-size="11.5" fill="currentColor">D<tspan font-size="9" dy="3">i</tspan><tspan dy="-3"> = false</tspan></text>
+      <line x1="484" y1="252" x2="484" y2="264" stroke="var(--muted)" stroke-width="1.5" marker-end="url(#mkg4-ar1)"/>
+
+      <rect x="344" y="266" width="280" height="40" rx="8" fill="var(--surface)" stroke="var(--good)" stroke-width="1.8"/>
+      <text x="484" y="283" text-anchor="middle" font-size="11" fill="currentColor">the query D<tspan font-size="9" dy="3">i</tspan><tspan dy="-3"> &rarr; false is satisfied</tspan></text>
+      <text x="484" y="298" text-anchor="middle" font-size="11" font-weight="700" fill="var(--good)">the problem is realizable</text>
+    </svg>
+    <figcaption class="fig-caption">The reduction on the deck's running example. Doomedness flows upwards from the error location, the hole at &#8467;<sub>1</sub> takes the conjunction of its two successors, and the conjunction of <code>x &lt; 0</code> with <code>x &gt; 0</code> is empty. After the lecture's slides.</figcaption>
+  </figure>
+
+  <p>The model the solver returns is worth reading line by line, because each entry is a statement about the program that a person can check.</p>
+
+  <div class="table-wrap">
+    <table>
+      <tr><th>Predicate</th><th>Interpretation</th><th>Reading</th></tr>
+      <tr><td>D<sub>err</sub></td><td><code>true</code></td><td>Every state at the error location has already failed.</td></tr>
+      <tr><td>D<sub>4</sub></td><td><code>res &lt; 0</code></td><td>Just before the assertion, a state is doomed exactly when the assertion is about to fail.</td></tr>
+      <tr><td>D<sub>2</sub></td><td><code>x &lt; 0</code></td><td>Take the <code>?</code> branch and <code>res</code> becomes <code>x</code>, which is negative exactly when <code>x &lt; 0</code>.</td></tr>
+      <tr><td>D<sub>3</sub></td><td><code>x &gt; 0</code></td><td>Take the <code>&not;?</code> branch and <code>res</code> becomes <code>&minus;x</code>, which is negative exactly when <code>x &gt; 0</code>.</td></tr>
+      <tr><td>D<sub>1</sub></td><td><code>false</code></td><td>No state is doomed on both branches, since <code>x &lt; 0</code> and <code>x &gt; 0</code> cannot hold together.</td></tr>
+      <tr><td>D<sub>i</sub></td><td><code>false</code></td><td>No initial state is doomed, so the query is discharged and the problem is realizable.</td></tr>
+    </table>
+  </div>
+
+  <details class="reveal">
+    <summary>What would have to change for this example to come out unrealizable</summary>
+    <p>Strengthen the assertion to <code>res &gt; 0</code>. Then the edge into the error location is guarded by <code>res &le; 0</code>, so D<sub>4</sub> becomes <code>res &le; 0</code>, D<sub>2</sub> becomes <code>x &le; 0</code> and D<sub>3</sub> becomes <code>x &ge; 0</code>. Their conjunction is <code>x = 0</code>, which is not empty, so D<sub>1</sub> and then D<sub>i</sub> are non-empty and the query fails. The solver reports UNSAT and the refutation names the doomed initial state <code>x = 0</code>. That is the honest answer: <code>abs(0)</code> is zero on either branch, and no branch condition can make it positive.</p>
+  </details>
+
+  <h3 id="mkg4-range">From one model to a range of conditions per hole <span class="slide-ref">slides 11-12</span></h3>
+
+  <p>Knowing that the problem is realizable is not yet a repair. The last part of CoSyn turns the doomed sets into the range of legal conditions for each hole, and it does so with local reasoning at the hole.</p>
+
+  <p>Fix the hole at &#8467;<sub>1</sub>, with the <code>?</code> edge going to &#8467;<sub>2</sub> and the <code>&not;?</code> edge going to &#8467;<sub>3</sub>, and let &psi; be the condition to be synthesised, understood throughout as the condition that sends control to &#8467;<sub>2</sub>. The deck states the principle in one sentence: freedom is obtained from states that are not reachable at &#8467;<sub>1</sub>, and from states that are not doomed at either &#8467;<sub>2</sub> or &#8467;<sub>3</sub>. Writing R<sub>1</sub> for the states reachable at &#8467;<sub>1</sub>, that sentence fixes the two bounds:</p>
+
+  <div class="formula">
+    &psi;<sub>f</sub> &nbsp;=&nbsp; R<sub>1</sub> &and; D<sub>3</sub> &nbsp;&nbsp;&nbsp; (a reachable state doomed on the else branch <em>must</em> be sent to &#8467;<sub>2</sub>)<br>
+    &psi;<sub>t</sub> &nbsp;=&nbsp; &not;(R<sub>1</sub> &and; D<sub>2</sub>) &nbsp;&nbsp;&nbsp; (a reachable state doomed on the then branch must <em>not</em> be sent to &#8467;<sub>2</sub>)<br>
+    every &psi; with &nbsp; &psi;<sub>f</sub> &rarr; &psi; &rarr; &psi;<sub>t</sub> &nbsp; is a solution
+  </div>
+
+  <p>Notice that reachability is a forward property, so R<sub>1</sub> is not read off the backward clause set: it comes from the ordinary forward encoding of the earlier sections. The deck does not detail how CoSyn obtains it, but it names non-reachability explicitly as one of the two sources of freedom.</p>
+
+  <figure class="fig">
+    <svg viewBox="0 0 660 256" role="img" aria-label="A horizontal bar showing the state space at l1 divided into four bands: not reachable, reachable and doomed at l3, reachable and doomed at neither, and reachable and doomed at l2. A bracket marks psi-f over the second band alone and a bracket marks psi-t over the first three bands.">
+      <text x="20" y="16" font-size="10.5" fill="var(--muted)">the state space at &#8467;1, and the two bounds on the hole condition &psi;</text>
+
+      <rect x="20" y="34" width="140" height="72" rx="6" fill="var(--surface)" stroke="var(--hairline)" stroke-width="1.4"/>
+      <text x="90" y="56" text-anchor="middle" font-size="10" fill="currentColor">not reachable</text>
+      <text x="90" y="70" text-anchor="middle" font-size="10" fill="currentColor">at &#8467;1</text>
+      <text x="90" y="90" text-anchor="middle" font-size="9.5" fill="var(--muted)">free</text>
+
+      <rect x="160" y="34" width="150" height="72" rx="6" fill="var(--good)" fill-opacity="0.14" stroke="var(--good)" stroke-width="1.5"/>
+      <text x="235" y="54" text-anchor="middle" font-size="10" fill="currentColor">reachable, doomed at &#8467;3</text>
+      <text x="235" y="70" text-anchor="middle" font-size="10" fill="currentColor">must take the ? branch</text>
+      <text x="235" y="90" text-anchor="middle" font-size="10" font-weight="700" fill="var(--good)">&psi; must hold</text>
+
+      <rect x="310" y="34" width="170" height="72" rx="6" fill="var(--surface)" stroke="var(--hairline)" stroke-width="1.4"/>
+      <text x="395" y="54" text-anchor="middle" font-size="10" fill="currentColor">reachable, doomed at neither</text>
+      <text x="395" y="70" text-anchor="middle" font-size="10" fill="currentColor">either branch is safe</text>
+      <text x="395" y="90" text-anchor="middle" font-size="9.5" fill="var(--muted)">free</text>
+
+      <rect x="480" y="34" width="150" height="72" rx="6" fill="var(--crit)" fill-opacity="0.14" stroke="var(--crit)" stroke-width="1.5"/>
+      <text x="555" y="54" text-anchor="middle" font-size="10" fill="currentColor">reachable, doomed at &#8467;2</text>
+      <text x="555" y="70" text-anchor="middle" font-size="10" fill="currentColor">must take the &not;? branch</text>
+      <text x="555" y="90" text-anchor="middle" font-size="10" font-weight="700" fill="var(--crit)">&psi; must not hold</text>
+
+      <path d="M160,118 L160,126 L310,126 L310,118" fill="none" stroke="var(--accent)" stroke-width="1.6"/>
+      <text x="235" y="144" text-anchor="middle" font-size="12" font-weight="700" fill="var(--accent)">&psi;<tspan font-size="9" dy="3">f</tspan></text>
+      <text x="322" y="144" font-size="10" fill="var(--muted)">the states that must be sent to &#8467;2</text>
+
+      <path d="M20,170 L20,178 L480,178 L480,170" fill="none" stroke="var(--accent)" stroke-width="1.6"/>
+      <text x="250" y="196" text-anchor="middle" font-size="12" font-weight="700" fill="var(--accent)">&psi;<tspan font-size="9" dy="3">t</tspan></text>
+      <text x="492" y="196" font-size="10" fill="var(--muted)">the states that may be sent to &#8467;2</text>
+
+      <text x="20" y="226" font-size="10.5" fill="var(--ink-2)">Any &psi; with &psi;f &rarr; &psi; &rarr; &psi;t fills the hole. The two pale bands are where the choice does not matter.</text>
+      <text x="20" y="244" font-size="10.5" fill="var(--ink-2)">If a reachable state were doomed at both &#8467;2 and &#8467;3, the two bounds would cross and no &psi; would exist.</text>
+    </svg>
+    <figcaption class="fig-caption">The range of legal conditions at a hole, laid out over the state space. The lower bound is forced by the states that the else branch would doom, the upper bound is forced by the states that the then branch would doom, and the gap between them is genuine freedom. After the lecture's slides.</figcaption>
+  </figure>
+
+  <p>Apply this to <code>abs</code>. At &#8467;<sub>1</sub> the assignment <code>res := 0</code> has just run, so R<sub>1</sub> is <code>res = 0</code>. With D<sub>3</sub> equal to <code>x &gt; 0</code> and D<sub>2</sub> equal to <code>x &lt; 0</code>, the bounds collapse to <code>x &gt; 0 &rarr; &psi; &rarr; x &ge; 0</code>. Both endpoints are legal fills, and so is anything between them. That matches the two versions of <code>abs</code> a programmer would write by hand, and it explains why neither is more correct than the other: on <code>x = 0</code> the two branches agree, so the condition is free there.</p>
+
+  <p>The picture also closes the loop with the theorem. The two bounds are consistent, that is &psi;<sub>f</sub> implies &psi;<sub>t</sub>, exactly when R<sub>1</sub> &and; D<sub>3</sub> &and; D<sub>2</sub> is empty, which is to say when no reachable state is doomed at &#8467;<sub>1</sub>. A reachable doomed state at the hole traces back to a doomed initial state, so the range is non-empty at every hole precisely in the realizable case.</p>
+
+  <div class="quiz">
+    <script type="application/json">
+    {"type":"mc","q":"For the hole in abs(x), CoSyn returns the range 'x > 0 implies psi implies x >= 0', where psi is the condition that sends control to the then branch. What does the gap between the two bounds represent?","options":["Solver imprecision: a more expensive analysis would return a single condition","The states on which either branch is safe, so the condition may decide them freely","The states that are unreachable and therefore irrelevant to correctness","A soundness gap: conditions strictly between the bounds are only probably correct"],"answer":1,"explain":"The only state between the bounds is x = 0, where res becomes 0 either way and the assertion res >= 0 holds on both branches. The gap is real freedom, not imprecision, and every condition inside it is a correct fill."}
+    </script>
+  </div>
+
+  <h3 id="mkg4-sygus">Combining CoSyn with SyGuS <span class="slide-ref">slides 13-15</span></h3>
+
+  <p>A range of conditions is a semantic object. It says which sets of states are acceptable, not which expressions a programmer would want to read. Syntax-guided synthesis, SyGuS, is the prominent framework for the other half of that: it synthesises a program with respect to a formal specification while restricting the search space to a user-supplied grammar G. CoSyn on its own cannot deliver a solution inside a given grammar, but the deck shows that the two combine, and that each covers the other's weakness.</p>
+
+  <p>The combined pipeline runs CoSyn first. If CoSyn answers unrealizable, the pipeline stops there and the answer is definitive. If CoSyn answers realizable, the ranges it produced are passed to the SyGuS solver together with the grammar G, and SyGuS looks for a condition inside G that lies inside the range. It may still fail, but its failure means only that G is too poor, not that the problem has no solution.</p>
+
+  <div class="callout key">
+    <p><span class="co-tag">Key idea</span> The ranges also decouple the holes. Each hole's range is a self-contained specification for that hole alone, so the synthesis of different holes can be split into different SyGuS queries instead of one joint search over all of them. The deck flags this as the main performance benefit of the combination.</p>
+  </div>
+
+  <div class="callout def">
+    <p><span class="co-tag">Worth noticing</span> The two "unrealizable" verdicts in this pipeline are not the same statement. CoSyn's unrealizable is grammar independent: a doomed initial state rules out every condition expressible in any language whatsoever. SyGuS's unrealizable is relative to G: no condition <em>in that grammar</em> falls inside the range. The deck's summary of the benefit is exactly this pair, a definite result for the unrealizable cases and more syntactically appealing conditions for the realizable ones.</p>
+  </div>
+
+  <div class="quiz">
+    <script type="application/json">
+    {"type":"mc","q":"In the combined pipeline, CoSyn reports unrealizable on one problem; on a second problem CoSyn reports realizable but the SyGuS solver then reports unrealizable for grammar G. How do the two verdicts differ?","options":["They do not differ, both mean that no solution exists","CoSyn's verdict rules out every condition in any language, while the SyGuS verdict only rules out conditions inside G","CoSyn's verdict is a heuristic while the SyGuS verdict is definite","CoSyn's verdict concerns a single hole while the SyGuS verdict concerns all holes together"],"answer":1,"explain":"CoSyn's unrealizable rests on a doomed initial state, which defeats any conceivable condition. SyGuS failing on G says only that the grammar is too weak; widening G may succeed, and the semantic range from CoSyn is still non-empty."}
+    </script>
+  </div>
+
+  <h3 id="mkg4-ehc">Beyond safety: existential Horn clauses and CTL* <span class="slide-ref">slides 18-24</span></h3>
+
+  <p>The last part of the lecture sketches a second non-standard application of Horn clauses, from "CTL* Verification and Synthesis using Existential Constrained Horn Clauses" by Mishel Carelli and Orna Grumberg, ATVA 2024. The setting is infinite-state programs with a first-order CTL* specification, for example <code>AF(a &le; b)</code> or <code>EG(a = b)</code>, and the goals are both verification against such a specification and synthesis of a partial program into a full one that satisfies it.</p>
+
+  <p>The deck lists four differences from CoSyn. The specification is a CTL* formula rather than assertions in the code. In the partial programs of this second setting, assertions as well as conditions may be missing. The computation runs forwards rather than backwards. And, most importantly, standard CHCs are not enough.</p>
+
+  <p>The reason is a limitation worth remembering. CHCs cannot express liveness or existential properties such as <code>AFp</code> and <code>EGp</code>. Existentially quantified Horn clauses, EHC, are a Horn-like family that adds two things: existential quantification, and well-foundedness, that is, the requirement that no infinite decreasing chain exists. Well-foundedness is what a termination or eventuality argument needs, and existential quantification is what an <code>E</code> path quantifier needs. Both the CTL* verification problem and the CTL* partial synthesis problem are translated into EHC satisfiability, and the deck states that both translations are sound and complete.</p>
+
+  <div class="callout warn">
+    <p><span class="co-tag">Careful</span> The deck is candid that this second application is not implemented, because the EHC solver is no longer active. It points to pfwCSP, by Unno, Terauchi and Koskinen, as a possible substitute for future work, and notes that the authors conjecture pfwCSP and EHC to be inter-reducible. A sound and complete translation is only as useful as the back end it targets.</p>
+  </div>
+
+  <h3 id="mkg4-close">What the series adds up to <span class="slide-ref">slides 16 and 25</span></h3>
+
+  <p>The contribution claimed for CoSyn is a novel approach to deciding the realizability of condition synthesis: via the existence of doomed initial states, and via a reduction of that existence question to CHC. It answers with evidence in both directions, a doomed initial state when unrealizable and a range of conditions per hole when realizable, and the range is what lets a SyGuS solver finish the job inside a grammar of the user's choosing. The deck presents these as qualitative claims and does not report benchmark numbers here; the measurements are in the NFM 2023 paper.</p>
+
+  <p>Grumberg closes the four lectures by naming the three things they covered. First, a theory-modular approach to solving CHCs that treats CHC solvers as a black box, which was the subject of the previous section. Second, a non-standard use of CHCs for synthesis rather than verification, which is CoSyn. Third, a variation on CHCs, namely EHC, that can express much more than standard CHCs, with the standing caveat that it needs a working solver. Taken together the message is that the clause format is more of a general-purpose interface than it first appears, and that most of the engineering effort now sits on either side of it: in the encoding that produces the clauses, and in the solver that consumes them.</p>
+</section>

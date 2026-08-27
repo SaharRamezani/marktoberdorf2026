@@ -1,0 +1,35 @@
+{
+  "_comment": [
+    "One entry per summer school, rendered in the order given by 'order'.",
+    "'dir' is the folder under sections/ holding that school's section files.",
+    "'groups' maps the data-day value on a section to the label of the group it",
+    "belongs to in the menu and on the front page. Add a school by adding a folder,",
+    "an entry here, and nothing else: build.py picks up the rest from the section tags."
+  ],
+  "order": [
+    "marktoberdorf"
+  ],
+  "schools": {
+    "marktoberdorf": {
+      "dir": "marktoberdorf",
+      "name": "Marktoberdorf Summer School",
+      "short": "Marktoberdorf",
+      "where": "Marktoberdorf",
+      "when": "August 2026",
+      "blurb": "Two weeks of lectures on deductive program verification, separation logic, constrained Horn clauses, the evaluation and security of AI-based systems, testing for cyber-physical systems, mechanized language semantics, verified systems programming in Rust, automated theorem proving, Lean, and what proof looks like in industry. The notes are grouped by lecture series rather than by day.",
+      "groups": {
+        "mk-dv": "Deductive program verification",
+        "mk-sl": "Separation logic and Viper",
+        "mk-chc": "Constrained Horn clauses",
+        "mk-ai": "AI systems: evaluation and security",
+        "mk-test": "Testing cyber-physical systems",
+        "mk-sem": "Mechanized language semantics",
+        "mk-rust": "Verified systems programming in Rust",
+        "mk-atp": "Automated theorem proving",
+        "mk-lean": "Lean and proof automation",
+        "mk-scale": "Proof in industry"
+      },
+      "notes": {}
+    }
+  }
+}

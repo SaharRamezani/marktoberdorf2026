@@ -1,0 +1,283 @@
+<section class="lecture" id="sec-mk-6" data-num="6" data-day="mk-chc" data-title="Theory-Modular CHC Solving" data-lecturer="Orna Grumberg">
+  <header class="lec-head">
+    <div class="lec-num">6</div>
+    <div>
+      <h2 id="mk6-top">Bit-Precise CHC Solving with Theory-Modular Reasoning</h2>
+      <p class="lec-meta">Lectures by Orna Grumberg (Technion). Deck: "Constrained Horn Clauses and their Applications", lectures 2 and 3.</p>
+    </div>
+  </header>
+
+  <p class="lead">The previous section ended with a clean pipeline: a program and a specification go into an encoder, out comes a set of constrained Horn clauses, and a CHC solver answers SAT (safe) or UNSAT (buggy). One assumption sits quietly inside it: the clauses are formulated modulo <em>one</em> background theory. These two lectures attack that assumption. They present "Bit-Precise CHC Satisfiability Using Theory-Modular Reasoning" by Omer Rappoport, Orna Grumberg and Yakir Vizel (ATVA 2026), and the Mosaic framework built on it. The idea is to stop forcing a single theory on the whole clause set, to cut the set into fragments, to solve each fragment in the theory that suits it, and to keep the fragments consistent through interface constraints. <button type="button" class="slide-ref" data-slide="grumberg2:2" title="Open this slide">lecture 2 slide 2</button></p>
+
+  <h3 id="mk6-precision">Machine arithmetic is not integer arithmetic</h3>
+
+  <p>One reminder from the previous section is enough. A constrained Horn clause has a body of predicate applications plus a constraint, and a head that is either a predicate application or false. The predicates are the unknowns; the constraint is written in a background theory, and that theory fixes the sorts of the variables and the meaning of the operations. <button type="button" class="slide-ref" data-slide="grumberg2:4" title="Open this slide">lecture 2 slides 4-5</button></p>
+
+  <div class="table-wrap">
+    <table>
+      <tr><th>Background theory</th><th>Sort</th></tr>
+      <tr><td>Integer arithmetic</td><td>Int</td></tr>
+      <tr><td>Real arithmetic</td><td>Real</td></tr>
+      <tr><td>Arrays</td><td>Array[I,V]</td></tr>
+    </table>
+  </div>
+
+  <p>The theory this lecture cares about joins that list a few slides later: fixed-size bit-vectors, sort BV[w], where w is the width. The reason it is needed is simple. In a real machine an integer variable is a finite binary array, so arithmetic on it wraps around. The deck makes the point with one small program fixed at 4-bit width and run on two different inputs. On the first input the loop overflows and the assertion fails. On the second input no overflow happens and the same assertion holds. The note printed on the slide is the whole motivation for the work: integers behave differently than bit-vectors. <button type="button" class="slide-ref" data-slide="grumberg2:6" title="Open this slide">lecture 2 slides 6-7</button></p>
+
+  <div class="callout warn">
+    <span class="co-tag">Careful</span>
+    <p>If you verify a program by giving its variables sort Int, you have verified a different program from the one that runs. The proof can succeed while the compiled code fails, and it can fail on a wrap-around that the real code never performs. <strong>Bit-precise</strong> verification means the encoding reproduces the finite width exactly, so the answer is about the machine, not about an idealised mathematical program.</p>
+  </div>
+
+  <h3 id="mk6-two-options">Two single-theory options, both of them stuck</h3>
+
+  <p>Given a program that mixes bit-level operations with ordinary counting arithmetic, there are two obvious ways to produce a bit-precise CHC system, and the deck measures both on the running example with Spacer under a two-hour budget.</p>
+
+  <p><strong>Option 1</strong> is to encode everything modulo the theory of fixed-size bit-vectors, so every variable gets sort BV[4], or BV[w] in general. This is precise by construction, since the theory has the wrap-around semantics built in, but bit-vector reasoning ultimately comes down to individual bits and the cost grows quickly with the width. The deck's verdict is one word, "not scalable", with the measurement next to it: Spacer reaches width 9 in two hours. <button type="button" class="slide-ref" data-slide="grumberg2:8" title="Open this slide">lecture 2 slide 8</button></p>
+
+  <p><strong>Option 2</strong> is to encode everything modulo integer arithmetic, so every variable gets sort Int. This is where CHC solvers are strongest, because their invariant generation and interpolation machinery is built for arithmetic. But an integer encoding is only bit precise if it spells out the wrap-around, and doing so puts modulo operations and conversions all over the constraints, which is exactly what arithmetic reasoning handles badly. The verdict is the same word with a worse number: Spacer reaches width 3 in two hours. <button type="button" class="slide-ref" data-slide="grumberg2:9" title="Open this slide">lecture 2 slides 9-10</button></p>
+
+  <div class="tabs">
+    <div class="tab" data-label="All bit-vectors (BV)"><p>Every clause modulo BV[w]. Bit precise with no extra work, and the theory solver understands masks, shifts and xor natively. The price is that width drives the cost, so the whole system becomes hard as soon as w grows. On the deck's example, width 9 in two hours.</p></div>
+    <div class="tab" data-label="All integers (IA)"><p>Every clause modulo Int, with wrap-around written out so that precision is not lost. Strong arithmetic reasoning is available, but the modulo operations and conversions needed for precision block it. On the deck's example, width 3 in two hours.</p></div>
+    <div class="tab" data-label="Theory-modular (BV+IA)"><p>Neither theory for the whole system. The clauses that use bit-level operations stay modulo BV, the clauses that only count stay modulo Int, and the two sides are connected by interface constraints. This is what the rest of the section explains.</p></div>
+  </div>
+
+  <div class="quiz">
+    <script type="application/json">
+    {"type":"mc",
+     "q":"On the deck's motivating example, Spacer reached bit-width 9 with the all bit-vector encoding and bit-width 3 with the all integer encoding, both within two hours. What does the deck conclude from this pair of numbers?",
+     "options":["The integer encoding is the better default, since arithmetic solvers are stronger","The bit-vector encoding is the better default, since it is bit precise for free","Neither single-theory encoding scales, so committing the whole clause set to one theory is itself the problem","The example is too small for the numbers to mean anything"],
+     "answer":2,
+     "explain":"Both configurations run out of time at very small widths, and they fail for different reasons: bit-vector reasoning pays for the width, integer reasoning pays for the modulo operations that keep it precise. The response in the paper is not to pick a winner but to stop making the choice globally."}
+    </script>
+  </div>
+
+  <h3 id="mk6-key-idea">The key idea and the Mosaic framework</h3>
+
+  <div class="callout key">
+    <span class="co-tag">Key idea</span>
+    <p>Do not commit to one theory. A single CHC system usually contains clauses of two very different kinds: clauses that manipulate bits, where the bit-vector theory is the right tool, and clauses that just count, where integer arithmetic is the right tool. Use both, on different parts of the same system, and connect the parts with an <strong>interface constraint</strong>. <button type="button" class="slide-ref" data-slide="grumberg2:11" title="Open this slide">lecture 2 slide 11</button></p>
+  </div>
+
+  <p>Mosaic is the framework that turns this idea into a pipeline. Its input is not the program directly: the usual encoder still runs first and produces an ordinary, fully bit-precise set of CHCs modulo BV. Mosaic then adds two stages. A <strong>theory-modular encoder</strong> rewrites that set into a theory-modular encoding, made of a bit-vector fragment, an integer fragment and the interface constraints between them. A <strong>theory-modular CHC solver</strong> then decides satisfiability of the pair of fragments, and its answer is read exactly as before: SAT means the program is safe, UNSAT means it is buggy. <button type="button" class="slide-ref" data-slide="grumberg2:12" title="Open this slide">lecture 2 slide 12</button></p>
+
+  <figure class="fig">
+    <svg viewBox="0 0 660 350" role="img" aria-label="The Mosaic pipeline: program and specification go through an encoder to a set of CHCs modulo bit-vectors, then through a theory-modular encoder to a bit-vector fragment, interface constraints and an integer fragment, then to a theory-modular CHC solver that answers SAT for safe or UNSAT for buggy">
+      <defs>
+        <marker id="mk6-ar" markerWidth="9" markerHeight="8" refX="8" refY="4" orient="auto" markerUnits="userSpaceOnUse">
+          <path d="M0,0 L9,4 L0,8 z" fill="var(--muted)"></path>
+        </marker>
+      </defs>
+      <rect x="14" y="16" width="150" height="48" rx="10" fill="var(--surface)" stroke="var(--hairline)"></rect>
+      <text x="89" y="37" text-anchor="middle" font-size="13" fill="currentColor">Program</text>
+      <text x="89" y="54" text-anchor="middle" font-size="13" fill="currentColor">Specification</text>
+      <line x1="166" y1="40" x2="192" y2="40" stroke="var(--muted)" stroke-width="1.6" marker-end="url(#mk6-ar)"></line>
+      <rect x="198" y="22" width="104" height="36" rx="10" fill="var(--surface)" stroke="var(--hairline)"></rect>
+      <text x="250" y="45" text-anchor="middle" font-size="13" fill="currentColor">Encoder</text>
+      <line x1="304" y1="40" x2="330" y2="40" stroke="var(--muted)" stroke-width="1.6" marker-end="url(#mk6-ar)"></line>
+      <rect x="336" y="16" width="200" height="48" rx="10" fill="var(--surface)" stroke="var(--hairline)"></rect>
+      <text x="436" y="37" text-anchor="middle" font-size="13" fill="currentColor">Set of CHCs</text>
+      <text x="436" y="54" text-anchor="middle" font-size="13" fill="currentColor">modulo BV[w]</text>
+      <line x1="436" y1="66" x2="436" y2="84" stroke="var(--muted)" stroke-width="1.6" marker-end="url(#mk6-ar)"></line>
+      <rect x="336" y="90" width="200" height="40" rx="10" fill="var(--accent)" fill-opacity="0.10" stroke="var(--accent)"></rect>
+      <text x="436" y="115" text-anchor="middle" font-size="13" fill="currentColor">Theory-Modular Encoder</text>
+      <line x1="436" y1="132" x2="436" y2="152" stroke="var(--muted)" stroke-width="1.6" marker-end="url(#mk6-ar)"></line>
+      <rect x="60" y="158" width="560" height="104" rx="12" fill="none" stroke="var(--hairline)" stroke-dasharray="6 4"></rect>
+      <text x="340" y="180" text-anchor="middle" font-size="12" fill="var(--muted)">theory-modular encoding</text>
+      <rect x="84" y="192" width="150" height="48" rx="10" fill="var(--accent)" fill-opacity="0.10" stroke="var(--accent)"></rect>
+      <text x="159" y="222" text-anchor="middle" font-size="13" fill="currentColor">bit-vector fragment</text>
+      <rect x="264" y="192" width="152" height="48" rx="10" fill="var(--warn)" fill-opacity="0.14" stroke="var(--warn)"></rect>
+      <text x="340" y="214" text-anchor="middle" font-size="13" fill="currentColor">interface</text>
+      <text x="340" y="232" text-anchor="middle" font-size="13" fill="currentColor">constraints</text>
+      <rect x="446" y="192" width="150" height="48" rx="10" fill="var(--good)" fill-opacity="0.12" stroke="var(--good)"></rect>
+      <text x="521" y="222" text-anchor="middle" font-size="13" fill="currentColor">integer fragment</text>
+      <line x1="234" y1="216" x2="262" y2="216" stroke="var(--muted)" stroke-width="1.6"></line>
+      <line x1="418" y1="216" x2="444" y2="216" stroke="var(--muted)" stroke-width="1.6"></line>
+      <line x1="340" y1="264" x2="340" y2="284" stroke="var(--muted)" stroke-width="1.6" marker-end="url(#mk6-ar)"></line>
+      <rect x="210" y="290" width="260" height="40" rx="10" fill="var(--accent)" fill-opacity="0.10" stroke="var(--accent)"></rect>
+      <text x="340" y="315" text-anchor="middle" font-size="13" fill="currentColor">Theory-Modular CHC Solver</text>
+      <line x1="472" y1="301" x2="498" y2="301" stroke="var(--muted)" stroke-width="1.6" marker-end="url(#mk6-ar)"></line>
+      <text x="504" y="305" font-size="13" fill="var(--good)">SAT: Safe</text>
+      <line x1="472" y1="323" x2="498" y2="323" stroke="var(--muted)" stroke-width="1.6" marker-end="url(#mk6-ar)"></line>
+      <text x="504" y="327" font-size="13" fill="var(--crit)">UNSAT: Buggy</text>
+    </svg>
+    <figcaption class="fig-caption">The Mosaic framework. The ordinary encoder and the SAT/UNSAT reading of the answer are unchanged; the two boxes in the middle are the new part. After the deck's framework diagram. <button type="button" class="slide-ref" data-slide="grumberg3:3" title="Open this slide">lecture 3 slide 3</button></figcaption>
+  </figure>
+
+  <h3 id="mk6-transformers">Relating values across theories</h3>
+
+  <p>Before any clause can be moved between fragments, the two theories need a common vocabulary of values. A bit-vector of width 4 and an integer are different objects, so the framework has to say which integer stands for which bit-vector.</p>
+
+  <div class="callout def">
+    <span class="co-tag">Definition</span>
+    <p><strong>Domain transformer.</strong> Every bit-vector variable is associated with an integer counterpart, and an injective map sends each bit-vector value to an integer. Injectivity matters: two different bit-vectors must never collapse onto the same integer, otherwise precision is lost at the very first step. The deck names the two natural choices, <strong>unsigned</strong> and <strong>signed</strong>, which differ in how they read the top bit. <button type="button" class="slide-ref" data-slide="grumberg2:13" title="Open this slide">lecture 2 slide 13</button></p>
+  </div>
+
+  <div class="callout def">
+    <span class="co-tag">Definition</span>
+    <p><strong>Theory transformer.</strong> A map that takes every quantifier-free bit-vector formula to a quantifier-free integer formula, so that the two formulas agree on the restricted bit-vector domain. Informally, writing α for the domain transformer and T for the theory transformer, what is required is</p>
+    <div class="formula">for every assignment σ of bit-vector values:&nbsp; σ &#8872; φ &nbsp;&hArr;&nbsp; α(σ) &#8872; T(φ)</div>
+    <p>Agreement is only demanded on integer assignments that come from bit-vector ones, which is why the encoding later has to add explicit domain restrictions. The transformer in the other direction, from integer formulas to bit-vector formulas, is defined dually. <button type="button" class="slide-ref" data-slide="grumberg2:14" title="Open this slide">lecture 2 slide 14</button></p>
+  </div>
+
+  <p>For the direction from bit-vectors to integers, the paper does not invent a translation. It adopts <strong>int-blasting</strong>, from Yoni Zohar and co-authors (VMCAI 2022), which turns a QF_BV formula into a QF_IA formula that keeps the exact machine semantics by inserting modulo operations. The single change reported on the slide is that int-blasting is extended to support <em>signed</em> domain transformers as well, which means adjusted domain restrictions and explicit signed to unsigned conversions. <button type="button" class="slide-ref" data-slide="grumberg2:15" title="Open this slide">lecture 2 slide 15</button></p>
+
+  <p>The direction from integers to bit-vectors is the one the authors had to build themselves, and it is where the interesting difficulty appears. The obvious approach is syntactic substitution: replace each integer variable by its bit-vector counterpart and each integer operation by the corresponding bit-vector operation. This is unsound as it stands, because bit-vector arithmetic overflows and integer arithmetic does not. The deck's example shows an integer assignment that satisfies the integer formula, while the matching bit-vector assignment fails to satisfy the translated formula, purely because an intermediate result wrapped around. The fix is to give the arithmetic enough room: sign-extend the variables and the constants by the minimal width that makes overflow impossible, and the translated formula is then satisfied by the matching assignment. <button type="button" class="slide-ref" data-slide="grumberg2:16" title="Open this slide">lecture 2 slides 16-17</button></p>
+
+  <details class="reveal">
+    <summary>The shape of the overflow problem, on concrete numbers</summary>
+    <p>Take signed 4-bit vectors, whose values run from -8 to 7, and the integer constraint <code>x + y &gt; 8</code>. The integer assignment x = 5, y = 5 satisfies it, since 10 &gt; 8. Substitute naively into bit-vectors of width 4: the bit-vector addition of 5 and 5 wraps to -6, and -6 &gt; 8 is false, so the translated formula rejects an assignment that the original accepted. Widening the addition by one bit before comparing removes the wrap, and the two formulas agree again. This is the deck's phenomenon on numbers of our own choosing; the slide states it with its own example.</p>
+  </details>
+
+  <div class="quiz">
+    <script type="application/json">
+    {"type":"mc",
+     "q":"Why is plain syntactic substitution not a correct translation from an integer formula to a bit-vector formula?",
+     "options":["Because integer formulas may contain quantifiers and bit-vector formulas may not","Because bit-vector operations overflow, so an assignment satisfying the integer formula may fail the substituted bit-vector formula","Because the domain transformer is not injective","Because bit-vector theory has no multiplication"],
+     "answer":1,
+     "explain":"Fixed-width arithmetic wraps around and unbounded integer arithmetic does not, so an intermediate result that is fine over the integers can be a different value over BV[w]. The paper's fix is to sign-extend the variables and constants by the minimal width that makes overflow impossible."}
+    </script>
+  </div>
+
+  <h3 id="mk6-encoding">The theory-modular encoding in four steps</h3>
+
+  <p>With the transformers in place, the encoder can rewrite one CHC system modulo BV into a pair of fragments. The deck presents this as four steps, and both lectures walk through the same worked system. <button type="button" class="slide-ref" data-slide="grumberg3:4" title="Open this slide">lecture 3 slides 4-9</button></p>
+
+  <div class="stepper" data-title="From one CHC system modulo BV to two connected fragments">
+    <div class="step" data-label="1. Partition"><p>Split the clauses into two groups. Nothing is translated yet, only sorted. The heuristic printed on the slide is: a clause whose function applications are purely arithmetic goes to the <strong>integer fragment</strong>. Everything else, in particular any clause that uses bit-level operations such as masks, shifts or xor, stays in the <strong>bit-vector fragment</strong>. In the paper's benchmarks this cuts exactly along the seam of the programs, since they are bit-manipulation routines composed with plain counting loops.</p></div>
+    <div class="step" data-label="2. Bit-vector fragment"><p>The clauses that stayed behind keep their theory and their constraints untouched. The only change is <strong>predicate renaming</strong>: each predicate is replaced by its bit-vector copy. After this step a predicate that is used on both sides of the partition exists as two distinct symbols, which is what makes the two fragments separate problems that a solver can attack independently.</p></div>
+    <div class="step" data-label="3. Integer fragment"><p>Four changes are applied to the clauses that moved. <strong>Predicate renaming</strong>, as above, but to the integer copies. <strong>Variable renaming</strong>: each bit-vector variable is replaced by its integer counterpart. <strong>Constraint translation</strong>: each constraint is passed through the theory transformer, so a QF_BV constraint becomes a QF_IA one. <strong>Domain restrictions</strong>: each integer variable is confined to the image of the domain transformer, so it can only take values that a w-bit vector can actually represent.</p></div>
+    <div class="step" data-label="3b. The optimization"><p>The translated constraints are heavy, because int-blasting protects every operation with a modulo and with uts conversions (uts is the unsigned to signed conversion the translation uses). The deck adds an optimization: eliminate the modulo and uts operations wherever the encoder can already see that overflow is impossible. What is left is the plain arithmetic that the integer solver is good at, which is the whole point of moving these clauses to the integer side.</p></div>
+    <div class="step" data-label="4. Interface constraints"><p>The two fragments would now be unrelated problems. The last step adds, for every predicate whose two copies are both in use, a constraint tying them together through the domain transformer, so that a fact about the integer copy is a fact about the bit-vector copy and the other way round. These constraints are the only place where the fragments meet, and they are what makes the pair equivalent to the original system.</p></div>
+  </div>
+
+  <figure class="fig">
+    <svg viewBox="0 0 660 300" role="img" aria-label="A CHC system split into a bit-vector fragment on the left and an integer fragment on the right, each containing a renamed copy of the shared predicate p, with a dashed interface constraint linking the two copies through the domain transformer alpha">
+      <defs>
+        <marker id="mk6-ar2" markerWidth="9" markerHeight="8" refX="8" refY="4" orient="auto" markerUnits="userSpaceOnUse">
+          <path d="M0,0 L9,4 L0,8 z" fill="var(--muted)"></path>
+        </marker>
+      </defs>
+      <rect x="12" y="40" width="286" height="236" rx="12" fill="var(--accent)" fill-opacity="0.07" stroke="var(--hairline)"></rect>
+      <text x="155" y="64" text-anchor="middle" font-size="13" fill="var(--accent)">bit-vector fragment (modulo BV)</text>
+      <rect x="100" y="84" width="110" height="32" rx="9" fill="var(--surface)" stroke="var(--hairline)"></rect>
+      <text x="155" y="105" text-anchor="middle" font-size="13" fill="currentColor">init</text>
+      <line x1="155" y1="116" x2="155" y2="146" stroke="var(--muted)" stroke-width="1.6" marker-end="url(#mk6-ar2)"></line>
+      <text x="163" y="137" font-size="12" fill="var(--muted)">bit-level clauses</text>
+      <rect x="88" y="150" width="134" height="36" rx="9" fill="var(--surface)" stroke="var(--accent)"></rect>
+      <text x="155" y="173" text-anchor="middle" font-size="13" fill="currentColor">p : BV copy</text>
+      <line x1="155" y1="186" x2="155" y2="216" stroke="var(--muted)" stroke-width="1.6" marker-end="url(#mk6-ar2)"></line>
+      <text x="163" y="207" font-size="12" fill="var(--muted)">query clause</text>
+      <rect x="100" y="220" width="110" height="32" rx="9" fill="var(--surface)" stroke="var(--hairline)"></rect>
+      <text x="155" y="241" text-anchor="middle" font-size="13" fill="currentColor">false</text>
+      <text x="155" y="267" text-anchor="middle" font-size="12" fill="var(--muted)">masks, shifts, xor stay here</text>
+      <rect x="362" y="40" width="286" height="236" rx="12" fill="var(--good)" fill-opacity="0.09" stroke="var(--hairline)"></rect>
+      <text x="505" y="64" text-anchor="middle" font-size="13" fill="var(--good)">integer fragment (modulo IA)</text>
+      <text x="505" y="132" text-anchor="middle" font-size="12" fill="var(--muted)">arithmetic loop clauses</text>
+      <rect x="438" y="150" width="134" height="36" rx="9" fill="var(--surface)" stroke="var(--good)"></rect>
+      <text x="505" y="173" text-anchor="middle" font-size="13" fill="currentColor">p : Int copy</text>
+      <path d="M572,158 C614,146 614,190 572,180" fill="none" stroke="var(--muted)" stroke-width="1.6" marker-end="url(#mk6-ar2)"></path>
+      <text x="505" y="212" text-anchor="middle" font-size="12" fill="var(--muted)">domain restriction: values in</text>
+      <text x="505" y="228" text-anchor="middle" font-size="12" fill="var(--muted)">the image of the transformer</text>
+      <text x="505" y="267" text-anchor="middle" font-size="12" fill="var(--muted)">purely arithmetic clauses move here</text>
+      <line x1="224" y1="168" x2="326" y2="168" stroke="var(--warn)" stroke-width="1.8" stroke-dasharray="6 4" marker-end="url(#mk6-ar2)"></line>
+      <line x1="436" y1="168" x2="334" y2="168" stroke="var(--warn)" stroke-width="1.8" stroke-dasharray="6 4" marker-end="url(#mk6-ar2)"></line>
+      <text x="330" y="152" text-anchor="middle" font-size="12" fill="var(--warn)">interface constraint</text>
+      <text x="330" y="200" text-anchor="middle" font-size="12" fill="var(--muted)">the two copies agree</text>
+      <text x="330" y="216" text-anchor="middle" font-size="12" fill="var(--muted)">under the domain transformer</text>
+    </svg>
+    <figcaption class="fig-caption">The partitioned system. Predicate renaming gives the shared predicate p one copy per fragment; the interface constraint is the only link between them. Drawn after the encoding steps in the deck. <button type="button" class="slide-ref" data-slide="grumberg3:5" title="Open this slide">lecture 3 slides 5-9</button></figcaption>
+  </figure>
+
+  <div class="quiz">
+    <script type="application/json">
+    {"type":"fill",
+     "q":"Complete the deck's partition heuristic: a clause goes to the integer fragment when its function applications are purely ____.",
+     "accept":["arithmetic","arithmetical"],
+     "explain":"Clauses whose function applications are purely arithmetic move to the integer fragment. Any clause that touches bits stays in the bit-vector fragment, where the theory handles it natively."}
+    </script>
+  </div>
+
+  <h3 id="mk6-semantics">What counts as a theory-modular solution</h3>
+
+  <p>Splitting the system changes what a derivation looks like. In the single-theory setting of the previous section, a derivation is a tree built from clauses, and the system is unsatisfiable exactly when some derivation violates the query. Here a derivation may start in one fragment and continue in the other. The deck marks the steps of such a derivation as <span class="pill">local</span> when the fragment produces the fact itself and <span class="pill warn">external</span> when the fact arrives from the other fragment across the interface. <button type="button" class="slide-ref" data-slide="grumberg3:10" title="Open this slide">lecture 3 slide 10</button></p>
+
+  <p>A solution is defined to match. A <strong>theory-modular solution</strong> is a pair of interpretations, one per fragment, that satisfies two conditions: <strong>local satisfaction</strong>, meaning each interpretation satisfies all the clauses of its own fragment, and <strong>interface constraint satisfaction</strong>, meaning the two interpretations agree wherever the interface relates them. Neither condition alone is enough. Local satisfaction on its own would let the two fragments believe contradictory things about the same predicate. <button type="button" class="slide-ref" data-slide="grumberg3:11" title="Open this slide">lecture 3 slide 11</button></p>
+
+  <div class="callout key">
+    <span class="co-tag">Key idea</span>
+    <p><strong>Correctness of the encoding.</strong> Let S be a set of CHCs modulo BV and let S' be a theory-modular encoding of S. The theorem states that S is satisfiable if and only if S' is satisfiable. The deck adds one more remark that is easy to miss and matters a lot in practice: the decidability of CHC satisfiability modulo BV is not compromised by the transformation. Nothing is given away for the speed, and no answer needs to be double checked against the original system. <button type="button" class="slide-ref" data-slide="grumberg3:12" title="Open this slide">lecture 3 slide 12</button></p>
+  </div>
+
+  <h3 id="mk6-solver">MosaicSolve, the theory-modular solver</h3>
+
+  <p>The second half of the work is the solver. MosaicSolve does not solve the fragments itself: it calls an ordinary CHC satisfiability oracle for each theory, one for CHC modulo BV and one for CHC modulo IA, and its job is to coordinate them. The difficulty it has to manage is that neither oracle can see through the interface. When the bit-vector oracle reasons about a shared predicate, part of the truth about that predicate is produced on the integer side, and vice versa. The deck calls this the <strong>external semantics</strong> of an interface predicate, and MosaicSolve approximates it from both directions while it searches. <button type="button" class="slide-ref" data-slide="grumberg3:14" title="Open this slide">lecture 3 slide 14</button></p>
+
+  <div class="table-wrap">
+    <table>
+      <tr><th>State component</th><th>What it holds</th><th>What it is for</th></tr>
+      <tr><td>proof obligations</td><td>pairs of a predicate p and a formula, asking whether some tuple derivable for p satisfies that formula</td><td>drives the search</td></tr>
+      <tr><td>under-approximation lemmas</td><td>facts that certainly do hold of the external semantics of an interface target predicate</td><td>find real counterexamples</td></tr>
+      <tr><td>over-approximation lemmas</td><td>facts that bound the same external semantics from above</td><td>block infeasible counterexamples and detect convergence</td></tr>
+    </table>
+  </div>
+
+  <p>The search itself is a small set of moves on that state. <button type="button" class="slide-ref" data-slide="grumberg3:15" title="Open this slide">lecture 3 slides 15-17</button></p>
+
+  <div class="algo" data-title="MosaicSolve: the moves">
+    <ol>
+      <li>Query. Take an obligation that cannot be resolved with what is known. Call the CHC oracle of the fragment that owns the predicate. If the answer is UNSAT with a refutation whose leaf is an interface predicate, that leaf becomes a new obligation for the other fragment, and it is added to the obligation set.</li>
+      <li>NegAnswer. If the oracle answers SAT with a solution, the obligation cannot be met with the current knowledge. Remove it from the obligation set and record the solution as a new over-approximation lemma.</li>
+      <li>PosAnswer. Dually, if the current under-approximations already justify an obligation, discharge it positively and record a new under-approximation lemma.</li>
+      <li>Sat / Unsat. Stop as soon as the initial obligation is resolved. Resolved negatively means no query violation is derivable, so the system is satisfiable and the program is safe. Resolved positively means a real derivation of a query violation exists, so the system is unsatisfiable and the program is buggy.</li>
+    </ol>
+  </div>
+
+  <p>The two guarantees are stated together at the end. <strong>Soundness</strong>: if MosaicSolve returns SAT then the original system is satisfiable, and if it returns UNSAT then the original system is unsatisfiable. <strong>Termination</strong>: MosaicSolve is guaranteed to terminate provided every single invocation of the underlying CHC satisfiability oracles terminates. That is a conditional guarantee, and honestly so: CHC satisfiability is undecidable in general, so the coordination layer promises only that it adds no new source of divergence of its own. <button type="button" class="slide-ref" data-slide="grumberg3:19" title="Open this slide">lecture 3 slide 19</button></p>
+
+  <div class="quiz">
+    <script type="application/json">
+    {"type":"mc",
+     "q":"MosaicSolve keeps both under-approximation and over-approximation lemmas for the external semantics of an interface predicate. Why are both needed?",
+     "options":["Under-approximations speed up the oracle calls and over-approximations make them precise","Under-approximations are used to find real counterexamples, while over-approximations block infeasible counterexamples and let the search detect convergence","Over-approximations are used for the bit-vector fragment and under-approximations for the integer fragment","They are two names for the same set, kept separately only for bookkeeping"],
+     "answer":1,
+     "explain":"Neither oracle can see through the interface, so the external contribution of the other fragment is approximated from both sides. The lower bound is what certifies a genuine derivation, the upper bound is what rules out spurious ones and tells the search when nothing new can be learned."}
+    </script>
+  </div>
+
+  <h3 id="mk6-eval">What the experiments report</h3>
+
+  <p>The implementation is a prototype built on top of Z3, with Spacer instantiating both CHC satisfiability oracles. The benchmarks are 11 small programs taken from the "Bit Twiddling Hacks" collection by Anderson (Stanford), each composed with simple arithmetic loops, so that every benchmark genuinely mixes bit manipulation with counting. Each program is run at increasing bit-widths under a two-hour timeout, and three configurations are compared. <button type="button" class="slide-ref" data-slide="grumberg3:20" title="Open this slide">lecture 3 slide 20</button></p>
+
+  <div class="table-wrap">
+    <table>
+      <tr><th>Configuration</th><th>What it does</th></tr>
+      <tr><td>BV</td><td>all clauses placed in the bit-vector fragment</td></tr>
+      <tr><td>IA</td><td>all clauses translated into the integer fragment</td></tr>
+      <tr><td>BV+IA</td><td>theory-modular reasoning, the method of the paper</td></tr>
+    </table>
+  </div>
+
+  <p>The results table reports, for each benchmark and configuration, the maximal bit-width reached within the budget and the runtime, with the largest width in bold. The claim the deck makes from it is stated in one line, and it is worth repeating with its qualifier intact: BV+IA achieves the largest bit-width on most benchmarks, often by a substantial margin. Not on all of them, and the summary is about how far the width can be pushed rather than about raw speed at a fixed width. <button type="button" class="slide-ref" data-slide="grumberg3:21" title="Open this slide">lecture 3 slide 21</button></p>
+
+  <div class="callout warn">
+    <span class="co-tag">Careful</span>
+    <p>This is a prototype evaluated on 11 small programs that were built to have exactly the mixed shape the method targets. That is the right first experiment for the idea, and it is fair evidence that the partition pays off when a program really does contain both kinds of reasoning. It is not yet evidence about large code bases, nor about programs where the seam between bit-level and arithmetic reasoning is less clean.</p>
+  </div>
+
+  <h3 id="mk6-next">Conclusion and where the series goes next</h3>
+
+  <p>The closing slide names the three ingredients in the order the lectures built them. <strong>Theory transformations</strong>: translations across theories that preserve the represented bit-vector semantics. <strong>Theory-modular encoding</strong>: the decomposition of one clause set into fragments plus interface constraints. <strong>Theory-modular solving</strong>: coordinated reasoning across the fragments through per-theory oracles. The reported outcome is substantial scalability improvements on bit-precise verification benchmarks. Two directions are listed as related and future work: abstraction refinement for theory-modular CHC satisfiability, and extending theory-modular reasoning to further background theories, with linear and nonlinear integer arithmetic named as the next pair. <button type="button" class="slide-ref" data-slide="grumberg3:22" title="Open this slide">lecture 3 slide 22</button></p>
+
+  <div class="quiz">
+    <script type="application/json">
+    {"type":"tf",
+     "q":"Because the integer fragment replaces bit-vector variables by integers, a theory-modular encoding can be satisfiable even when the original CHC system modulo bit-vectors is not.",
+     "answer":false,
+     "explain":"The correctness theorem rules this out: the original system is satisfiable if and only if its theory-modular encoding is. That is what the injective domain transformer, the domain restrictions and the interface constraints are there to secure, and the deck adds that decidability of CHC satisfiability modulo bit-vectors is not compromised either."}
+    </script>
+  </div>
+
+  <p>The rest of the third lecture leaves Mosaic behind and opens the first application of CHCs in the series: condition synthesis realizability, from "Condition Synthesis Realizability via Constrained Horn Clauses" by Bat-chen Rothenberg, Orna Grumberg, Yakir Vizel and Eytan Singher (NFM 2023). The problem there is a partial program with holes in its conditional branches, and the question is whether the holes can be filled so that the assertions hold. The algorithm, COSYN, is aimed in particular at proving <em>unrealizability</em> efficiently, which it does by searching for a doomed initial state, one that reaches an error on every run no matter how the conditions are filled in, and that search is again reduced to constrained Horn clauses. <button type="button" class="slide-ref" data-slide="grumberg3:25" title="Open this slide">lecture 3 slides 25-33</button></p>
+</section>

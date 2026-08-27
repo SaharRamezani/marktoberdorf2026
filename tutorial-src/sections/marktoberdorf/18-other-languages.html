@@ -1,0 +1,155 @@
+<section class="lecture" id="sec-mk-ryu4" data-num="18" data-day="mk-sem" data-title="Other Languages, and Software That Is Not a Language" data-lecturer="Sukyoung Ryu">
+  <header class="lec-head">
+    <div class="lec-num">18</div>
+    <div>
+      <h2 id="mkr4-top">Other Languages, and Software That Is Not a Language</h2>
+      <p class="lec-meta">Sukyoung Ryu (KAIST), from the deck <em>Mechanized Specifications (4): Other PLs and Non-PL Software</em>, 21 August 2026.</p>
+    </div>
+  </header>
+
+  <p class="lead">The three earlier lectures all began from the same piece of luck: somebody had already written the document. ECMA-262 existed, the WebAssembly specification existed, and even P4 had a reference compiler to argue with. This last lecture is about the case where that luck runs out, and the language is Rust. She announced at the outset that the hour would be mostly storytelling around two of her group's papers. The deck is unusually thin, roughly half of it pictures with no text, so what follows leans on the recording.</p>
+
+  <h3 id="mkr4-series">Where this sits in the series</h3>
+
+  <p>This is the fourth and final lecture, after JavaScript and ESMeta, WebAssembly and SpecTec, and P4 and P4-SpecTec <button type="button" class="slide-ref" data-slide="ryu4:2" title="Open this slide">slide 2</button>. The deck opens by bringing the P4 adoption timeline up to date, out to a planned official acceptance at the P4 language design working group in December 2026 <button type="button" class="slide-ref" data-slide="ryu4:3" title="Open this slide">slide 3</button>.</p>
+
+  <h3 id="mkr4-memsafe">The push that made Rust urgent</h3>
+
+  <p>The framing comes from policy rather than research. A White House office published a report urging a move to memory-safe languages such as Rust and away from C and C++, which she described as music to the ears of most programming-language researchers. Then, in July 2024, DARPA started a programme to automate the translation of C into Rust; several teams take part and hers is one of them. The recording does not render the programme's name or the institutional arrangement reliably, so neither is reproduced here.</p>
+
+  <p>Her group was already positioned for it, having worked on C-to-Rust translation for years. The starting point is C2Rust, an existing open-source translator. It produces Rust that compiles, but much of the output sits inside <code>unsafe</code> blocks, forfeiting precisely the guarantees the migration was undertaken for. Their contribution is to attack those unsafe features one at a time, and the mental model she offered is a compiler: parse, type check, analyse control flow, then run a long sequence of passes. For each unsafe feature in the C code there is a static analysis that recovers what the C left implicit and a transformation that rewrites the code using it. As she put it, they are compiling better Rust code.</p>
+
+  <div class="quiz">
+    <script type="application/json">
+    {"type":"mc","q":"In the group's C-to-Rust work, what role does the existing C2Rust translator play?","options":["It produces the final Rust code, and the group's contribution is to test that code","It produces a first Rust version that is largely unsafe, which the group then improves with a pipeline of analysis and transformation passes","It checks whether a hand-written Rust translation is faithful to the C original","It generates a mechanized specification of C from which Rust code is derived"],"answer":1,"explain":"C2Rust gives a first Rust version, but much of it sits inside unsafe blocks, which gives up the guarantees the migration was for. The group targets one unsafe feature at a time: a static analysis recovers what the C code left implicit, and a transformation rewrites the code using it. She described the arrangement as a compiler pass pipeline."}
+    </script>
+  </div>
+
+  <h3 id="mkr4-fortress">A long way round to type systems</h3>
+
+  <p>The C-to-Rust work is by Jaemin Hong <button type="button" class="slide-ref" data-slide="ryu4:4" title="Open this slide">slide 4</button>. Before any technical content she went back twenty years, to Fortress, a language project at Sun Microsystems. It was a small team: a library team drove the design, with Guy Steele and Jan-Willem Maessen writing code in a language that did not exist yet, while a specification team wrote down static and dynamic semantics for whatever the library team invented. Her verdict was short: wonderful, and too early. Back at KAIST the group mechanized a featherweight subset, found it too much work, and moved to JavaScript. That fork in the road produced the previous three lectures.</p>
+
+  <p>Years later the old collaboration was revived around doing the type system properly: subtype and parametric polymorphism together, plus multiple dispatch and symmetric overloading. The result appeared at POPL 2019, and the deck marks that slide with one stamped word, PROVEN <button type="button" class="slide-ref" data-slide="ryu4:9" title="Open this slide">slide 9</button>. Jaemin Hong worked on gradual type systems for two years, found the mechanized proofs heavier than he wanted, and switched to C-to-Rust translation, which is why that work was already under way when reports appeared that Rust's type checking is unsound.</p>
+
+  <h3 id="mkr4-traits">Rust traits, and the one formalization that exists</h3>
+
+  <p>Why traits in particular? Because Rust's type-safety and memory-safety guarantees are built on its type system, and while many groups work on borrowing and lifetimes, almost nobody works on traits. She found a single formalization effort: a 2015 master's thesis by Jonatan Milewski, supervised by Ron Garcia <button type="button" class="slide-ref" data-slide="ryu4:11" title="Open this slide">slide 11</button>. It climbs a ladder of small languages. NanoRust has traits; MicroRust adds associated types; MiniRust adds trait objects; RustIn is an internal language into which MiniRust programs are translated.</p>
+
+  <p>That ladder is what her group is now re-expressing in SpecTec, the framework from the WebAssembly lecture: NanoRust's well-typed programs and items, rewritten as a SpecTec specification <button type="button" class="slide-ref" data-slide="ryu4:12" title="Open this slide">slides 12-13</button>. She was candid that this is exploratory and currently stalled, and used the slide to invite collaborators.</p>
+
+  <h3 id="mkr4-soundness">What the compiler's own bug tracker says</h3>
+
+  <p>Rather than argue from anecdote, she wanted objective evidence. An earlier empirical study of rustc bugs supplied fourteen type-related issue labels as a starting point. The study filtered the compiler's soundness issues reported between 1 January 2022 and 1 September 2025, a window chosen to span two editions, Rust 2021 and Rust 2024 <button type="button" class="slide-ref" data-slide="ryu4:18" title="Open this slide">slide 18</button>. Of 969 issues carrying one of the fourteen labels, 320 were marked C-bug or I-unsound; manual inspection cut that to 27 genuine soundness issues, meaning cases with a Rust snippet the reporter claimed the compiler should have rejected where the fault was the compiler's. Deduplicated, 23 remain.</p>
+
+  <div class="callout def"><p><span class="co-tag">Definition</span> Incompleteness and unsoundness are not equally serious. An incomplete checker rejects programs it should accept: inconvenient, and you work around it. An unsound checker accepts a program that then goes wrong, with undefined behaviour and memory bugs at the end of it. Only the second kind was collected.</p></div>
+
+  <div class="tabs">
+    <div class="tab" data-label="Symptoms"><p><strong>Finding 1.</strong> The compiler does have soundness issues that lead to real memory bugs, caused by missing lifetime checks or overlapping trait implementations. <strong>Finding 2.</strong> Rust programmers often believe the compiler should reject even programs that would not incur a memory bug <button type="button" class="slide-ref" data-slide="ryu4:21" title="Open this slide">slide 21</button>.</p></div>
+    <div class="tab" data-label="Triggering features"><p><strong>Finding 3.</strong> Compiler developers should handle associated types carefully wherever they occur. <strong>Finding 4.</strong> The interaction between orthogonal features, especially lifetimes and traits, is what makes sound type checking difficult: each is manageable alone. <strong>Finding 5.</strong> Correct treatment of implied bounds and trait objects is extremely important to memory safety <button type="button" class="slide-ref" data-slide="ryu4:22" title="Open this slide">slide 22</button>.</p></div>
+    <div class="tab" data-label="Consensus"><p><strong>Finding 6.</strong> The rustc developers are inclusive in discussing soundness issues even when those issues do not lead to memory bugs <button type="button" class="slide-ref" data-slide="ryu4:23" title="Open this slide">slide 23</button>. With Finding 2, maintainers and users agree that consistency of the type system matters in its own right.</p></div>
+    <div class="tab" data-label="Lifecycles"><p><strong>Finding 7.</strong> Soundness issues are typically discovered long after they were introduced, and persist across multiple releases. <strong>Finding 8.</strong> New features are often stabilized before undergoing sufficient testing <button type="button" class="slide-ref" data-slide="ryu4:24" title="Open this slide">slide 24</button>.</p></div>
+  </div>
+
+  <div class="quiz">
+    <script type="application/json">
+    {"type":"tf","q":"According to the study, soundness issues in the Rust compiler are usually found and fixed within the release that introduced them.","answer":false,"explain":"Finding 7 says the opposite: soundness issues are typically discovered long after they are introduced and persist across multiple releases. Finding 8 adds that new features are often stabilized before they have been tested enough."}
+    </script>
+  </div>
+
+  <h3 id="mkr4-oracle">The missing document</h3>
+
+  <p>This is where the method behind the whole series meets its limit. Extraction needs something to extract from, and Rust has no specification. So what serves as the oracle?</p>
+
+  <p>Three implementations are candidates, each with a disqualifying limitation <button type="button" class="slide-ref" data-slide="ryu4:25" title="Open this slide">slide 25</button>. Miri is a Rust interpreter designed to detect undefined behaviour, but it cannot identify soundness bugs that never manifest as undefined behaviour. Chalk implements the trait system on a logic solver, and targets only the trait system. And a-mir-formality is an executable formal model of the type system that supports only a limited subset of the language.</p>
+
+  <p>Three documents are the other candidates <button type="button" class="slide-ref" data-slide="ryu4:26" title="Open this slide">slide 26</button>: the Rust Reference, an official Rust project; the FLS, developed by Ferrous Systems and AdaCore for safety-critical industries and adopted as a Rust project in 2025; and the Rust RFCs, some of which are the only place a feature is explained in detail.</p>
+
+  <details class="reveal"><summary>What goes wrong with implied bounds, concretely?</summary><p>Some lifetime bounds are never written down: they are implied by the shape of a signature, so settling a soundness question about them needs a definition of well-formedness. The Reference says only that "lifetime bounds required for types to be well-formed are sometimes inferred". The FLS calls an implied bound "the byproduct of relations between lifetime parameters and function parameters". The real definition, with inference rules, exists only in RFC 1214, written against its own syntax for Rust types, which lacks several types the language now has, most conspicuously impl trait types <button type="button" class="slide-ref" data-slide="ryu4:27" title="Open this slide">slide 27</button>.</p></details>
+
+  <figure class="fig">
+    <svg viewBox="0 0 660 290" role="img" aria-label="Two situations. In lectures 15 to 17 a single standards document is extracted into a mechanized specification which yields tests and analysers. For Rust there is no such document, and six partial candidates, three implementations and three documents, all point at an unresolved notion of ground truth.">
+      <defs>
+        <marker id="mkr4-ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="var(--ink-2)"/></marker>
+      </defs>
+      <text x="20" y="24" font-size="12" font-weight="600" fill="var(--ink)">Lectures 15 to 17: one document to extract from</text>
+      <rect x="20" y="36" width="150" height="44" rx="6" fill="var(--surface)" stroke="var(--hairline)"/>
+      <text x="95" y="58" font-size="11" text-anchor="middle" fill="var(--ink)">Standards document</text>
+      <text x="95" y="72" font-size="10" text-anchor="middle" fill="var(--muted)">ECMA-262, Wasm, P4</text>
+      <line x1="172" y1="58" x2="226" y2="58" stroke="var(--accent)" stroke-width="1.5" marker-end="url(#mkr4-ah)"/>
+      <text x="199" y="51" font-size="10" text-anchor="middle" fill="var(--accent)">extract</text>
+      <rect x="230" y="36" width="140" height="44" rx="6" fill="var(--surface)" stroke="var(--accent)"/>
+      <text x="300" y="63" font-size="11" text-anchor="middle" fill="var(--ink)">Mechanized spec</text>
+      <line x1="372" y1="58" x2="426" y2="58" stroke="var(--ink-2)" stroke-width="1.5" marker-end="url(#mkr4-ah)"/>
+      <rect x="430" y="36" width="184" height="44" rx="6" fill="var(--surface)" stroke="var(--hairline)"/>
+      <text x="522" y="63" font-size="11" text-anchor="middle" fill="var(--ink)">tests, analysers, checks</text>
+      <text x="20" y="99" font-size="11" fill="var(--good)">The document is the oracle, and a committee is obliged to maintain it.</text>
+
+      <line x1="20" y1="112" x2="640" y2="112" stroke="var(--hairline)" stroke-width="1"/>
+
+      <text x="20" y="138" font-size="12" font-weight="600" fill="var(--ink)">Rust: no specification, so what is the oracle?</text>
+      <text x="20" y="156" font-size="11" font-weight="600" fill="var(--muted)">Implementations</text>
+      <text x="640" y="156" font-size="11" font-weight="600" text-anchor="end" fill="var(--muted)">Documentation</text>
+
+      <rect x="20" y="164" width="150" height="30" rx="6" fill="var(--surface)" stroke="var(--hairline)"/>
+      <text x="95" y="183" font-size="11" text-anchor="middle" fill="var(--ink)">Miri</text>
+      <rect x="20" y="198" width="150" height="30" rx="6" fill="var(--surface)" stroke="var(--hairline)"/>
+      <text x="95" y="217" font-size="11" text-anchor="middle" fill="var(--ink)">Chalk</text>
+      <rect x="20" y="232" width="150" height="30" rx="6" fill="var(--surface)" stroke="var(--hairline)"/>
+      <text x="95" y="251" font-size="11" text-anchor="middle" fill="var(--ink)">a-mir-formality</text>
+
+      <rect x="470" y="164" width="170" height="30" rx="6" fill="var(--surface)" stroke="var(--hairline)"/>
+      <text x="555" y="183" font-size="11" text-anchor="middle" fill="var(--ink)">Rust Reference</text>
+      <rect x="470" y="198" width="170" height="30" rx="6" fill="var(--surface)" stroke="var(--hairline)"/>
+      <text x="555" y="217" font-size="11" text-anchor="middle" fill="var(--ink)">FLS</text>
+      <rect x="470" y="232" width="170" height="30" rx="6" fill="var(--surface)" stroke="var(--hairline)"/>
+      <text x="555" y="251" font-size="11" text-anchor="middle" fill="var(--ink)">Rust RFCs</text>
+
+      <line x1="172" y1="179" x2="264" y2="202" stroke="var(--ink-2)" stroke-width="1.2" stroke-dasharray="4 3" marker-end="url(#mkr4-ah)"/>
+      <line x1="172" y1="213" x2="264" y2="209" stroke="var(--ink-2)" stroke-width="1.2" stroke-dasharray="4 3" marker-end="url(#mkr4-ah)"/>
+      <line x1="172" y1="247" x2="264" y2="216" stroke="var(--ink-2)" stroke-width="1.2" stroke-dasharray="4 3" marker-end="url(#mkr4-ah)"/>
+      <line x1="468" y1="179" x2="396" y2="202" stroke="var(--ink-2)" stroke-width="1.2" stroke-dasharray="4 3" marker-end="url(#mkr4-ah)"/>
+      <line x1="468" y1="213" x2="396" y2="209" stroke="var(--ink-2)" stroke-width="1.2" stroke-dasharray="4 3" marker-end="url(#mkr4-ah)"/>
+      <line x1="468" y1="247" x2="396" y2="216" stroke="var(--ink-2)" stroke-width="1.2" stroke-dasharray="4 3" marker-end="url(#mkr4-ah)"/>
+
+      <rect x="270" y="182" width="120" height="52" rx="6" fill="var(--surface)" stroke="var(--warn)"/>
+      <text x="330" y="209" font-size="20" text-anchor="middle" fill="var(--warn)">?</text>
+      <text x="330" y="226" font-size="10" text-anchor="middle" fill="var(--muted)">ground truth</text>
+      <text x="20" y="280" font-size="11" fill="var(--warn)">Every candidate covers only part of the language, and the documents disagree.</text>
+    </svg>
+    <figcaption>The precondition of the approach is a document somebody is responsible for. Rust has six partial substitutes and no authority among them <button type="button" class="slide-ref" data-slide="ryu4:25" title="Open this slide">slides 25-27</button>.</figcaption>
+  </figure>
+
+  <div class="quiz">
+    <script type="application/json">
+    {"type":"mc","q":"Why is Rust a harder target for this series' method than JavaScript, WebAssembly or P4?","options":["Rust programs are too large for an extraction toolchain to handle","Rust has no single authoritative specification, so there is no document to mechanize and every candidate oracle covers only part of the language","The Rust project has refused to work with academic groups","Rust's type system is decidable, so a mechanized specification would add nothing"],"answer":1,"explain":"ECMA-262, the WebAssembly specification and even P4's reference compiler each gave the method something definite to work from. Rust has none. Miri only catches undefined behaviour, Chalk covers only the trait system, a-mir-formality covers only a subset, and the Reference, the FLS and the RFCs disagree about basic notions such as well-formedness."}
+    </script>
+  </div>
+
+  <h3 id="mkr4-lessons">Four cases, one table</h3>
+
+  <p>The deck's summary slide sets the series out in columns: the problem, what already existed, what the mechanized specification provided, and what it cost <button type="button" class="slide-ref" data-slide="ryu4:30" title="Open this slide">slide 30</button>.</p>
+
+  <table>
+    <thead><tr><th>Case</th><th>Problem</th><th>Existing artifact</th><th>What the mechanized spec gave</th><th>Burden</th></tr></thead>
+    <tbody>
+      <tr><td>JavaScript</td><td>Specification bugs, diverse implementations</td><td>ECMA-262</td><td>Type checking of the spec, rich test generation</td><td>The ESMeta team's maintenance</td></tr>
+      <tr><td>WebAssembly</td><td>Bugs and inconsistencies across artifacts</td><td>The spec and its artifacts</td><td>Automatic generation of the artifacts</td><td>Community learns a spec language</td></tr>
+      <tr><td>P4</td><td>No specification at all</td><td>P4c, the reference compiler</td><td>Understanding, discussing, specifying and testing the semantics</td><td>Community learns a spec language</td></tr>
+      <tr><td>More</td><td colspan="4">Left as an ellipsis on the slide</td></tr>
+    </tbody>
+  </table>
+
+  <p>The last column is the honest one. Every case moves the cost somewhere; none deletes it. Either a small team maintains the machinery in perpetuity, or the community learns a specification language. The argument for paying is that the alternative, people reading prose carefully and getting it right, costs more.</p>
+
+  <p>The title also promises software that is not a programming language, and this is the part the hour did not reach: the row is labelled simply "More", with an ellipsis where the content should be, and the recording stops before it. What the series established is the precondition rather than the extension. The method needs a document written in a stylised, repetitive register by people obliged to be precise, and standards for network protocols, file formats and hardware interfaces are written in exactly that register.</p>
+
+  <p>The deck's last substantive pages, titled "Mechanized Specifications as an Enabler", are pictures rather than text <button type="button" class="slide-ref" data-slide="ryu4:32" title="Open this slide">slides 32-33</button>. One points at a 2026 student camp built around P4-SpecTec: once a specification is a machine artifact rather than a book, it can be taught with and handed to people who were not there when it was built.</p>
+
+  <h3 id="mkr4-advice">The closing slide</h3>
+
+  <p>She ended with two pieces of advice quoted on the deck's last page, attributed there only to a talk at PLDI 2023 <button type="button" class="slide-ref" data-slide="ryu4:34" title="Open this slide">slide 34</button>.</p>
+
+  <div class="callout key"><p><span class="co-tag">The deck's closing advice</span> "If you go and talk to an old person and he or she says, 'We tried that 25 years ago and it didn't work,' don't take that for an answer, ask why it didn't work and what's different today."</p><p>"Keep the big picture in mind; look for opportunities to bridge disciplines rather than rat holing on just one; don't settle for just a 5% improvement, aim big; and finally read read read voraciously, read papers, read code, read books, absorb as much information as you can, you never can tell what you learned five years ago might suddenly be relevant now."</p></div>
+
+  <p>The first is the JISET story exactly: mechanizing a language standard had been tried and abandoned before, and what was different was that ECMA-262 had become stylised HTML with about a hundred recurring phrase forms. The second is this lecture: work started at Sun twenty years ago, dropped as too laborious, picked up again when a policy shift made the technique relevant to a different language.</p>
+</section>

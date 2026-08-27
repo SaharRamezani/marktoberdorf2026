@@ -1,0 +1,109 @@
+<section class="lecture" id="sec-mk-bl4" data-num="23" data-day="mk-atp" data-title="Formalizing the Metatheory" data-lecturer="Jasmin Blanchette">
+  <header class="lec-head">
+    <div class="lec-num">23</div>
+    <div>
+      <h2 id="mkb4-top">Formalizing the Metatheory</h2>
+      <p class="lec-meta">Jasmin Blanchette (LMU Munich), from a short recorded fragment. No deck accompanies this material, so the section is reconstructed from the recording alone and is deliberately shorter than the others.</p>
+    </div>
+  </header>
+
+  <p class="lead">The earlier lectures in this series were about the calculus: saturation as a proof-search framework, then resolution and superposition as the rules that drive it. This one turns the camera round and looks at what happens when you take that theory into a proof assistant and formalize it. Blanchette works in Isabelle, and the part of the lecture the recording preserves is not about the clever steps of a completeness proof at all. It is about the library types you need underneath such a proof, and about the two occasions on which the standard library's abstraction turned out to be very slightly not the one the project needed.</p>
+
+  <h3 id="mkb4-multisets">Why multisets are the type in question</h3>
+
+  <p>The running example is finite multisets, and the reason they matter here is worth stating explicitly, because the recording assumes it rather than explains it. In the superposition lecture a clause was a <em>multiset</em> of literals, not a set of them. That is the standard choice in this field, and it is not cosmetic: keeping duplicate literals rather than silently merging them is what makes factoring an explicit inference rule with something to do, and the multiset extension of a term ordering is what gives you the ordering on clauses that the redundancy criterion is stated in terms of. So a formalization of the metatheory of a saturation prover is, from its first line, a formalization written on top of a multiset type.</p>
+
+  <p>Blanchette's point was that Isabelle is in good shape here. Finite multisets are already defined in the library and are already used a great deal, so this is one abstraction a formalization can simply pick up and lean on. That is why his examples in this part of the lecture were finite multisets: not because the interesting cases are finite, but because that is the case where the library already agrees with you.</p>
+
+  <h3 id="mkb4-general">Two generalisations the projects actually needed</h3>
+
+  <p>The interesting part is what happened when the library stopped agreeing. He described two projects that each needed a variant the standard type does not cover.</p>
+
+  <ul>
+    <li><strong>Multisets with infinite multiplicities.</strong> One case study needed a multiset in which an element may occur infinitely often. He did not go into what that case study was.</li>
+    <li><strong>Weighted sets.</strong> A second project needed something he called a weighted set. The idea is a small step from a multiset: a multiset attaches a multiplicity to each element, and a multiplicity is really just a kind of weight, so let the weight come from some other structure instead of from the natural numbers. His example of where that is the natural abstraction was probability distributions, where the weight you want is a real number rather than a count.</li>
+  </ul>
+
+  <figure class="fig">
+    <svg viewBox="0 0 700 262" role="img" aria-label="Three panels side by side, each listing elements a, b and c against a multiplicity column. In the first panel, headed Set, every multiplicity is 1 and the caption says the multiplicity is 0 or 1. In the second, headed Multiset, the multiplicities are 1, 3 and 2, and the caption says the multiplicity is a natural number. In the third, headed Weighted set, the multiplicities are 0.5, 0.2 and 0.3, and the caption says the multiplicity is a weight from some other structure. Arrows run from the first panel to the second and from the second to the third, each labelled generalise.">
+      <defs>
+        <marker id="mkb4-arw" markerWidth="9" markerHeight="8" refX="8" refY="4" orient="auto" markerUnits="userSpaceOnUse">
+          <path d="M0,0 L9,4 L0,8 z" fill="var(--muted)"></path>
+        </marker>
+      </defs>
+
+      <text x="114" y="40" text-anchor="middle" font-size="14" fill="var(--accent)">Set</text>
+      <rect x="16" y="54" width="196" height="140" rx="12" fill="var(--surface)" stroke="var(--hairline)"></rect>
+      <text x="68" y="94" text-anchor="middle" font-size="13" fill="var(--muted)">a</text>
+      <text x="68" y="126" text-anchor="middle" font-size="13" fill="var(--muted)">b</text>
+      <text x="68" y="158" text-anchor="middle" font-size="13" fill="var(--muted)">c</text>
+      <text x="156" y="94" text-anchor="middle" font-size="13" fill="var(--accent)">1</text>
+      <text x="156" y="126" text-anchor="middle" font-size="13" fill="var(--accent)">1</text>
+      <text x="156" y="158" text-anchor="middle" font-size="13" fill="var(--accent)">1</text>
+      <text x="114" y="220" text-anchor="middle" font-size="11.5" fill="var(--muted)">multiplicity is 0 or 1:</text>
+      <text x="114" y="238" text-anchor="middle" font-size="11.5" fill="var(--muted)">in, or out</text>
+
+      <line x1="218" y1="124" x2="246" y2="124" stroke="var(--muted)" stroke-width="1.6" marker-end="url(#mkb4-arw)"></line>
+      <text x="232" y="112" text-anchor="middle" font-size="10.5" fill="var(--muted)">generalise</text>
+
+      <text x="350" y="40" text-anchor="middle" font-size="14" fill="var(--accent)">Multiset</text>
+      <rect x="252" y="54" width="196" height="140" rx="12" fill="var(--surface)" stroke="var(--hairline)"></rect>
+      <text x="304" y="94" text-anchor="middle" font-size="13" fill="var(--muted)">a</text>
+      <text x="304" y="126" text-anchor="middle" font-size="13" fill="var(--muted)">b</text>
+      <text x="304" y="158" text-anchor="middle" font-size="13" fill="var(--muted)">c</text>
+      <text x="392" y="94" text-anchor="middle" font-size="13" fill="var(--accent)">1</text>
+      <text x="392" y="126" text-anchor="middle" font-size="13" fill="var(--accent)">3</text>
+      <text x="392" y="158" text-anchor="middle" font-size="13" fill="var(--accent)">2</text>
+      <text x="350" y="220" text-anchor="middle" font-size="11.5" fill="var(--muted)">multiplicity is a count:</text>
+      <text x="350" y="238" text-anchor="middle" font-size="11.5" fill="var(--muted)">a natural number</text>
+
+      <line x1="454" y1="124" x2="482" y2="124" stroke="var(--muted)" stroke-width="1.6" marker-end="url(#mkb4-arw)"></line>
+      <text x="468" y="112" text-anchor="middle" font-size="10.5" fill="var(--muted)">generalise</text>
+
+      <text x="586" y="40" text-anchor="middle" font-size="14" fill="var(--accent)">Weighted set</text>
+      <rect x="488" y="54" width="196" height="140" rx="12" fill="var(--accent)" fill-opacity="0.07" stroke="var(--hairline)"></rect>
+      <text x="540" y="94" text-anchor="middle" font-size="13" fill="var(--muted)">a</text>
+      <text x="540" y="126" text-anchor="middle" font-size="13" fill="var(--muted)">b</text>
+      <text x="540" y="158" text-anchor="middle" font-size="13" fill="var(--muted)">c</text>
+      <text x="628" y="94" text-anchor="middle" font-size="13" fill="var(--accent)">0.5</text>
+      <text x="628" y="126" text-anchor="middle" font-size="13" fill="var(--accent)">0.2</text>
+      <text x="628" y="158" text-anchor="middle" font-size="13" fill="var(--accent)">0.3</text>
+      <text x="586" y="220" text-anchor="middle" font-size="11.5" fill="var(--muted)">multiplicity is a weight</text>
+      <text x="586" y="238" text-anchor="middle" font-size="11.5" fill="var(--muted)">from some other structure</text>
+    </svg>
+    <figcaption>The same idea at three levels of generality. Only the multiplicity column changes: a truth value, then a natural number, then a weight drawn from a structure you choose. The third panel with real weights that sum to one is a probability distribution, which was Blanchette's example of why one might want it.</figcaption>
+  </figure>
+
+  <h3 id="mkb4-bnf">What it costs to add a type like that</h3>
+
+  <p>Isabelle's finite multiset is defined the way you would expect: as the type of functions from the element type to the natural numbers that are non-zero only finitely often. Blanchette's next remark was the honest one. If it were only that, this would be a short story. The complication is that you often want to use such a type in a nested recursive definition, that is, to define a datatype one of whose components is a multiset of the datatype being defined. Not every type constructor is allowed there. An unrestricted set constructor is not, because it makes the type too large, which he pointed at through a cardinality argument of the kind Cantor's theorem gives you.</p>
+
+  <p>Isabelle's answer to this is a registration step for the new type. The name is garbled in the recording, but the description matches Isabelle's bounded natural functors: you supply the type with a set of operators, prove a list of properties about them, and the type is then admissible in nested recursive positions. He did not go through those properties, and neither will this section.</p>
+
+  <p>The two new types were built by exactly this route, and in both cases the construction is the standard multiset with one component swapped out.</p>
+
+  <ul>
+    <li>For multisets with infinite multiplicities, the natural numbers were replaced by the extended naturals, so that an element can have an infinite count, and the finiteness condition on the support was relaxed to countability.</li>
+    <li>For weighted sets, the natural numbers were replaced by a general weight type.</li>
+  </ul>
+
+  <p>A general weight type cannot be completely arbitrary, and this is where the recording is at its most damaged, so only the shape of the answer is reported here. Two conditions on the weight structure are recognisable. One is a refinement property: if two sums of weights agree, the parts can be split into a rectangle whose row sums and column sums recover the two original decompositions. The other is a positivity condition: if two weights add up to zero, then both of them are zero. Together they rule out the structures where weights can cancel each other out. The instances he named as satisfying this were the natural numbers and the non-negative reals, and the point of stating the conditions abstractly is that the weighted set type then works for all of them at once rather than being rebuilt per case.</p>
+
+  <div class="quiz">
+    <script type="application/json">
+    {"type":"mc","q":"In the step from a multiset to a weighted set, what is generalised?","options":["The element type, which may now be infinite rather than finite","The multiplicity attached to each element, which becomes a weight drawn from some other structure rather than a natural number count","The support, which may now contain uncountably many elements","The equality on elements, which becomes an arbitrary equivalence relation"],"answer":1,"explain":"A multiset is a set with a multiplicity attached to each element, and a multiplicity is a weight that happens to be a natural number. A weighted set takes the weight from a more general structure instead, which is what makes probability distributions with real weights an instance. Blanchette's other generalisation, multisets with infinite multiplicities, is a different one: there the natural numbers become the extended naturals and the support condition is relaxed from finite to countable."}
+    </script>
+  </div>
+
+  <h3 id="mkb4-lesson">Where the effort in this kind of formalization goes</h3>
+
+  <p>The lecture supports a modest general observation, and it is worth drawing out without inflating it. Formalizing the metatheory of a prover is not mostly about the clever parts of the proof. A substantial share of the work is discovering that the abstraction the standard library offers is very slightly not the abstraction you need, and then generalising it: redoing the underlying construction, re-registering the new type so it is admissible where the old one was, and finding the right conditions on the parameter you have just introduced so that the generalisation covers your case without losing the properties the original had.</p>
+
+  <div class="callout key">
+    <p><span class="co-tag">Worth remembering</span> Both generalisations here are one component swapped in an existing definition, and both still cost a construction and a body of proofs. The gap between "the library nearly has this" and "the library has this" is where a lot of formalization time goes, and it is invisible in the finished paper.</p>
+  </div>
+
+  <h3 id="mkb4-gaps">What the recording preserves</h3>
+
+  <p>Only a fragment of this material survives on the recording, and the surviving part is what is written above. The audio then moves on to unrelated talks, so there is no way to tell how it continued or what it concluded with, and nothing has been imported from the earlier lectures to cover the gap. One further gap is worth naming, because it is a whole lecture rather than a passage. The deck for lecture 1 announces four lectures: resolution, superposition, lambda-superposition, and AVATAR. The first three are sections 21, 22 and 23 here. The fourth, on AVATAR, the architecture that adds case splitting on top of a saturation prover and is the reason section 21 notes that resolution and superposition do not branch by themselves, is not covered anywhere in these notes: no deck for it was circulated and no recording of it survives. The material above is not that lecture, and does not mention AVATAR at all.</p>
+</section>

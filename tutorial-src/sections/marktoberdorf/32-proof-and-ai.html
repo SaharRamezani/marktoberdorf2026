@@ -1,0 +1,141 @@
+<section class="lecture" id="sec-mk-md2" data-num="28" data-day="mk-scale" data-title="Proof and AI: What Changes" data-lecturer="Mike Dodds">
+  <header class="lec-head">
+    <div class="lec-num">28</div>
+    <div>
+      <h2 id="mkd4-top">Proof and AI: What Changes</h2>
+      <p class="lec-meta">Lecture by Mike Dodds, from his deck <em>Doing Proof: Today, Tomorrow, Next Year</em> and the recording of the session. This section covers the last two of the talk's four parts, "AI seems like a massive deal" and "Tentative advice on building with AI". He labelled part 4 tentative on the slides and said so again in the room: these are his opinions as of today, they might change, and the advice should be taken in that light.</p>
+    </div>
+  </header>
+
+  <p class="lead">The previous section ended with a diagram in which a second curve, labelled AI-assisted proofs, crosses the break-even line at a fraction of the cost of the first. Part 3 argues for that curve, and it is not an argument about proof automation getting better in the usual sense. It is an argument about an asymmetry: generating a candidate is becoming cheap, checking one was always cheap, and the two together behave very differently from either alone.</p>
+
+  <h3 id="mkd4-trends">What the trends say</h3>
+
+  <p>Dodds opens with external evidence rather than his own: METR's measurements of how long a task an agent can complete, Epoch's FrontierMath results across tiers 1 to 3, and, as a counterweight, an example on the Jacobian conjecture where the model was, in his caption, very confused <button type="button" class="slide-ref" data-slide="dodds:122" title="Open this slide">slides 122-124</button>. The trends he draws out are that capability is rising in both frontier and open models, that the cost of a fixed capability has consistently fallen, and that models are now good at graduate-level mathematics and formal verification <button type="button" class="slide-ref" data-slide="dodds:125" title="Open this slide">slide 125</button>.</p>
+
+  <p>Three expectations follow: continued rapid capability increases, models outperforming humans in most technical domains, and expensive capabilities becoming cheap along a path from possible to expensive to cheap <button type="button" class="slide-ref" data-slide="dodds:126" title="Open this slide">slide 126</button>. Speaking to the room he put the middle claim pointedly: the students should expect these systems to outperform them at many of the tasks the school had been teaching, and should expect the capability to keep getting cheaper. For mathematics he expects models wildly better than humans, with chess as the analogy, because gains are not slowing, because proofs are a good training signal precisely in being checkable, and because mathematical ability is complementary to software engineering <button type="button" class="slide-ref" data-slide="dodds:127" title="Open this slide">slide 127</button>.</p>
+
+  <p>This is not sold as good news. The risk list is rapid growth in dangerous capabilities such as cyber and bio, a lag of roughly six to twelve months between a capability existing in the best models and its arrival with bad actors, ongoing difficulty controlling powerful systems, and a steady supply of damaging incidents. His stated view is that AI risk control needs urgent, focused action from the people in the room <button type="button" class="slide-ref" data-slide="dodds:133" title="Open this slide">slide 133</button>.</p>
+
+  <h3 id="mkd4-mechanism">The mechanism: a cheap oracle makes guessing safe</h3>
+
+  <p>The uplift claim concerns one axis of the diagram from part 2. Nothing on the benefit side changes: the client wants the same reliability and will not pay more for it. What changes is cost, because most of the cost of a proof was never the checking. It was the labour of producing the candidate: definitions, lemma structure, invariants, tactics. If that becomes cheap, a wide band of projects that were possible but did not pencil out rises above the line without anyone arguing harder about their value <button type="button" class="slide-ref" data-slide="dodds:128" title="Open this slide">slides 128-129</button>.</p>
+
+  <p>What makes this safe is the checker. A generator that is fast, powerful and opaque may be wrong; a verifier is slow, simple and legible, and its answer is guaranteed. In series, the untrusted component is allowed to be untrustworthy, because nothing it produces is believed until the trusted one agrees <button type="button" class="slide-ref" data-slide="dodds:143" title="Open this slide">slide 143</button>.</p>
+
+  <figure class="fig">
+    <svg viewBox="0 0 660 260" role="img" aria-label="An untrusted generator on the left produces candidate artefacts that flow into a trusted checker on the right. The generator box is labelled heuristic search: any means available, quick, powerful, opaque, may be wrong. The checker box is labelled verification: predictable, legible, slow but simple, guaranteed correctness. A specification file feeds into the checker from below and is marked as the thing nothing checks. Two outputs leave the checker: accept, the only path to belief, and reject, which costs one more attempt and loops back to the generator.">
+      <defs>
+        <marker id="mkd4-arw" markerWidth="9" markerHeight="8" refX="8" refY="4" orient="auto" markerUnits="userSpaceOnUse">
+          <path d="M0,0 L9,4 L0,8 z" fill="var(--muted)"></path>
+        </marker>
+      </defs>
+      <rect x="20" y="46" width="216" height="96" rx="12" fill="var(--surface)" stroke="var(--crit)" stroke-width="1.4"></rect>
+      <text x="128" y="70" text-anchor="middle" font-size="13" fill="var(--crit)">AI: heuristic search</text>
+      <text x="128" y="92" text-anchor="middle" font-size="11.5" fill="var(--muted)">any means available</text>
+      <text x="128" y="110" text-anchor="middle" font-size="11.5" fill="var(--muted)">quick, powerful, opaque</text>
+      <text x="128" y="128" text-anchor="middle" font-size="11.5" fill="var(--muted)">may be wrong</text>
+      <text x="128" y="32" text-anchor="middle" font-size="12" fill="var(--crit)">untrusted</text>
+
+      <line x1="240" y1="94" x2="292" y2="94" stroke="var(--muted)" stroke-width="1.6" marker-end="url(#mkd4-arw)"></line>
+      <text x="266" y="82" text-anchor="middle" font-size="11" fill="var(--muted)">candidate</text>
+
+      <rect x="296" y="46" width="200" height="96" rx="12" fill="var(--accent)" fill-opacity="0.08" stroke="var(--accent)" stroke-width="1.4"></rect>
+      <text x="396" y="70" text-anchor="middle" font-size="13" fill="var(--accent)">checker: verification</text>
+      <text x="396" y="92" text-anchor="middle" font-size="11.5" fill="var(--muted)">predictable, legible</text>
+      <text x="396" y="110" text-anchor="middle" font-size="11.5" fill="var(--muted)">slow but simple</text>
+      <text x="396" y="128" text-anchor="middle" font-size="11.5" fill="var(--muted)">guaranteed correctness</text>
+      <text x="396" y="32" text-anchor="middle" font-size="12" fill="var(--accent)">trusted</text>
+
+      <rect x="296" y="196" width="200" height="34" rx="9" fill="var(--surface)" stroke="var(--hairline)"></rect>
+      <text x="396" y="218" text-anchor="middle" font-size="11.5" fill="var(--ink)">some_specification.lean</text>
+      <line x1="396" y1="194" x2="396" y2="148" stroke="var(--muted)" stroke-width="1.5" marker-end="url(#mkd4-arw)"></line>
+      <text x="510" y="216" font-size="11.5" fill="var(--muted)">nothing checks this</text>
+
+      <line x1="500" y1="76" x2="548" y2="76" stroke="var(--muted)" stroke-width="1.5" marker-end="url(#mkd4-arw)"></line>
+      <text x="554" y="72" font-size="12" fill="var(--accent)">accept</text>
+      <text x="554" y="88" font-size="10.5" fill="var(--muted)">the only path to belief</text>
+      <path d="M 500 118 C 546 118, 560 168, 300 172 C 140 175, 90 160, 90 148" fill="none" stroke="var(--muted)" stroke-width="1.4" stroke-dasharray="5 4" marker-end="url(#mkd4-arw)"></path>
+      <text x="300" y="166" text-anchor="middle" font-size="11" fill="var(--muted)">reject: costs one more attempt</text>
+    </svg>
+    <figcaption>The shape of the argument, from <button type="button" class="slide-ref" data-slide="dodds:143" title="Open this slide">slides 143-145</button>. The asymmetry between the two exit paths is what makes cheap generation tolerable, and the specification at the bottom is the one input the arrangement does not check.</figcaption>
+  </figure>
+
+  <p>In the room he stated the mechanism more directly than the slides do, and called it outrageous that it works: if you can shrink the task down to one thing with an oracle the system can check for itself, you keep turning the loop until it hands you something that passes. Guess and check, at a scale that makes guessing a reasonable strategy. A theorem, he said, is a very tiny surface to check. You dispatch agents, they come back with a proof, and you do not much care how they got there, because the kernel has told you the theorem holds. He tied that to the Lean lecture earlier in the school, which had described the kernel as the small trusted thing everything else answers to.</p>
+
+  <p>The same lecture supplies the reason the arrangement is sound: accepting something false is a disaster, while rejecting something true is merely inconvenient. That asymmetry is normally a cost, and it is what makes proof assistants pedantic. Put a cheap generator in front of it and the asymmetry becomes the point, because inconvenience is now paid in machine time. The gap Dodds is careful about is the other one: nothing in the loop validates the specification. His own qualification was that the kernel's verdict holds modulo adversarial attack, and a capable system optimising against a checker is exactly the adversary a soundness bug is waiting for.</p>
+
+  <div class="quiz">
+    <script type="application/json">
+    {"type":"mc","q":"Dodds called it outrageous that guess-and-check works, and argued it works for proof in a way it does not for most AI applications. What carries the argument?","options":["The generator is fine-tuned on verified code, so its guesses are usually right","A theorem is a tiny surface that a small trusted checker can decide, so a wrong guess costs one more attempt while only an accepted guess is believed","Proof assistants are too slow for an AI to fool them","The checker explains its rejections, so the generator learns from them"],"answer":1,"explain":"The loop is safe because of an error asymmetry, not because the generator is reliable. Rejecting a true candidate wastes machine time; accepting a false one destroys the guarantee. Since the kernel decides the theorem, nobody has to read how the proof was found. Dodds' own caveat is that this holds modulo adversarial attack: a system optimising against the checker is precisely what finds a soundness bug."}
+    </script>
+  </div>
+
+  <h3 id="mkd4-oversight">Formal oversight, and why it scales</h3>
+
+  <p>The application he cares about is oversight of AI systems, not faster verification of what we already verify. In formal oversight, a problem description and a specification go in, the model returns a proposed solution together with a proof that it meets the specification, and a checker checks the proof <button type="button" class="slide-ref" data-slide="dodds:145" title="Open this slide">slide 145</button>. His worked target is verified agent containment: take the stack beneath an agent, from permission controls through the OCI runtimes runc and crun, down through syscalls, the kernel and the hardware, verify the legacy implementation, upgrade the AI-built components, and trust the result enough to run agents in consequential environments <button type="button" class="slide-ref" data-slide="dodds:148" title="Open this slide">slide 148</button>.</p>
+
+  <figure class="fig">
+    <svg viewBox="0 0 660 250" role="img" aria-label="Two curves plotted against time, from AI being stupid on the left to AI being clever on the right. The first curve, are AI actions understandable, starts high and falls towards the bottom right. The second curve, can the AI prove it met a specification, starts low and rises towards the top right. The curves cross near the middle.">
+      <defs>
+        <marker id="mkd4-ar2" markerWidth="9" markerHeight="8" refX="8" refY="4" orient="auto" markerUnits="userSpaceOnUse">
+          <path d="M0,0 L9,4 L0,8 z" fill="var(--muted)"></path>
+        </marker>
+      </defs>
+      <line x1="70" y1="202" x2="620" y2="202" stroke="var(--muted)" stroke-width="1.6" marker-end="url(#mkd4-ar2)"></line>
+      <line x1="70" y1="202" x2="70" y2="30" stroke="var(--muted)" stroke-width="1.6" marker-end="url(#mkd4-ar2)"></line>
+      <text x="52" y="44" text-anchor="end" font-size="12" fill="var(--muted)">yes</text>
+      <text x="52" y="200" text-anchor="end" font-size="12" fill="var(--muted)">no</text>
+      <text x="86" y="226" font-size="12" fill="var(--muted)">AI stupid</text>
+      <text x="600" y="226" text-anchor="end" font-size="12" fill="var(--muted)">AI clever, later</text>
+
+      <path d="M 80 56 C 220 62, 330 100, 420 150 C 480 182, 540 192, 596 196" fill="none" stroke="var(--crit)" stroke-width="2.2"></path>
+      <text x="200" y="50" font-size="12.5" fill="var(--crit)">are AI actions understandable?</text>
+
+      <path d="M 80 192 C 200 188, 300 172, 390 128 C 470 90, 530 64, 596 54" fill="none" stroke="var(--accent)" stroke-width="2.2"></path>
+      <text x="592" y="78" text-anchor="end" font-size="12.5" fill="var(--accent)">can the AI prove it met a specification?</text>
+    </svg>
+    <figcaption>The scaling claim from <button type="button" class="slide-ref" data-slide="dodds:146" title="Open this slide">slides 146-147</button>. Oversight that depends on a human following the reasoning gets worse as the system gets more capable; checking a proof gets better, because what improves is the system's ability to produce the proof, not the reviewer's ability to read it.</figcaption>
+  </figure>
+
+  <h3 id="mkd4-hard">Three reasons it is hard</h3>
+
+  <p><strong>Proof is very hard.</strong> The reference figure is seL4 around 2009: roughly 8,500 lines of C against roughly 165,000 lines of Isabelle proof <button type="button" class="slide-ref" data-slide="dodds:151" title="Open this slide">slide 151</button>. He puts the heading back up with two words added, "used to be?", which is the bet in miniature <button type="button" class="slide-ref" data-slide="dodds:152" title="Open this slide">slide 152</button>. A twenty-to-one proof-to-code ratio is fatal when people write the proof and merely expensive when they do not.</p>
+
+  <p><strong>Tooling and semantics are hard.</strong> The trust pipeline runs from system code, say Rust, through a model of that code in Lean, and trusts library models, language semantics, and the hardware and operating system underneath <button type="button" class="slide-ref" data-slide="dodds:154" title="Open this slide">slides 154-155</button>. The survey is sobering: quite good verifiers for C, C++, Rust and LLVM, though mostly not in Lean; promising prototypes for Go, JavaScript and Python; nothing for Zig, Ruby, PHP, Perl, Visual Basic or Swift <button type="button" class="slide-ref" data-slide="dodds:156" title="Open this slide">slide 156</button>. Here he offered the most provocative prediction of the talk, that we are entering "a dark age of programming languages" in which no new convenient language gets built because everyone leans on AI to work in the ones that exist. Below the model sits the assistant, and the pipeline trusts its logical core and runtime <button type="button" class="slide-ref" data-slide="dodds:157" title="Open this slide">slide 157</button>. Citing work on soundness bugs, he notes that Lean is only mostly right, and that this matters under oversight, because a capable system will find any available way to cheat <button type="button" class="slide-ref" data-slide="dodds:158" title="Open this slide">slides 158-160</button>.</p>
+
+  <p><strong>Specification is very, very hard.</strong> The pipeline assumes the user understands the specification and knows what they want <button type="button" class="slide-ref" data-slide="dodds:162" title="Open this slide">slide 162</button>. Beside seL4's 8,500 lines of C and 165,000 lines of proof sits a specification of roughly 4,900 lines of Isabelle, more than half the size of the code, and nothing verifies it <button type="button" class="slide-ref" data-slide="dodds:163" title="Open this slide">slide 163</button>. Agent containment needs a stack of specifications: user intent and safety, permission controls, container and syscall specifications, kernel interfaces, hardware <button type="button" class="slide-ref" data-slide="dodds:164" title="Open this slide">slide 164</button>. The scenarios he wants to be ready for are of another scale: rebuild Chrome in Rust, find and fix all the bugs in Windows, build a self-driving car controller and make no mistakes. The slide ends with a question and an instruction: how do we specify and oversee agents at vast and ludicrous scale, and please work on this problem <button type="button" class="slide-ref" data-slide="dodds:165" title="Open this slide">slide 165</button>.</p>
+
+  <h3 id="mkd4-grind">Part 4: grind to victory</h3>
+
+  <p>Models, on his account, are good at mathematical reasoning, at coding and Lean, at nit-picking and above all at persistence, and bad at judgement about whether the current activity is right, at creativity about alternatives, and at executive control, which he glossed in the room as noticing that an approach is not working and changing tack <button type="button" class="slide-ref" data-slide="dodds:174" title="Open this slide">slide 174</button>. The method is built around that profile: supply the judgement and the stopping condition yourself, and let the machine supply the persistence.</p>
+
+  <div class="callout def">
+    <p><span class="co-tag">Definition</span> <strong>Grind to victory.</strong> Two ingredients: an <em>objective</em>, something you want to build, and an <em>oracle</em>, a checkable root of trust pointing at the objective. Then a loop: the agent builds, checks the oracle and fixes the gaps, and you iterate for a long time <button type="button" class="slide-ref" data-slide="dodds:177" title="Open this slide">slide 177</button>. The oracle need not be a theorem; tests, differential testing, an existing implementation, a coverage metric or a judge all qualify. It must be hard to game, human-reviewable and genuinely aimed at the objective <button type="button" class="slide-ref" data-slide="dodds:178" title="Open this slide">slide 178</button>. His practical test for the first is whether you can state the oracle so the agent cannot play funny tricks, or at least so you can tell when it is.</p>
+  </div>
+
+  <p>The reported output is five projects in roughly two to three months: ACL2Lean, which replays ACL2 proofs in Lean; golean, a Go semantics with an Iris-based verifier; grossmith, a Go program generator; brick-wp, a tactic library for BRiCk C++ verification; and cerberus-lean, a port of the Cerberus C semantics <button type="button" class="slide-ref" data-slide="dodds:179" title="Open this slide">slide 179</button>. The Go verifier is five nested grind loops, each with an oracle: a test set that must compile, run and exercise features affecting return values; a Lean interpreter checked by differential testing against real Go; a relational semantics proved equivalent to the interpreter and carrying Iris properties; verification of small programs, with the relational semantics outside the trusted computing base; and the generator, which must always emit conformant Go and cover a stated feature set <button type="button" class="slide-ref" data-slide="dodds:180" title="Open this slide">slides 180-184</button>. He was concrete about how small a useful oracle can be: a theorem that executing the semantics on a program adding two numbers yields two is enough to grind against, and the proof behind it may be as baroque as the agent likes, because what you read is the statement and the kernel's tick.</p>
+
+  <p>ACL2Lean shows the same structure on a harder problem. ACL2 emits no proof objects and reasons by term reduction, so replaying its proofs in Lean needs a deep embedding, instrumentation of a very large legacy tool to emit proof logs, and tactic engineering to walk the reconstructed tree, which he says is beyond what he could have built himself. What makes it grindable is that ACL2 already has a large body of theorems known to be true, so a replayer either passes them or does not. His tactic is to start with a trivial slice, run every grind loop over that narrow case, then widen one category at a time while keeping the earlier cases passing <button type="button" class="slide-ref" data-slide="dodds:186" title="Open this slide">slides 186-187</button>. Named future targets are a real Raft implementation via golean, libxml2 via cerberus-lean, the Rust compiler and the Linux kernel <button type="button" class="slide-ref" data-slide="dodds:188" title="Open this slide">slide 188</button>. Compiler verification he sees as almost entirely grind loops, a semantics per intermediate representation plus proofs between them, and in the room he put a deliberately aggressive number on the kernel: a substantial slice of it, perhaps twelve to twenty-four months away.</p>
+
+  <h3 id="mkd4-advice">The rest of the advice, with its hedges</h3>
+
+  <ul>
+    <li><strong>Do not read the code,</strong> at least most of it. Oversight is the punishing limit, and reading every line does not survive a build of tens of thousands of lines <button type="button" class="slide-ref" data-slide="dodds:190" title="Open this slide">slide 190</button>. What replaces it is narrowing the trusted base to the minimum you must read to believe the result.</li>
+    <li><strong>You need an anchor objective,</strong> which he introduced as the anti-psychosis slide. There must be one top-level auditable claim you personally understand, in his example that the Go semantics agrees with real Go under differential testing and that any result it produces satisfies a specification function, which may say only that the program does not crash. The nonsense underneath is fine to ignore; without the anchor you may be building total nonsense, and he has met people who could not say what their agent had produced <button type="button" class="slide-ref" data-slide="dodds:191" title="Open this slide">slide 191</button>.</li>
+    <li><strong>Use the best model, and pay for it.</strong> Cheaper models are much worse for conceptual, long-cycle work and leave you badly calibrated about what is possible, though they serve as sub-agents; test each new model on arrival, since not every one is an improvement <button type="button" class="slide-ref" data-slide="dodds:192" title="Open this slide">slide 192</button>. A $200 per month subscription beats API pricing, a useful artefact runs to thousands of dollars of tokens, and one overnight prototype run cost him about $400 <button type="button" class="slide-ref" data-slide="dodds:193" title="Open this slide">slide 193</button>.</li>
+    <li><strong>Work in arcs.</strong> Ask the agent for a charter, a plan for one slice of work, committed to the repository, then use a goal construct that forces continuation until the condition is met <button type="button" class="slide-ref" data-slide="dodds:194" title="Open this slide">slide 194</button>. He tells the agent the purpose is risk control and to build risk reduction into the charter, runs an orchestrator over sub-agents, and comes back hours later. His prompt <button type="button" class="slide-ref" data-slide="dodds:195" title="Open this slide">slide 195</button> requires every decision to be logged and tagged as agent-decided or user-decided, calling confusion of the two a critical trust failure. The unconditional emergency exit has an origin: he once set an unsatisfiable goal, and the monitor kept telling a stuck agent to keep grinding.</li>
+    <li><strong>Audit adversarially.</strong> At the end of each arc, start fresh agents briefed as outside reviewers rather than authors, aimed at the trust surfaces, allowed to propose their own audits but required to return answers. He reports this as amazingly effective, and explains it by saying a goal-directed agent starts believing its own account of its work <button type="button" class="slide-ref" data-slide="dodds:196" title="Open this slide">slide 196</button>.</li>
+    <li><strong>Sandbox.</strong> Do not rely on the client's built-in sandbox; run inside a paranoid one, restrict the filesystem to the working folder, and allow network access only to the model endpoint, so the agent cannot push to your repository. Keep the work in git worktrees <button type="button" class="slide-ref" data-slide="dodds:197" title="Open this slide">slide 197</button>.</li>
+    <li><strong>Climb the oversight ladder.</strong> From reviewing every line, to every change, to discussing each commit, to watching an arc go by, to running several arcs with mixed human and agent management, which is where he places himself, to agents deciding and supervising arcs, where the job resembles running an organisation rather than reading code <button type="button" class="slide-ref" data-slide="dodds:198" title="Open this slide">slide 198</button>.</li>
+    <li><strong>Be ambitious, and aim one to two years out.</strong> Most people aim too low, and tasks you know are currently impossible are useful precisely because how they fail tells you whether the systems are improving <button type="button" class="slide-ref" data-slide="dodds:199" title="Open this slide">slide 199</button>. The failure mode is building a tool for a weakness that will be gone in six months; the opposite error is aiming ten years out, at something an agent will simply solve while you are halfway through <button type="button" class="slide-ref" data-slide="dodds:200" title="Open this slide">slides 200-201</button>.</li>
+  </ul>
+
+  <div class="quiz">
+    <script type="application/json">
+    {"type":"fill","q":"In Dodds' grind-to-victory loop, what is the name of the checkable root of trust that the agent iterates against?","accept":["oracle","an oracle","the oracle"],"explain":"The two ingredients are an objective and an oracle. It can be tests, differential testing, an existing implementation, a theorem, a coverage metric or a judge, and it must be hard to game, human-reviewable and genuinely aimed at the objective. It is the untrusted-generator, trusted-checker pattern of part 3 applied to the engineering process rather than to a single proof."}
+    </script>
+  </div>
+
+  <p>His closing recommendation ties part 4 back to part 3. Scaling trust, he argued, is a problem the models will not grind out of existence, because why a human should trust an agent doing fast and incomprehensible things is not a question the agent can answer on its own behalf. Work on the trust interfaces that will still be there. He was equally clear that this is a minority position among the lecturers at the school, that he might be wrong, and that the right response is to form your own judgement rather than take his literally.</p>
+</section>

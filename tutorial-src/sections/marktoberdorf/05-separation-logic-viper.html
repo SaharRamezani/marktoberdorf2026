@@ -1,0 +1,651 @@
+<section class="lecture" id="sec-mk-4" data-num="4" data-day="mk-sl" data-title="Separation Logic with Viper" data-lecturer="Peter Mueller">
+  <header class="lec-head">
+    <div class="lec-num">4</div>
+    <div>
+      <h2 id="mk4-top">Automating Separation Logic Proofs with Viper</h2>
+      <p class="lec-meta">Peter Mueller, ETH Zurich. Deck: "Automating Separation Logic Proofs with Viper", with the opening lecture, the second lecture's live demos and the questions that followed both taken from the recordings.</p>
+    </div>
+  </header>
+
+  <p class="lead">This lecture is about one problem and one answer. The problem is that modular verification, where each procedure is verified once and independently of its callers, stops working as soon as procedures share a heap: the caller cannot tell what the callee left alone. The answer is separation logic, in the concrete form of access permissions and a separating conjunction, and the lecture shows how those ideas are turned into an automated tool. Viper is presented as an intermediate verification language: front ends for Rust, Go, Python and other languages encode their programs into it, and back ends discharge the resulting proof obligations with an SMT solver. The four parts of the deck follow that path, from the frame problem to the SCION router verification.</p>
+
+  <h3 id="mk4-demo">The opening demo: writing a specification badly, three times</h3>
+
+  <p>The lecture began not with a definition but with a live session in Visual Studio Code, where
+  a plugin runs the verifier in the background while you type. The point of the demo was not the
+  tool. It was that writing a correct specification is harder than it looks, and that the verifier
+  is what tells you so. The method is <code>indexOf</code>, which takes a sequence of integers and
+  an element, and returns the index where the element occurs.</p>
+
+  <div class="stepper" data-title="Building indexOf under a verifier">
+    <div class="step" data-label="A crash, before any specification">
+      <p>The first version checks whether the first element of the sequence is the one being looked
+      for, returns 0 if it is, and otherwise searches the tail recursively. The verifier immediately
+      underlines the condition: indexing into the sequence at 0 may exceed its length. That is right,
+      because the sequence may be empty. Note what has happened already. No specification has been
+      written yet, and the tool has still found a real bug.</p>
+    </div>
+    <div class="step" data-label="Guarding the empty case">
+      <p>Adding a check for an empty sequence, returning <code>-1</code> to mean not found, makes
+      verification succeed. What that success means is narrow but genuine: the program cannot crash.
+      No out of bounds access, no null dereference, no division by zero. Nothing yet has been proved
+      about what the method computes.</p>
+    </div>
+    <div class="step" data-label="The first postcondition">
+      <p>To say anything about behaviour you have to state it. The first postcondition is the
+      negative case: if the result is negative, the element does not occur in the sequence. That
+      verifies.</p>
+    </div>
+    <div class="step" data-label="The positive case fails, twice">
+      <p>The positive case says that if the result is not negative then it is a valid index and the
+      sequence holds the element there. This fails, and the reason is a genuine bug: the recursive
+      call searches a shorter sequence and its index is returned unchanged, so the method can only
+      ever return 0. Adding one to the recursive result fixes that and the postcondition still
+      fails, because of a second bug hiding behind the first. When the recursive call returns
+      <code>-1</code> for not found, adding one turns it into 0, which claims the element was found
+      at the front. The increment has to apply only when the recursive call actually succeeded.</p>
+    </div>
+    <div class="step" data-label="Now test the specification, not the code">
+      <p>With the method verified, the lecture made a point of general method: write a client and
+      reason about it, to check that the specification says what you meant. Searching for 2 in the
+      sequence 1, 2, 3 lets the client prove the result is 1.</p>
+    </div>
+    <div class="step" data-label="The lesson: modularity has a price">
+      <p>Change the sequence to 1, 2, 3, 2 and the same assertion no longer verifies, even though
+      the implementation would still return 1. Verification in Viper is modular, so the client is
+      checked against the specification alone and never looks at the body. The specification
+      promises an index where the element occurs, not the smallest one, so as far as the caller can
+      prove, the answer could be 1 or 3. The specification is weaker than the code, and only a
+      client exposes that.</p>
+    </div>
+  </div>
+
+  <div class="callout key">
+    <p><span class="co-tag">Key idea</span> A specification that verifies is not the same as a
+    specification that is right. The habit worth taking from the demo is to write a small client
+    against every specification you care about, because a proof about the implementation cannot
+    tell you that you specified the wrong thing.</p>
+  </div>
+
+  <div class="quiz">
+    <script type="application/json">
+    {"type":"mc",
+     "q":"In the demo, asserting that the result is 1 when searching for 2 in the sequence 1, 2, 3, 2 fails to verify. Why?",
+     "options":["The implementation contains a bug that only shows up with repeated elements","The verifier reasons about the call using only the specification, which promises some index of the element rather than the first","Sequences with repeated elements are not supported by Viper","The postcondition was never proved for the recursive case"],
+     "answer":1,
+     "explain":"The implementation would return 1, but modular verification never looks at the body. The specification allows any index where the element occurs, so from the caller's side the answer could be 1 or 3."}
+    </script>
+  </div>
+
+  <h3 id="mk4-modular">Modular reasoning and why the heap breaks it</h3>
+
+  <p>The goal is to verify each procedure modularly, that is, independently of its callers. Each procedure is equipped with a specification: a precondition that constrains the parameters and a postcondition that constrains the results. Two proof obligations follow. The implementation must satisfy the specification, and every caller must be verified against the specification alone, proving the precondition at the call site and relying on the postcondition afterwards. <button type="button" class="slide-ref" data-slide="viper:2" title="Open this slide">slide 2</button></p>
+
+<pre><code>method indexOf(s: Seq[Int], e: Int) returns (res: Int)
+  ensures res &lt; 0 ==&gt; !(e in s)
+  ensures 0 &lt;= res ==&gt; ...
+
+var x: Int
+x := indexOf(Seq(1, 2, 3, 2), 2)
+assert x == 1 || x == 3   // succeeds
+assert x == 1             // fails</code></pre>
+
+  <p>The second assertion fails even though the obvious implementation returns 1, because the caller sees only the specification, which does not say which of the two matching positions is returned. That is the price and the point of modularity: what is not written down is not available.</p>
+
+  <p>Viper's own heap is deliberately simple. A heap is a set of objects, there are no classes, and every object carries every field declared anywhere in the program. The type rules of a source language can be encoded on top, and memory consumption is not a concern because Viper programs are never executed. Objects are reached through references, with field read and update as the only operations, and there is no explicit deallocation. <button type="button" class="slide-ref" data-slide="viper:6" title="Open this slide">slide 6</button></p>
+
+  <p>Now the trouble starts. Consider a method that writes one field.</p>
+
+<pre><code>field f: Int
+field g: Int
+
+method set(p: Ref, v: Int)
+  requires p != null
+  ensures p.f == v
+{ p.f := v }
+
+x.f := 0
+x.g := 0
+set(x, 5)
+assert x.g == 0    // can the caller prove this?</code></pre>
+
+  <p>The postcondition says what <code>set</code> establishes, but says nothing about what <code>set</code> leaves untouched, so the caller has no way to conclude that <code>x.g</code> is still 0. This is the frame problem, and the deck rejects the two obvious repairs. Inspecting the body of the callee to find out which locations it modifies is not modular and does not work for abstract methods with no body at all. Assuming conservatively that every location may change is worse: the callee would need a specification entry for every field location, including ones it never touches, and every specification in the program would have to be edited whenever a new field is declared. <button type="button" class="slide-ref" data-slide="viper:7" title="Open this slide">slide 7</button></p>
+
+  <p>Aliasing is the second half of the problem. A method that writes <code>p.val := 5</code> and then <code>q.val := 7</code> cannot promise <code>p.val == 5</code>, because <code>p</code> and <code>q</code> may be the same reference. Asking the programmer to spell out all non-aliasing facts explicitly does not scale: you cannot enumerate the disjointness conditions of an unbounded data structure, and stating them exposes the internal layout of a module, which violates information hiding. <button type="button" class="slide-ref" data-slide="viper:8" title="Open this slide">slide 8</button></p>
+
+  <div class="callout key">
+    <p><span class="co-tag">Key idea</span> The deck states three challenges for sequential heap verification, and the rest of the lecture is organised as answers to them: reasoning about aliasing, framing for dynamic data structures, and writing specifications that preserve information hiding. Concurrency adds more, such as data races. <button type="button" class="slide-ref" data-slide="viper:9" title="Open this slide">slide 9</button></p>
+  </div>
+
+  <div class="quiz">
+    <script type="application/json">
+    {"type":"mc",
+     "q":"Why does the deck reject the rule \"assume conservatively that a callee may modify every field location\"?",
+     "options":["It is unsound, because a callee can also allocate new objects","It forces every procedure specification to mention locations it never touches, and to change whenever a new field is declared","It cannot be encoded into an SMT solver","It only works for programs without recursion"],
+     "answer":1,
+     "explain":"The rule is sound but useless. Specifications would have to list locations that are irrelevant to the procedure, and adding one field declaration anywhere in the program would invalidate them, which is the opposite of modular."}
+    </script>
+  </div>
+
+  <h3 id="mk4-ivl">Viper as an intermediate verification language</h3>
+
+  <p>Before the logic, the architecture. Viper sits in the middle of a stack. On top is a source language with its own program, specification language and methodology, handled by a front end. In the middle is the intermediate verification language, which is small, fixed and permission aware. Underneath are two interchangeable back end verifiers, one based on symbolic execution and one on verification condition generation, and both hand their proof obligations to an SMT solver. <button type="button" class="slide-ref" data-slide="viper:3" title="Open this slide">slides 3, 32</button></p>
+
+  <figure class="fig">
+    <svg viewBox="0 0 640 300" role="img" aria-label="A four layer stack. The top row has four front end boxes for Rust with Prusti, Python with Nagini, Go with Gobra and further languages. Arrows point down into a wide box for the Viper intermediate verification language. Below it two boxes, symbolic execution and verification condition generation, both feed a single SMT solver box at the bottom.">
+      <rect x="16" y="16" width="136" height="46" rx="8" fill="var(--surface)" stroke="var(--accent)" stroke-width="1.5"/>
+      <rect x="168" y="16" width="136" height="46" rx="8" fill="var(--surface)" stroke="var(--accent)" stroke-width="1.5"/>
+      <rect x="320" y="16" width="136" height="46" rx="8" fill="var(--surface)" stroke="var(--accent)" stroke-width="1.5"/>
+      <rect x="472" y="16" width="136" height="46" rx="8" fill="var(--surface)" stroke="var(--hairline)" stroke-width="1.5"/>
+      <text x="84" y="37" text-anchor="middle" font-size="13" fill="currentColor">Rust</text>
+      <text x="84" y="53" text-anchor="middle" font-size="12" fill="var(--muted)">Prusti</text>
+      <text x="236" y="37" text-anchor="middle" font-size="13" fill="currentColor">Python</text>
+      <text x="236" y="53" text-anchor="middle" font-size="12" fill="var(--muted)">Nagini</text>
+      <text x="388" y="37" text-anchor="middle" font-size="13" fill="currentColor">Go</text>
+      <text x="388" y="53" text-anchor="middle" font-size="12" fill="var(--muted)">Gobra</text>
+      <text x="540" y="37" text-anchor="middle" font-size="13" fill="currentColor">Java, Kotlin, ...</text>
+      <text x="540" y="53" text-anchor="middle" font-size="12" fill="var(--muted)">further front ends</text>
+      <line x1="84" y1="62" x2="84" y2="104" stroke="var(--muted)" stroke-width="1.5"/>
+      <line x1="236" y1="62" x2="236" y2="104" stroke="var(--muted)" stroke-width="1.5"/>
+      <line x1="388" y1="62" x2="388" y2="104" stroke="var(--muted)" stroke-width="1.5"/>
+      <line x1="540" y1="62" x2="540" y2="104" stroke="var(--muted)" stroke-width="1.5"/>
+      <polygon points="84,110 79,100 89,100" fill="var(--muted)"/>
+      <polygon points="236,110 231,100 241,100" fill="var(--muted)"/>
+      <polygon points="388,110 383,100 393,100" fill="var(--muted)"/>
+      <polygon points="540,110 535,100 545,100" fill="var(--muted)"/>
+      <rect x="16" y="112" width="592" height="50" rx="10" fill="var(--surface)" stroke="var(--good)" stroke-width="2"/>
+      <text x="312" y="134" text-anchor="middle" font-size="14" fill="currentColor">Viper language</text>
+      <text x="312" y="152" text-anchor="middle" font-size="12" fill="var(--muted)">intermediate verification language: heap, permissions, predicates, functions</text>
+      <line x1="180" y1="162" x2="180" y2="196" stroke="var(--muted)" stroke-width="1.5"/>
+      <line x1="444" y1="162" x2="444" y2="196" stroke="var(--muted)" stroke-width="1.5"/>
+      <polygon points="180,202 175,192 185,192" fill="var(--muted)"/>
+      <polygon points="444,202 439,192 449,192" fill="var(--muted)"/>
+      <rect x="60" y="204" width="240" height="44" rx="8" fill="var(--surface)" stroke="currentColor" stroke-width="1.5"/>
+      <rect x="324" y="204" width="240" height="44" rx="8" fill="var(--surface)" stroke="currentColor" stroke-width="1.5"/>
+      <text x="180" y="231" text-anchor="middle" font-size="13" fill="currentColor">symbolic execution</text>
+      <text x="444" y="231" text-anchor="middle" font-size="13" fill="currentColor">verification condition generation</text>
+      <line x1="180" y1="248" x2="180" y2="262" stroke="var(--muted)" stroke-width="1.5"/>
+      <line x1="444" y1="248" x2="444" y2="262" stroke="var(--muted)" stroke-width="1.5"/>
+      <line x1="180" y1="262" x2="444" y2="262" stroke="var(--muted)" stroke-width="1.5"/>
+      <line x1="312" y1="262" x2="312" y2="268" stroke="var(--muted)" stroke-width="1.5"/>
+      <polygon points="312,274 307,264 317,264" fill="var(--muted)"/>
+      <rect x="212" y="276" width="200" height="22" rx="6" fill="var(--surface)" stroke="var(--warn)" stroke-width="1.5"/>
+      <text x="312" y="292" text-anchor="middle" font-size="13" fill="currentColor">SMT solver</text>
+    </svg>
+    <figcaption class="fig-caption">The Viper stack: front ends above, two back ends and an SMT solver below. After the deck's architecture slides. <button type="button" class="slide-ref" data-slide="viper:3" title="Open this slide">slides 3, 52, 60</button></figcaption>
+  </figure>
+
+  <p>An earlier section of these notes covers Why3, which occupies the same position in its own stack: a small language in the middle, several front ends above it, and automatic provers below. The division of labour is the same, and so is the motivation, since writing one careful encoding into a shared middle language is cheaper than writing a verifier per source language. The difference is what the middle language builds in. Viper's assertion language is designed around a heap and around permissions to that heap, so the separation logic reasoning happens inside the intermediate language rather than inside each front end.</p>
+
+  <p>The Viper language itself is compact, and the lecturer walked through its four columns once the core concepts were in place. <button type="button" class="slide-ref" data-slide="viper:29" title="Open this slide">slide 29</button> The program part is a sequential imperative language with a deliberately basic type system. There is no primitive support for concurrency, which does not put concurrency out of reach: it is encoded into the sequential core. Control flow is both structured and unstructured, so <code>goto</code> is available and occasionally useful when encoding a source language. The heap, by contrast, is built in, and that is the difference from Why3 and Boogie, which have no heap of their own. The verification part has the usual contract features plus <code>inhale</code> and <code>exhale</code>, the two permission transfer statements discussed below, and permission introspection. The assertion language adds inductive predicates and abstraction functions, both covered here, fractional permissions, which separate read from write access and matter most for concurrency, iterated separating conjunction, which quantifies over permissions for structures with a lot of sharing, and magic wands, for partial data structures. The last two are not developed in this deck, so this section leaves them aside. Last come the mathematical theories: predefined datatypes including sequences, sets, multisets and maps, user-defined datatypes, uninterpreted functions and axioms. The predefined collections are what abstraction functions map into.</p>
+
+  <h3 id="mk4-permissions">Permissions and the separating conjunction</h3>
+
+  <p>The central move is to associate every heap location with a permission. <button type="button" class="slide-ref" data-slide="viper:10" title="Open this slide">slide 10</button> Permissions are created when a location is allocated by <code>new(f, g)</code>. They are held by method executions, not by objects. Read or write access to a location requires holding the permission for it, so an assignment such as <code>x.f := 5</code> is a proof obligation and not only an instruction. Permissions can be transferred, but never duplicated and never forged: the total amount in the system only changes at allocation.</p>
+
+  <div class="callout def">
+    <p><span class="co-tag">Definition</span> An <strong>access predicate</strong> <code>acc(p.f)</code> is the assertion "I hold the permission to the location <code>p.f</code>". Access predicates may not appear under negation, under disjunction, or on the left of an implication. Assertions may mix permissions with value constraints, as in <code>acc(p.f) &amp;&amp; p.f &gt; 0</code>. Most assertions in a program must be <strong>self-framing</strong>, meaning that they include the permissions needed to evaluate their own heap accesses, so a bare <code>requires p.f &gt; 0</code> is rejected. <button type="button" class="slide-ref" data-slide="viper:11" title="Open this slide">slide 11</button></p>
+  </div>
+
+  <p>Aliasing is then handled by a new connective, the separating conjunction. <code>A * B</code> holds in a state if both <code>A</code> and <code>B</code> hold and the state holds the sum of the permissions required by <code>A</code> and by <code>B</code>. If neither side contains access predicates, <code>A * B</code> and ordinary <code>A &amp;&amp; B</code> agree. In Viper there is no separate symbol: <code>&amp;&amp;</code> is the separating conjunction. <button type="button" class="slide-ref" data-slide="viper:12" title="Open this slide">slide 12</button></p>
+
+  <p>The consequence that makes the connective useful is this: holding the permission to <code>p.f</code> and the permission to <code>q.f</code> at the same time implies that <code>p</code> and <code>q</code> are different references, because permissions cannot be duplicated. Disjointness is derived from ownership instead of being stated by the programmer. The deck's example is a method <code>swap(a: Ref, b: Ref)</code> with precondition <code>acc(a.f) &amp;&amp; acc(b.f)</code>. For the call <code>swap(x, x)</code> that precondition is equivalent to false, so the call simply cannot be verified.</p>
+
+  <figure class="fig">
+    <svg viewBox="0 0 640 210" role="img" aria-label="Two rounded boxes side by side with a star between them. The left box, labelled acc of x dot f, contains a circle for the object x with an arrow to a cell holding f equals 5. The right box, labelled acc of y dot f, contains a circle for the object y with an arrow to a cell holding f equals 7. A caption below says that no location lies in both boxes, so x and y are different references.">
+      <text x="142" y="30" text-anchor="middle" font-size="14" fill="var(--accent)">acc(x.f)</text>
+      <text x="498" y="30" text-anchor="middle" font-size="14" fill="var(--good)">acc(y.f)</text>
+      <rect x="16" y="42" width="252" height="112" rx="14" fill="var(--surface)" stroke="var(--accent)" stroke-width="2"/>
+      <rect x="372" y="42" width="252" height="112" rx="14" fill="var(--surface)" stroke="var(--good)" stroke-width="2"/>
+      <circle cx="72" cy="98" r="20" fill="none" stroke="currentColor" stroke-width="1.5"/>
+      <text x="72" y="103" text-anchor="middle" font-size="13" fill="currentColor">x</text>
+      <line x1="94" y1="98" x2="146" y2="98" stroke="currentColor" stroke-width="1.5"/>
+      <polygon points="152,98 142,93 142,103" fill="currentColor"/>
+      <rect x="154" y="78" width="96" height="40" rx="6" fill="none" stroke="currentColor" stroke-width="1.5"/>
+      <text x="202" y="103" text-anchor="middle" font-size="13" fill="currentColor">f: 5</text>
+      <circle cx="428" cy="98" r="20" fill="none" stroke="currentColor" stroke-width="1.5"/>
+      <text x="428" y="103" text-anchor="middle" font-size="13" fill="currentColor">y</text>
+      <line x1="450" y1="98" x2="502" y2="98" stroke="currentColor" stroke-width="1.5"/>
+      <polygon points="508,98 498,93 498,103" fill="currentColor"/>
+      <rect x="510" y="78" width="96" height="40" rx="6" fill="none" stroke="currentColor" stroke-width="1.5"/>
+      <text x="558" y="103" text-anchor="middle" font-size="13" fill="currentColor">f: 7</text>
+      <text x="320" y="106" text-anchor="middle" font-size="26" fill="var(--muted)">*</text>
+      <text x="320" y="180" text-anchor="middle" font-size="12" fill="var(--muted)">no location lies in both boxes, therefore x &ne; y</text>
+    </svg>
+    <figcaption class="fig-caption">The separating conjunction as two disjoint footprints. Disjointness is a consequence of holding both permissions, not an extra assumption. After the deck's permission slides. <button type="button" class="slide-ref" data-slide="viper:10" title="Open this slide">slides 10-12</button></figcaption>
+  </figure>
+
+  <p>With permissions in place, framing becomes a proof rule rather than a convention. <button type="button" class="slide-ref" data-slide="viper:13" title="Open this slide">slide 13</button></p>
+
+  <div class="formula">
+    premise: { A } S { B }<br>
+    conclusion: { A &lowast; C } S { B &lowast; C }<br>
+    <span class="pill">side condition</span> S does not assign to a local variable that is free in C
+  </div>
+
+  <p>The frame <code>C</code> must be self-framing. If the heap locations constrained by <code>C</code> are disjoint from those modified by <code>S</code>, then <code>C</code> survives the statement. If they are not disjoint, the permissions required on the left of the conclusion exceed what any state can hold, the precondition is equivalent to false, and the triple holds trivially. The rule is therefore sound without any case analysis on aliasing.</p>
+
+  <p>The typical proof the deck returns to three times is small enough to check by hand. <button type="button" class="slide-ref" data-slide="viper:14" title="Open this slide">slides 14, 37-38</button></p>
+
+<pre><code>method set(p: Ref, v: Int)
+  requires acc(p.f)
+  ensures acc(p.f) &amp;&amp; p.f == v
+{ p.f := v }
+
+x := new(f); x.f := 2
+y := new(f); y.f := 7
+set(x, 5)
+assert x.f == 5 &amp;&amp; y.f == 7</code></pre>
+
+  <p>Note what changed compared with the version at the start. The precondition no longer says <code>p != null</code>; it says <code>acc(p.f)</code>, which is stronger and also implies non-nullness. The postcondition gives the permission back, otherwise the caller could never touch <code>x.f</code> again. And nothing at all is said about <code>y</code>, yet <code>y.f == 7</code> is provable, because the permission to <code>y.f</code> was never handed over.</p>
+
+  <div class="quiz">
+    <script type="application/json">
+    {"type":"mc",
+     "q":"A method has precondition acc(a.f) && acc(b.f). What happens at the call swap(x, x)?",
+     "options":["The call verifies, and a and b are known to be equal inside the body","The precondition is equivalent to false, so the call cannot be verified","The permission to x.f is duplicated so that both parameters own it","Viper reports a warning but accepts the call"],
+     "answer":1,
+     "explain":"The precondition demands the permission to a.f and the permission to b.f as a sum. With a and b both bound to x, that is twice the full permission to one location, which no state can hold, so the assertion is equivalent to false."}
+    </script>
+  </div>
+
+  <h3 id="mk4-predicates">Predicates for unbounded data structures</h3>
+
+  <p>The second lecture opens by fixing a running example and using it to show what the machinery so far cannot say. The example is a linked list of integers. A node has two fields, <code>elem</code> and <code>next</code>. A list is a chain of such nodes whose last node is a <em>sentinel</em>: it carries no value, its <code>next</code> is null, and on its own it represents the empty list. The operation under discussion is <code>append</code>, which walks the chain, and on reaching the sentinel allocates a fresh sentinel, stores the new element in the node that was the sentinel a moment ago, and links the two. Otherwise it recurses on the tail. <button type="button" class="slide-ref" data-slide="viper:18" title="Open this slide">slide 18</button></p>
+
+  <p>Two things then go wrong. The first is that access predicates reach only a fixed, statically known set of locations, and <code>append</code> needs the permission to every node it visits. Written out with what the language has so far, its precondition would be <code>acc(this.next)</code> and <code>acc(this.next.next)</code> and <code>acc(this.next.next.next)</code>, without end. There is no way to write it. The second is information hiding. Even the getter, whose precondition <code>acc(this.elem)</code> and postcondition <code>acc(this.elem) &amp;&amp; res == this.elem</code> do fit on one line, is written entirely in terms of field names, so any client is told exactly how the module lays out its data. And the functional behaviour of <code>append</code> cannot be expressed at all.</p>
+
+  <p>User-defined predicates fix this. A predicate has a name, a list of parameters, and a self-framing assertion as its body. Because the body may mention the predicate itself, a single predicate instance can denote a statically unbounded number of permissions. <button type="button" class="slide-ref" data-slide="viper:19" title="Open this slide">slide 19</button></p>
+
+<pre><code>predicate node(this: Ref) {
+  acc(this.elem) &amp;&amp; acc(this.next)
+}
+
+predicate list(this: Ref) {
+  acc(this.elem) &amp;&amp; acc(this.next) &amp;&amp;
+  (this.next != null ==&gt; list(this.next))
+}</code></pre>
+
+  <p>Recursion creates a new difficulty for a static tool: the verifier cannot know how far to unfold a recursive definition. <button type="button" class="slide-ref" data-slide="viper:20" title="Open this slide">slide 20</button> Viper therefore uses an <em>iso-recursive</em> semantics: a predicate instance and its body are different things, and permissions are held either by method executions or by predicate instances, never by both at once. <button type="button" class="slide-ref" data-slide="viper:21" title="Open this slide">slide 21</button> The stepper below follows the demo in which the need for that distinction becomes visible.</p>
+
+  <p>Exchanging one for the other is then an explicit step in the program text. An <code>unfold</code> statement trades a predicate instance for its body, and a <code>fold</code> statement trades the body back for the instance. <button type="button" class="slide-ref" data-slide="viper:22" title="Open this slide">slide 22</button></p>
+
+<pre><code>method foo(x: Ref)
+  requires list(x)
+  ensures list(x)
+{
+  unfold list(x)     // now we hold acc(x.elem), acc(x.next) and list(x.next)
+  x.next := null     // permitted
+  fold list(x)       // give the body back, obtain the instance again
+}</code></pre>
+
+  <div class="stepper" data-title="Why the predicate alone does not verify">
+    <div class="step" data-label="The specification looks complete">
+      <p>Give <code>append</code> the precondition <code>list(this)</code> and the postcondition
+      <code>list(this)</code>. A predicate instance is an assertion like any other, so the caller
+      transfers it to the callee and receives it back. The lecturer's image is a box: you put
+      permissions inside, you hand it to somebody else, they hand it back. And yet verification fails,
+      with the message that the assignment may lack permission, even though the body of
+      <code>list(this)</code> plainly contains <code>acc(this.next)</code>.</p>
+    </div>
+    <div class="step" data-label="Why a verifier must not unroll freely">
+      <p>The reason is not specific to separation logic. Any automatic verifier reasoning about
+      recursive definitions must be built so that it never unrolls one indefinitely. Take a method with
+      precondition <code>list(x)</code> whose body writes <code>y.next := null</code>. A verifier
+      hunting for the missing permission would open <code>list(x)</code>, find
+      <code>acc(x.next)</code>, which is not what it wants unless <code>x</code> and <code>y</code> are
+      equal, split on the implication, obtain <code>list(x.next)</code> in the non-null case, unroll
+      that, and continue. Nothing stops the search, so the verifier may fail to terminate.</p>
+    </div>
+    <div class="step" data-label="Iso-recursive semantics is the answer">
+      <p>So the instance and its body are made two different assertions on purpose. Mathematics does
+      not do this, because there a predicate simply is its interpretation and there is nothing to move
+      between. Here there is, and under that reading the question "do we hold the permission to
+      <code>y.next</code>?" gets the answer no immediately, with no search.</p>
+    </div>
+    <div class="step" data-label="unfold, then fold">
+      <p><code>unfold list(this)</code> exchanges the box for its contents, and the field access now
+      verifies. The postcondition then fails instead, because after the unfold we hold the body and not
+      the instance. <code>fold list(this)</code> puts the contents back and returns the instance.</p>
+    </div>
+    <div class="step" data-label="The fold that still fails">
+      <p>In <code>append</code> the fold does not succeed at the first attempt. The method has
+      allocated a fresh node <code>n</code>, and the predicate body is recursive, so folding
+      <code>list(this)</code> needs a <code>list(n)</code> instance for the new tail too. Folding
+      <code>list(n)</code> first completes the proof.</p>
+    </div>
+    <div class="step" data-label="Both are ghost statements">
+      <p><code>fold</code> and <code>unfold</code> exist only for the proof. They have no run-time
+      meaning and a compiler erases them, which makes them ghost code in exactly the sense of the
+      Filli&acirc;tre lectures earlier in the school, a connection the lecturer drew explicitly.</p>
+    </div>
+  </div>
+
+  <p><code>fold</code> and <code>unfold</code> are statements, so they can appear only inside a method
+  body. Assertions often need the same effect and have nowhere to put a statement: a postcondition
+  constraining <code>this.elem</code> needs the body of the predicate in order to be self-framing at
+  all. Viper therefore adds an <code>unfolding</code> expression, a temporary unfold that opens the
+  predicate, evaluates one expression and closes it again, with no net effect on the permissions held.
+  That is what makes heap-dependent functions usable in specifications, and it appears in nearly every
+  example in the rest of the lecture.
+  <button type="button" class="slide-ref" data-slide="viper:22" title="Open this slide">slide 22</button></p>
+
+  <figure class="fig">
+    <svg viewBox="0 0 640 230" role="img" aria-label="On the left a single rounded box labelled list of x, marked folded. Two arrows in the middle, one pointing right labelled unfold list of x and one pointing left labelled fold list of x. On the right the body of the predicate as three items joined by stars: a cell for acc of x dot elem, a cell for acc of x dot next, and a rounded box for list of x dot next which is still folded.">
+      <text x="92" y="34" text-anchor="middle" font-size="12" fill="var(--muted)">predicate instance</text>
+      <rect x="20" y="72" width="144" height="72" rx="12" fill="var(--surface)" stroke="var(--accent)" stroke-width="2"/>
+      <text x="92" y="106" text-anchor="middle" font-size="14" fill="currentColor">list(x)</text>
+      <text x="92" y="126" text-anchor="middle" font-size="12" fill="var(--muted)">folded</text>
+      <line x1="176" y1="94" x2="242" y2="94" stroke="var(--good)" stroke-width="1.5"/>
+      <polygon points="248,94 238,89 238,99" fill="var(--good)"/>
+      <text x="212" y="84" text-anchor="middle" font-size="12" fill="var(--good)">unfold</text>
+      <line x1="248" y1="126" x2="182" y2="126" stroke="var(--warn)" stroke-width="1.5"/>
+      <polygon points="176,126 186,121 186,131" fill="var(--warn)"/>
+      <text x="212" y="146" text-anchor="middle" font-size="12" fill="var(--warn)">fold</text>
+      <text x="440" y="34" text-anchor="middle" font-size="12" fill="var(--muted)">body of the predicate</text>
+      <rect x="264" y="72" width="104" height="72" rx="8" fill="var(--surface)" stroke="currentColor" stroke-width="1.5"/>
+      <text x="316" y="114" text-anchor="middle" font-size="12" fill="currentColor">acc(x.elem)</text>
+      <text x="382" y="114" text-anchor="middle" font-size="20" fill="var(--muted)">*</text>
+      <rect x="396" y="72" width="104" height="72" rx="8" fill="var(--surface)" stroke="currentColor" stroke-width="1.5"/>
+      <text x="448" y="114" text-anchor="middle" font-size="12" fill="currentColor">acc(x.next)</text>
+      <text x="514" y="114" text-anchor="middle" font-size="20" fill="var(--muted)">*</text>
+      <rect x="528" y="72" width="96" height="72" rx="12" fill="var(--surface)" stroke="var(--accent)" stroke-width="2"/>
+      <text x="576" y="106" text-anchor="middle" font-size="12" fill="currentColor">list(x.next)</text>
+      <text x="576" y="126" text-anchor="middle" font-size="12" fill="var(--muted)">still folded</text>
+      <text x="320" y="188" text-anchor="middle" font-size="12" fill="var(--muted)">one unfold reveals one node; the tail stays a single instance until it is unfolded in turn</text>
+      <text x="320" y="208" text-anchor="middle" font-size="12" fill="var(--muted)">the null case of the body contributes nothing when x.next == null</text>
+    </svg>
+    <figcaption class="fig-caption">Unfolding the list predicate one level. Under the iso-recursive semantics the instance on the left and the body on the right are different assertions, and only fold and unfold move between them. After the deck's predicate slides. <button type="button" class="slide-ref" data-slide="viper:19" title="Open this slide">slides 19-22</button></figcaption>
+  </figure>
+
+  <p>Predicates carry more than permissions, and this is where the design pays a second time. The body of a predicate is an arbitrary assertion, so it can constrain values as well as permissions. Data structures usually maintain consistency conditions, which may be value constraints such as a reference being non-null or an integer being positive, or structural constraints such as a tree being balanced. Adding a conjunct such as <code>0 &lt;= this.elem</code> to the body of <code>list</code> turns these representation invariants into part of the predicate. The pattern then becomes economical: a constructor establishes the invariant by folding, and every operation begins with <code>unfold</code>, which assumes the invariant, and ends with <code>fold</code>, which checks it again. <button type="button" class="slide-ref" data-slide="viper:23" title="Open this slide">slide 23</button></p>
+
+  <p>The live version is short. Strengthening the body of <code>list</code> to require <code>0 &lt;= this.elem</code> at every node that is not the sentinel makes the previously verified <code>append</code> fail, precisely at the <code>fold</code>, because <code>e</code> is an arbitrary integer and nothing establishes that it is non-negative. That is not a false alarm: a negative argument really would break the invariant. Adding <code>requires 0 &lt;= e</code> restores verification. The invariant came for free on top of the fold and unfold discipline the permissions required anyway, and every operation added later is checked against it automatically, because every operation ends with a fold.</p>
+
+  <div class="quiz">
+    <script type="application/json">
+    {"type":"mc",
+     "q":"Under Viper's iso-recursive semantics, a method holds the predicate instance list(x) and has not unfolded it. May it write to x.elem?",
+     "options":["Yes, because the body of list(x) contains acc(x.elem)","No, it must first unfold list(x); the instance and its body are different assertions","Yes, but only if x.next is null","No, predicates never grant write access, only read access"],
+     "answer":1,
+     "explain":"Permissions are held by method executions or by predicate instances. While the instance is folded, the permission sits inside the instance and not in the method's own state, so the write needs an unfold first. A fold afterwards restores the instance."}
+    </script>
+  </div>
+
+  <h3 id="mk4-abstract">Abstract predicates and the client's view</h3>
+
+  <p>Predicates as introduced still mention concrete field names in their bodies, so handing a
+  predicate to a client hands over the layout of the data structure with it. The remedy, which the
+  lecture presents as a standard device of separation logics rather than a Viper peculiarity, is the
+  <strong>abstract predicate</strong>: a declaration that gives the predicate a name and a parameter
+  list and stops there, with no body. It says only that such a predicate exists. A client can hold an
+  instance, receive one through a precondition, return one through a postcondition and pass it to
+  another method. What it cannot do is fold or unfold it, because it does not know the body.</p>
+
+  <p>Combined with abstract methods, which are signatures and specifications with no code, this gives
+  the familiar arrangement of a module and its interface. The implementation keeps the full bodies,
+  because it needs them in order to reason; the version published to clients keeps only signatures and
+  specifications. A client programming against <code>list(this)</code> then has no idea what a list is.
+  It calls a constructor, which returns a reference packaged with its predicate instance, passes the
+  instance into <code>append</code> and gets it back, and never looks inside the box.</p>
+
+  <div class="callout key">
+    <p><span class="co-tag">Key idea</span> The same abstract interface is satisfied by a singly linked
+    list, a doubly linked list, an array-based list or a cyclic list. The client cannot distinguish
+    them, which is what information hiding means here, and the closing demo exercises exactly that
+    freedom.</p>
+  </div>
+
+  <h3 id="mk4-functions">Functions and data abstraction</h3>
+
+  <p>Predicates solve the permission half of information hiding. Functional behaviour needs one more mechanism. Old-expressions and unfolding-expressions already allow small specifications such as</p>
+
+<pre><code>method head(this: Ref) returns (res: Int)
+  requires list(this)
+  ensures list(this)
+  ensures res == old(unfolding list(this) in this.elem)</code></pre>
+
+  <p>but the deck immediately marks the limits: this does not work when the behaviour depends on an unbounded number of fields, for instance when sorting a list, and the specification still mentions the field <code>elem</code>, so implementation details leak out. <button type="button" class="slide-ref" data-slide="viper:25" title="Open this slide">slide 25</button></p>
+
+  <p>This slide turns on a question. Written naively, with <code>requires node(this)</code>
+  and <code>ensures res == this.elem</code>, the specification is not merely weak, it is not
+  well-formed, and it is worth seeing why. The answer is self-framing: to constrain a value you must
+  hold the permission to it, and holding the predicate is not holding its body. Since an assertion has
+  no room for an <code>unfold</code> statement, the repair has to be the <code>unfolding</code>
+  expression. Even repaired, the pattern reaches only as far as a getter.</p>
+
+  <p>The standard answer is data abstraction. The concrete data structure is mapped to a mathematical concept, a linked list to a mathematical sequence, a binary search tree to a mathematical set, and the behaviour is specified in terms of the mathematical value. <button type="button" class="slide-ref" data-slide="viper:26" title="Open this slide">slide 26</button> Viper provides heap-dependent functions for the mapping, and they may be recursive, so they reach across unbounded structures. <button type="button" class="slide-ref" data-slide="viper:27" title="Open this slide">slide 27</button></p>
+
+<pre><code>function content(this: Ref): Seq[Int]
+  requires list(this)
+{
+  unfolding list(this) in
+  (this.next == null
+     ? Seq[Int]()
+     : Seq(this.elem) ++ content(this.next))
+}</code></pre>
+
+  <p>The precondition is not decoration. A function must have a precondition that frames its body, that is, provides all the permissions needed to evaluate it. That requirement pays off twice, once here and once in the encoding, where the same precondition is read as the function's read effect. What a function does <em>not</em> need is a postcondition handing the permissions back. Since it cannot have side effects, it cannot lose a permission either, so Viper returns everything to the caller automatically and the annotation is halved.</p>
+
+  <p>Three conditions are imposed on such a function: it must be side-effect free, deterministic and terminating. Two of them come for free, because function bodies are expressions rather than statements, and an expression can neither be non-deterministic nor have a side effect. Termination has to be proved, and the obvious measure is unavailable: in the Why3 lectures a variant over a list value gives a well-founded order directly, but a Viper list is reached through a reference, and references have nothing well founded about them, since the heap may contain cycles. What is well founded is the predicate. Every predicate instance has a finite unrolling by construction, so its nesting depth is a legitimate measure, and the demo writes exactly that in a <code>decreases</code> clause, Viper's spelling of Why3's <code>variant</code>. The <code>unfolding</code> around the recursive call is what makes the measure go down.</p>
+
+  <div class="quiz">
+    <script type="application/json">
+    {"type":"fill",
+     "q":"A recursive Viper function over a linked list cannot use the list reference as its termination measure. What does the demo use instead?",
+     "accept":["the nesting depth of the predicate","nesting depth of the predicate","predicate nesting depth","nesting depth","the nesting depth","depth of the predicate"],
+     "explain":"References have nothing well founded about them, because the heap may contain cycles. Predicate instances, on the other hand, always have a finite unrolling, so their nesting depth is a well-founded order and can be written in a decreases clause."}
+    </script>
+  </div>
+
+  <p>With the abstraction function in place, the specification of <code>append</code> becomes one line and names no field at all.</p>
+
+<pre><code>method append(this: Ref, e: Int)
+  requires list(this)
+  ensures  list(this)
+  ensures  content(this) == old(content(this)) ++ Seq(e)</code></pre>
+
+  <p>Permissions are described by the predicate and values by the function, independently of each other. That separation is characteristic of implicit dynamic frames, the variant of separation logic Viper is built on, where <code>acc(x.f)</code> and <code>x.f == 5</code> are separate conjuncts. Scaled up, it means talking about many permissions with a predicate and about functional behaviour with functions without entangling the two, which the lecturer named as the main reason Viper does not use textbook separation logic.</p>
+
+  <p>This closes the third challenge as far as the deck takes it. Viper offers three abstraction mechanisms and they line up neatly with the three syntactic categories of the language: methods abstract over statements, functions abstract over expressions, and predicates abstract over assertions. Together they allow specifications for unbounded data structures, for code whose implementation is unavailable such as abstract methods, foreign functions and binaries, and for modules that want to hide their internals. <button type="button" class="slide-ref" data-slide="viper:28" title="Open this slide">slides 28, 30</button></p>
+
+  <h3 id="mk4-cyclic">The closing demo: the same list, made cyclic</h3>
+
+  <p>The second lecture ended with a live refactoring whose only purpose was to test the claim the
+  lecture had been making. The starting point was the file built up during the session: a
+  null-terminated list with its predicate, its <code>content</code> function and a method constructing
+  a singleton list. The target was a different representation altogether, a cyclic list, in which the
+  empty list is a sentinel pointing at itself and a non-empty list is a sentinel followed by the
+  value-carrying nodes, the last of which points back to the sentinel.</p>
+
+  <p>The permissions came first, with the functional specifications commented out so that the error
+  messages stayed readable. A predicate that recurses until it reaches null is no use on a structure
+  with no null in it, so the demo introduced the standard device, a <strong>list segment</strong>
+  predicate. <code>lseg(this, last)</code> describes the nodes from one node up to but not including
+  another. If <code>this == last</code> the segment is empty and contributes nothing; otherwise it
+  holds the first node's two fields and, recursively, <code>lseg(this.next, last)</code>. The list is
+  then the permission to the sentinel itself plus one segment that starts after the sentinel and runs
+  back round to it.</p>
+
+<pre><code>predicate lseg(this: Ref, last: Ref) {
+  this != last ==&gt;
+    acc(this.elem) &amp;&amp; acc(this.next) &amp;&amp; lseg(this.next, last)
+}
+
+predicate list(this: Ref) {
+  acc(this.elem) &amp;&amp; acc(this.next) &amp;&amp; lseg(this.next, this)
+}</code></pre>
+
+  <figure class="fig">
+    <svg viewBox="0 0 640 250" role="img" aria-label="Two pictures of the cyclic representation. On the left, the empty list: a single circle labelled s with an arrow looping from it back to itself. On the right, a non-empty list: a circle labelled s for the sentinel, an arrow to a circle n1, an arrow to a circle n2, and a curved arrow from n2 back to s. A bracket spans n1 and n2 and is labelled lseg of this dot next comma this.">
+      <text x="110" y="28" text-anchor="middle" font-size="12" fill="var(--muted)">empty list</text>
+      <circle cx="110" cy="120" r="26" fill="var(--surface)" stroke="currentColor" stroke-width="1.5"/>
+      <text x="110" y="125" text-anchor="middle" font-size="13" fill="currentColor">s</text>
+      <path d="M 110 94 C 50 88 50 152 100 145" fill="none" stroke="var(--accent)" stroke-width="1.5"/>
+      <polygon points="108,146 97,141 98,151" fill="var(--accent)"/>
+      <text x="110" y="196" text-anchor="middle" font-size="12" fill="var(--muted)">the sentinel points to itself</text>
+      <line x1="222" y1="40" x2="222" y2="212" stroke="var(--hairline)" stroke-width="1"/>
+      <text x="430" y="28" text-anchor="middle" font-size="12" fill="var(--muted)">non-empty list</text>
+      <path d="M 392 84 L 392 72 L 568 72 L 568 84" fill="none" stroke="var(--accent)" stroke-width="1.5"/>
+      <text x="480" y="62" text-anchor="middle" font-size="12" fill="var(--accent)">lseg(this.next, this)</text>
+      <text x="300" y="86" text-anchor="middle" font-size="12" fill="var(--muted)">this</text>
+      <circle cx="300" cy="120" r="26" fill="var(--surface)" stroke="currentColor" stroke-width="1.5"/>
+      <text x="300" y="125" text-anchor="middle" font-size="13" fill="currentColor">s</text>
+      <circle cx="420" cy="120" r="26" fill="var(--surface)" stroke="currentColor" stroke-width="1.5"/>
+      <text x="420" y="125" text-anchor="middle" font-size="13" fill="currentColor">n1</text>
+      <circle cx="540" cy="120" r="26" fill="var(--surface)" stroke="currentColor" stroke-width="1.5"/>
+      <text x="540" y="125" text-anchor="middle" font-size="13" fill="currentColor">n2</text>
+      <line x1="326" y1="120" x2="388" y2="120" stroke="currentColor" stroke-width="1.5"/>
+      <polygon points="394,120 384,115 384,125" fill="currentColor"/>
+      <line x1="446" y1="120" x2="508" y2="120" stroke="currentColor" stroke-width="1.5"/>
+      <polygon points="514,120 504,115 504,125" fill="currentColor"/>
+      <path d="M 540 146 C 520 205 320 205 300 152" fill="none" stroke="var(--accent)" stroke-width="1.5"/>
+      <polygon points="300,146 295,157 305,157" fill="var(--accent)"/>
+      <text x="430" y="236" text-anchor="middle" font-size="12" fill="var(--muted)">the last node points back to the sentinel, which carries no value</text>
+    </svg>
+    <figcaption class="fig-caption">The cyclic representation used in the closing demo: the sentinel's own two fields plus one segment running from the node after it back round to it. Reconstructed from the recording, which has no matching slide.</figcaption>
+  </figure>
+
+  <p>The constructor then had to be repaired, since the representation had changed: the head is now the
+  dummy, so the element goes into the second node and that node's <code>next</code> points back to the
+  head. The folds changed with it, an empty segment from the head to itself, then a segment from the new
+  node back to the head, then the list predicate. The functional side needed a helper of the same shape,
+  <code>contentSeg(this, last)</code>, defined by unfolding the segment: an empty segment gives the
+  empty sequence, otherwise the first element followed by the content of the rest. The content of a list
+  is the content of the segment after the sentinel, which carries no value.</p>
+
+  <p>What changed and what did not is the entire point. The predicate body changed, the method body
+  changed, and one predicate and one function were added, both private. The signature of
+  <code>list</code>, the signature of <code>content</code> and the specification of the method are the
+  same characters as before, and the client's assertions verified unchanged once uncommented. No client
+  can tell that the data structure was replaced.</p>
+
+  <div class="quiz">
+    <script type="application/json">
+    {"type":"mc",
+     "q":"In the closing demo the null-terminated list was replaced by a cyclic one built from a list segment predicate. What did a client of the module have to change?",
+     "options":["The calls, because the predicate now takes two arguments instead of one","Nothing: the signature of list, the signature of content and the method specification were all unchanged","The client's own fold and unfold statements for the new segment predicate","The client's specifications, because content now returns a set rather than a sequence"],
+     "answer":1,
+     "explain":"Only the predicate body, the method body and two new private declarations changed. The segment predicate takes two arguments, but it is internal; list still has one parameter, content still returns the same sequence, and the method specification is written in terms of content, so the client sees no difference at all."}
+    </script>
+  </div>
+
+  <h3 id="mk4-inhale">Automation: the permission mask, inhale and exhale</h3>
+
+  <p>The third part of the deck shows how the logic is turned into work for an SMT solver. The verification condition route encodes the program into guarded commands and applies a weakest-precondition transformer: to verify a statement <code>S</code>, one proves the weakest precondition of <code>S</code> under a background predicate <code>BP</code>, which encodes properties of the programming language. Conditionals, for instance, become nondeterministic choice plus <code>assume</code>. <button type="button" class="slide-ref" data-slide="viper:33" title="Open this slide">slides 33, 36</button></p>
+
+  <p>The heap becomes a global variable holding a polymorphic map, and permissions become a second global map called the mask. <button type="button" class="slide-ref" data-slide="viper:34" title="Open this slide">slides 34-35</button></p>
+
+<pre><code>type Ref                                  // references
+const null: Ref
+type Field T                              // polymorphic field names
+type HeapType = &lt;T&gt;[Ref, Field T]T
+type MaskType = &lt;T&gt;[Ref, Field T]bool
+var Heap: HeapType
+var Mask: MaskType
+
+v := x.f          becomes    assert Mask[x,f];  v := Heap[x,f]
+x.f := E          becomes    assert Mask[x,f];  Heap[x,f] := E</code></pre>
+
+  <p>Every field access begins with an assertion about the mask, so a verified program is one in which every access was owned. Since permission is by convention never held for locations of the null reference, the same check also rules out null dereferences, at no extra cost. The mask in this simplified presentation is boolean, so permission is all or nothing; the slide marks in the margin that going beyond full permission is a separate case, which is where fractional permissions come in.</p>
+
+  <div class="callout def">
+    <p><span class="co-tag">Definition</span> <code>inhale A</code> obtains all permissions required by <code>A</code> and assumes all its logical constraints. <code>exhale A</code> asserts all logical constraints of <code>A</code>, checks and removes all permissions required by <code>A</code>, and havocs any location to which all permission is lost. They are the permission-aware analogs of <code>assume</code> and <code>assert</code>. <button type="button" class="slide-ref" data-slide="viper:42" title="Open this slide">slides 42, 50</button></p>
+  </div>
+
+  <p>Both are defined by recursion on the structure of the assertion. <button type="button" class="slide-ref" data-slide="viper:43" title="Open this slide">slides 43-44</button></p>
+
+  <div class="table-wrap">
+    <table>
+      <tr><th>assertion</th><th>inhale</th><th>exhale</th></tr>
+      <tr><td><code>E</code></td><td><code>assume E</code></td><td><code>assert E</code></td></tr>
+      <tr><td><code>acc(E.f)</code></td><td><code>Mask[E,f] := true</code></td><td><code>assert Mask[E,f]; Mask[E,f] := false; havoc Heap[E,f]</code></td></tr>
+      <tr><td><code>E ==&gt; A</code></td><td><code>if (E) { inhale A }</code></td><td><code>if (E) { exhale A }</code></td></tr>
+      <tr><td><code>A &amp;&amp; B</code></td><td><code>inhale A; inhale B</code></td><td><code>exhale A; exhale B</code></td></tr>
+    </table>
+  </div>
+
+  <p>The last row is the separating conjunction at work: the two sides are processed one after the other, so the permissions add up on inhale and are removed as a sum on exhale. The havoc on exhale is what makes framing automatic. Once the last permission to a location is gone, the verifier forgets its value, so nothing can be assumed about it later. In both cases the real encoding also asserts that <code>E</code> is well-defined, which the deck omits.</p>
+
+  <p>With these two statements, the proof obligations for method bodies and calls are short. A body inhales the precondition, runs the encoding of the statements, and exhales the postcondition. A call exhales the precondition with the actual arguments substituted, havocs the assigned variables, and inhales the postcondition. <button type="button" class="slide-ref" data-slide="viper:45" title="Open this slide">slide 45</button> Calling a method transfers permissions from caller to callee according to the precondition, returning transfers them back according to the postcondition, and whatever is not transferred is residual and is framed around the call. <button type="button" class="slide-ref" data-slide="viper:39" title="Open this slide">slide 39</button> Predicates reuse the very same mask: <code>fold</code> and <code>unfold</code> are permission transfers between the caller's own permissions and the instance. <button type="button" class="slide-ref" data-slide="viper:46" title="Open this slide">slide 46</button></p>
+
+  <div class="stepper" data-title="The set example as permission transfers">
+    <div class="step" data-label="Allocate">
+      <p><code>x := new(f); x.f := 2</code> and <code>y := new(f); y.f := 7</code>. Allocation creates permissions, so the current method execution now holds <code>acc(x.f)</code> and <code>acc(y.f)</code>, and the mask records both. It also knows the two values.</p>
+    </div>
+    <div class="step" data-label="Exhale the precondition">
+      <p>The call <code>set(x, 5)</code> starts by exhaling the precondition <code>acc(p.f)</code> with <code>p</code> bound to <code>x</code>. The mask entry for <code>x.f</code> is checked and cleared, and because all permission to that location is gone, <code>Heap[x,f]</code> is havocked. The caller has now forgotten that <code>x.f</code> was 2, which is correct: the callee is free to change it.</p>
+    </div>
+    <div class="step" data-label="What stays behind">
+      <p><code>acc(y.f)</code> was not mentioned in the precondition, so it is residual and stays with the caller, together with the knowledge that <code>y.f == 7</code>. This is the frame. No reasoning about whether <code>x</code> and <code>y</code> alias is needed, because the callee received nothing that would let it write to <code>y.f</code>.</p>
+    </div>
+    <div class="step" data-label="Inside the callee">
+      <p><code>set</code> is verified separately, once. Its body inhales <code>acc(p.f)</code>, executes <code>p.f := v</code>, which the mask now permits, and exhales <code>acc(p.f) &amp;&amp; p.f == v</code>, which checks both the value constraint and the return of the permission.</p>
+    </div>
+    <div class="step" data-label="Inhale the postcondition">
+      <p>Back at the call site, the caller inhales <code>acc(x.f) &amp;&amp; x.f == 5</code>. It regains the permission and learns the new value. Note the order: the value is only learned after the havoc, so no stale information survives.</p>
+    </div>
+    <div class="step" data-label="Assert">
+      <p><code>assert x.f == 5 &amp;&amp; y.f == 7</code> succeeds. The left conjunct comes from the postcondition, the right one from the frame. Neither requires looking at the body of <code>set</code>, which is exactly the modularity that was lost at the start of the lecture. <button type="button" class="slide-ref" data-slide="viper:38" title="Open this slide">slide 38</button></p>
+    </div>
+  </div>
+
+  <div class="quiz">
+    <script type="application/json">
+    {"type":"fill",
+     "q":"Which pair of Viper statements are described in the deck as the permission-aware analogs of assume and assert?",
+     "accept":["inhale and exhale","inhale, exhale","exhale and inhale","inhale exhale"],
+     "explain":"inhale adds permissions and assumes constraints, like assume; exhale checks and removes permissions and asserts constraints, like assert. Every proof rule of the separation logic is encoded as a combination of these transfers."}
+    </script>
+  </div>
+
+  <p>Heap-dependent functions need one more piece. They are encoded as uninterpreted functions with an extra heap parameter, and the body becomes a definitional axiom. <button type="button" class="slide-ref" data-slide="viper:47" title="Open this slide">slide 47</button> That alone is not enough, because every field update changes the global heap variable, so all previously derived facts about function applications refer to the old heap and become useless. Recovering them by looking at the function body would break information hiding and would not work for abstract functions. <button type="button" class="slide-ref" data-slide="viper:48" title="Open this slide">slide 48</button> The fix is a framing axiom generated from the function's precondition, which is read as a declaration of the read effect: if two heaps agree on the locations the function is allowed to read, the function has the same result in both. <button type="button" class="slide-ref" data-slide="viper:49" title="Open this slide">slide 49</button></p>
+
+  <div class="formula">
+    &forall; x, h<sub>1</sub>, h<sub>2</sub> &nbsp;:: &nbsp; h<sub>1</sub>[x, elem] == h<sub>2</sub>[x, elem] &rArr; get(x, h<sub>1</sub>) == get(x, h<sub>2</sub>)
+  </div>
+
+  <p>The deck notes that the axiom actually used is more complex, in order to break symmetry and avoid unnecessary quantifier instantiations, and that for predicates in preconditions the axiom must consider all locations contained in the predicate. This is a good illustration of a general point about SMT-based verification: the logic is settled long before the performance is, and the shape of the axioms matters as much as their content.</p>
+
+  <h3 id="mk4-frontends">Front ends: Gobra, Prusti and the cost of annotations</h3>
+
+  <p>A front end has to bridge three gaps. <button type="button" class="slide-ref" data-slide="viper:53" title="Open this slide">slide 53</button> The state model, where source pointers, arrays, slices and a type system must be expressed in Viper's object-based model. The execution model, where complex statements, higher-order computations and effects such as exceptions and input or output become simple statements and defunctionalized encodings. And the program logic, where concurrency and higher-order features must be built from Viper's universal primitives.</p>
+
+  <div class="tabs">
+    <div class="tab" data-label="Gobra, for Go">
+      <p>Gobra verifies Go with a separation logic very close to Viper's, targeting functional properties, memory errors, aliasing and data races. <button type="button" class="slide-ref" data-slide="viper:54" title="Open this slide">slide 54</button> The encoding of a pointer swap shows the mechanics: Go's <code>*int</code> parameters become <code>Ref</code> objects with a <code>val</code> field, the source specification <code>requires acc(x) &amp;&amp; acc(y)</code> becomes <code>requires acc(x.val) &amp;&amp; acc(y.val)</code>, parameters are copied into locals because Go allows assignment to parameters, and locals are given their default initial values by an explicit <code>inhale tmp == 0</code>. <button type="button" class="slide-ref" data-slide="viper:55" title="Open this slide">slide 55</button></p>
+      <p>The cost is visible in the source program: the developer writes separation logic directly, including the permission annotations, and the overhead is substantial in both the amount and the complexity of the annotations. <button type="button" class="slide-ref" data-slide="viper:56" title="Open this slide">slide 56</button></p>
+    </div>
+    <div class="tab" data-label="Prusti, for Rust">
+      <p>Rust's type system already guarantees the absence of memory errors, controls aliasing and prevents data races, so the question is whether verification can build on that instead of asking for it again. <button type="button" class="slide-ref" data-slide="viper:57" title="Open this slide">slide 57</button> Prusti extracts permissions automatically from type information and generates a Viper core proof of memory safety with no user input at all. Users then add functional correctness specifications using a slight extension of Rust expressions, such as <code>#[ensures(*x == old(*y))]</code>, with no <code>acc</code> in sight. The overhead for programmers is substantially reduced in both amount and complexity. <button type="button" class="slide-ref" data-slide="viper:58" title="Open this slide">slide 58</button></p>
+      <p>The deck makes the comparison concrete by placing a Rust program with Prusti annotations next to the Viper code a developer would otherwise write for the same list operations, where predicates, <code>unfold</code>, <code>fold</code> and permission amounts are all explicit. <button type="button" class="slide-ref" data-slide="viper:59" title="Open this slide">slide 59</button></p>
+    </div>
+    <div class="tab" data-label="Fractional permissions">
+      <p>The list example on the comparison slide is also where fractional permissions appear. <code>cloneList</code> requires <code>acc(list(this), 1/2)</code> and returns it unchanged, while producing a fresh <code>list(res)</code>. A fraction below the full permission grants read access only, which is what a cloning or a length operation needs, and it can be split among several readers because the fractions still add up to at most one. The pure function <code>len</code> asks for <code>acc(list(this), wildcard)</code>, an unspecified positive fraction, which is the weakest read request one can make. <button type="button" class="slide-ref" data-slide="viper:59" title="Open this slide">slide 59</button></p>
+    </div>
+  </div>
+
+  <p>The family of front ends is large: Prusti for Rust, Nagini for Python, Gobra for Go, VerCors for Java and OpenCL, SnaKt for Kotlin, and further front ends and prototypes for OCaml, Pancake and Vyper. <button type="button" class="slide-ref" data-slide="viper:60" title="Open this slide">slide 60</button> Between them they cover imperative and object-oriented code, nominal and structural typing, ownership types, multithreading with shared state and with message passing, weak-memory concurrency, input and output, closures and iterators, and digital assets. The properties proved range from memory safety and crash freedom through absence of overflows, termination and functional correctness to race freedom, deadlock freedom, secure information flow and worst-case execution time. <button type="button" class="slide-ref" data-slide="viper:61" title="Open this slide">slide 61</button></p>
+
+  <div class="callout warn">
+    <p><span class="co-tag">Careful</span> The deck is explicit about the limitations. <button type="button" class="slide-ref" data-slide="viper:62" title="Open this slide">slide 62</button> Some are inherited from the SMT solver: undecidable theories can produce spurious errors, and verification time grows for large methods. Annotation overhead is typically 2 to 5 lines of annotation per line of code. And the trust assumptions are threefold, since one must trust the SMT solver, Viper itself, and the encoding performed by the front end.</p>
+  </div>
+
+  <h3 id="mk4-scion">A large case study: the SCION router</h3>
+
+  <p>SCION is a new architecture for inter-domain routing, with both research and commercial deployments. The stated goal is formal end-to-end verification of security and correctness: the protocol for secure packet forwarding, and the code for crash freedom, functional correctness, termination and protocol compliance. <button type="button" class="slide-ref" data-slide="viper:63" title="Open this slide">slide 63</button> The proof is layered. A mathematical model of the entire network is refined to a mathematical model of a border router, that model is connected by refinement and equivalence arguments to a router specification, and the implementation is verified against that specification. <button type="button" class="slide-ref" data-slide="viper:64" title="Open this slide">slide 64</button></p>
+
+  <p>The reported outcome: verification of the SCION router, 4,700 lines of optimized Go, was completed for all four properties, with 16,700 lines of annotations, a ratio of 3.6 lines of specification per line of code, and only three code changes were required. The work identified 14 confirmed issues related to memory safety, functional correctness and protocol compliance, plus 2 performance issues, in code that had already been through extensive code reviews, testing and fuzzing, and it triggered various performance optimizations. <button type="button" class="slide-ref" data-slide="viper:65" title="Open this slide">slide 65</button></p>
+
+  <div class="callout key">
+    <p><span class="co-tag">Key idea</span> The summary of this part is that Viper's concepts are expressive enough to encode a wide range of verification problems for different languages, programs and properties. Most front ends reflect Viper's verification logic directly, while some reduce the annotation overhead by using ownership type systems. Annotation overhead and performance on large code bases remain the open challenges. <button type="button" class="slide-ref" data-slide="viper:66" title="Open this slide">slide 66</button></p>
+  </div>
+
+  <h3 id="mk4-directions">Research directions</h3>
+
+  <p>The closing part argues that AI increases rather than decreases the demand for verification. Large amounts of code are now generated by agents, that code contains a significant number of bugs and security vulnerabilities, and code review has become the main bottleneck of software development. At the same time AI has become effective at detecting vulnerabilities. Both trends point the same way. <button type="button" class="slide-ref" data-slide="viper:68" title="Open this slide">slide 68</button></p>
+
+  <p>Three directions follow. First, program logics, which capture the essential correctness arguments of a program: invariants for loops, ranking functions for termination, lock orders for deadlock freedom. AI agents need such logics to phrase proofs for the same reason human developers do, and logics for probabilistic programs, hyperproperties, distributed systems and quantum computing are still open problems. <button type="button" class="slide-ref" data-slide="viper:69" title="Open this slide">slide 69</button> Second, agentic verification, presented as a trade-off rather than a winner. Explicit proof objects may be better training targets and their expressiveness is not limited by an SMT solver, but user interaction exposes the complexity of the underlying logic. Annotated programs cater to the strengths of models that are good at coding, relying primarily on an SMT solver is likely to be faster and cheaper, and a code-centric approach may make developer and AI interaction easier. <button type="button" class="slide-ref" data-slide="viper:70" title="Open this slide">slide 70</button> Third, validation: given an intent in natural language, a specification, an implementation and proofs, the specification is the part nothing checks, so how AI-generated specifications and code are validated remains an open question. <button type="button" class="slide-ref" data-slide="viper:71" title="Open this slide">slide 71</button></p>
+
+  
+</section>

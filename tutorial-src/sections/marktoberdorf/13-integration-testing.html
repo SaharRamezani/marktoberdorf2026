@@ -1,0 +1,345 @@
+<section class="lecture" id="sec-mk-10" data-num="10" data-day="mk-test" data-title="Integration Testing" data-lecturer="Alexander Pretschner">
+  <header class="lec-head">
+    <div class="lec-num">10</div>
+    <div>
+      <h2 id="mk10-top">Integration Testing: Design Faults in Disguise</h2>
+      <p class="lec-meta">Alexander Pretschner, TUM, fortiss and bidt. From the deck "(Integration Testing and) Scenario-Based Tests for Cyber-Physical Systems: Autonomous Driving Systems", joint work with Michael Wolf, Florian Hauer, Nicola Kolb, Tabea Schmidt and Thomas Hutzelmann.</p>
+    </div>
+  </header>
+
+  <p class="lead">Every unit has passed its own tests. The system is assembled, and it fails. What exactly was the integration test supposed to look for? This lecture answers that question by building a small formal model of what composition promises, deriving four obligations that any composition has to discharge, and reading the four obligations as four classes of fault. The conclusion is uncomfortable: most integration faults are not coding errors. They are design faults or infrastructure faults, and they exist because the specifications the units were tested against left something out.</p>
+
+  <h3 id="mk10-framing">What is being tested, and at which level</h3>
+
+  <p>The lecture sets its scope in four lines: this is about testing rather than formal verification, about integration and system level rather than component level, about continuous and hybrid behaviour rather than purely discrete behaviour, and about situations where there is no specification to test against, which the deck calls testing the untestable. <button type="button" class="slide-ref" data-slide="pretschner1:3" title="Open this slide">slide 3</button></p>
+
+  <div class="callout def">
+    <p><span class="co-tag">Definition</span> A <strong>test case</strong> is an input, an expected output, and a set of environment conditions. <strong>Testing</strong> means applying the input to the system under test and comparing the actual output to the expected one. A <strong>good</strong> test case detects a potential defect with good cost effectiveness, which is to say it reduces risk per unit of effort spent.</p>
+  </div>
+
+  <p>Testing can never show the absence of defects. What it buys in exchange is that it scales, that it applies to entire systems including their hardware rather than to single components, and that depending on the test level it runs under more realistic circumstances with fewer strong assumptions. <button type="button" class="slide-ref" data-slide="pretschner1:4" title="Open this slide">slide 4</button> That last point matters here, because software does not run on an abstraction. It runs on libraries, a virtual machine, middleware, an operating system and hardware, connected to further systems, sensors and actuators, and many of those parts arrive without source code, so no analysis of your own code can settle what they will do. <button type="button" class="slide-ref" data-slide="pretschner1:5" title="Open this slide">slide 5</button></p>
+
+  <p>The standard test levels are unit, integration, system and acceptance. <button type="button" class="slide-ref" data-slide="pretschner1:6" title="Open this slide">slide 6</button> The deck maps them onto what is actually being checked: technical software functions get unit tests, subsystem tests and horizontal software integration tests, and since their behaviour is mostly discrete, classical unit testing frameworks are adequate. User functions get software-in-the-loop tests, because their behaviour is continuous and needs co-simulation, for example with FMUs. Systemic properties get software-in-the-loop or hardware-in-the-loop tests. <button type="button" class="slide-ref" data-slide="pretschner1:7" title="Open this slide">slide 7</button></p>
+
+  <h3 id="mk10-shared-world">Integration rests on shared knowledge about the world</h3>
+
+  <p>The starting picture is a single system with an input and an output, surrounded by two rings: explicit knowledge about the world, written down in interface descriptions, APIs and data models, and implicit knowledge about the world, the assumptions nobody wrote down. Now split that system into subsystems. The two rings do not shrink, but the number of places where the knowledge has to be shared multiplies, because every internal boundary is a boundary across which assumptions must agree. <button type="button" class="slide-ref" data-slide="pretschner1:10" title="Open this slide">slides 10-11</button></p>
+
+  <p>From there the challenge has three shapes. Different stakeholders can hold different understandings of the same interface. An understanding can be wrong. Or it can be incomplete, in two grades: sometimes realistically foreseeable, as with certain system properties, and sometimes not, as with externalities, feature interactions and emergent properties. <button type="button" class="slide-ref" data-slide="pretschner1:12" title="Open this slide">slide 12</button> The word "unit" is not fixed either: it can mean a class, a task, a microservice or an electronic control unit, and the development process, who runs the test (the developer or the system integrator) and the class of system all change what integration means in practice. <button type="button" class="slide-ref" data-slide="pretschner1:13" title="Open this slide">slide 13</button></p>
+
+  <figure class="fig" id="mk10-fig-isolation">
+    <svg viewBox="0 0 660 250" style="width:100%;max-width:660px" role="img"
+         aria-label="Left: a unit inside a test harness, where its input assumptions hold by construction. Right: the same unit next to a partner component on top of a real platform, where the assumptions must be established by the design.">
+      <defs>
+        <marker id="mk10-arr-a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" fill="var(--accent)"/>
+        </marker>
+        <marker id="mk10-arr-m" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" fill="var(--muted)"/>
+        </marker>
+      </defs>
+
+      <text x="16" y="20" font-size="13" font-weight="700" fill="currentColor">Unit test: the unit inside its harness</text>
+      <rect x="16" y="32" width="296" height="176" rx="12" fill="none" stroke="var(--hairline)" stroke-width="1.5" stroke-dasharray="6 4"/>
+      <text x="26" y="50" font-size="12" fill="var(--muted)">test harness</text>
+
+      <rect x="106" y="60" width="116" height="30" rx="6" fill="var(--surface)" stroke="var(--muted)" stroke-width="1.4" stroke-dasharray="4 3"/>
+      <text x="164" y="80" font-size="12" text-anchor="middle" fill="currentColor">stubs and mocks</text>
+      <line x1="164" y1="90" x2="164" y2="112" stroke="var(--muted)" stroke-width="1.6" marker-end="url(#mk10-arr-m)"/>
+
+      <rect x="114" y="116" width="100" height="44" rx="8" fill="var(--surface)" stroke="var(--accent)" stroke-width="2"/>
+      <text x="164" y="143" font-size="13" text-anchor="middle" fill="currentColor">unit I₁</text>
+
+      <line x1="34" y1="138" x2="110" y2="138" stroke="var(--accent)" stroke-width="1.8" marker-end="url(#mk10-arr-a)"/>
+      <line x1="218" y1="138" x2="296" y2="138" stroke="var(--accent)" stroke-width="1.8" marker-end="url(#mk10-arr-a)"/>
+      <text x="164" y="186" font-size="12" text-anchor="middle" fill="var(--good)">A₁ holds by construction</text>
+      <text x="164" y="202" font-size="12" text-anchor="middle" fill="var(--muted)">so nobody writes A₁ down</text>
+
+      <text x="348" y="20" font-size="13" font-weight="700" fill="currentColor">Integration: the same unit in place</text>
+      <rect x="348" y="32" width="296" height="176" rx="12" fill="none" stroke="var(--hairline)" stroke-width="1.5"/>
+
+      <rect x="366" y="94" width="96" height="44" rx="8" fill="var(--surface)" stroke="var(--accent)" stroke-width="2"/>
+      <text x="414" y="121" font-size="13" text-anchor="middle" fill="currentColor">unit I₁</text>
+      <rect x="530" y="94" width="96" height="44" rx="8" fill="var(--surface)" stroke="var(--accent)" stroke-width="2"/>
+      <text x="578" y="121" font-size="13" text-anchor="middle" fill="currentColor">unit I₂</text>
+      <line x1="526" y1="116" x2="466" y2="116" stroke="var(--muted)" stroke-width="1.8" marker-end="url(#mk10-arr-m)"/>
+      <text x="496" y="82" font-size="12" text-anchor="middle" fill="var(--crit)">A₁ must be established here</text>
+
+      <line x1="414" y1="138" x2="414" y2="164" stroke="var(--hairline)" stroke-width="1.6" stroke-dasharray="4 3"/>
+      <line x1="578" y1="138" x2="578" y2="164" stroke="var(--hairline)" stroke-width="1.6" stroke-dasharray="4 3"/>
+      <rect x="366" y="164" width="260" height="36" rx="8" fill="var(--surface)" stroke="var(--warn)" stroke-width="2"/>
+      <text x="496" y="187" font-size="12" text-anchor="middle" fill="currentColor">W_real: OS, middleware, bus, hardware</text>
+    </svg>
+    <figcaption class="fig-caption">The same unit in two settings. In the harness the environment is built to suit it, so its input assumptions hold silently. Once integrated, the partner component and the real platform have to supply them. After the lecture's figures on slides 10, 11 and 32.</figcaption>
+  </figure>
+
+  <h3 id="mk10-confusion">The standards do not agree either</h3>
+
+  <p>Two entries in ISO/IEC/IEEE 24765:2017(E) pull in different directions. "Integration test" is defined as the "progressive linking and testing of programs or modules in order to ensure their proper functioning in the complete system". "Integration testing" is defined as "testing in which software components, hardware components, or both are combined and tested to evaluate the interaction among them". ASPICE does not define the term at all; its process SWE.5 asks that components be verified against the detailed design, that the software elements be integrated, and that the integrated elements comply with the software architecture including the interfaces between them, and SYS.4 says the analogous thing at system level. <button type="button" class="slide-ref" data-slide="pretschner1:17" title="Open this slide">slide 17</button></p>
+
+  <p>Practitioners are no more consistent. The deck collects what engineers actually say, and the statements contradict each other: "integration tests test if we have had the same understanding", "unit tests have no state, integration tests do", "unit tests are technical, integration tests test user functionality", "regression tests can only be used for units", "we can't really distinguish between integration and (sub)system tests". <button type="button" class="slide-ref" data-slide="pretschner1:15" title="Open this slide">slide 15</button> The rest of the lecture replaces this list with a definition that can be applied to a concrete failure and give a definite answer.</p>
+
+  <h3 id="mk10-refinement">Development as a chain of refinements</h3>
+
+  <p>Idealised, development is a chain. Requirements become functional system requirements, those become subsystem specifications, those become component architectures, those become software implementations, and those become deployments. <button type="button" class="slide-ref" data-slide="pretschner1:29" title="Open this slide">slide 29</button></p>
+
+  <div class="formula">R &#8669; F<sub>1</sub> + &hellip; + F<sub>k</sub> &#8669; S<sub>1</sub> + &hellip; + S<sub>&#8467;</sub> &#8669; J<sub>1</sub> + &hellip; + J<sub>m</sub> &#8669; I<sub>1</sub> + &hellip; + I<sub>n</sub> &#8669; D<sub>1</sub> + &hellip; + D<sub>o</sub></div>
+
+  <p>The "+" in that chain is not one operator. Depending on the level it means function composition, logical conjunction, function calls or message protocols. Two properties of the chain drive everything that follows. First, the description at each level is necessarily partial. Second, each next level removes some of that partiality and, in doing so, adds assumptions about the context in which the described artefact will sit. Those added assumptions are the implicit world knowledge. And, as the deck notes plainly, the world is not a waterfall: the chain is a way of talking about the dependencies, not a claim about the schedule.</p>
+
+  <p>If the chain were linear and correct by construction, integration testing would be unnecessary: transitivity would give us that the deployed system satisfies the requirements. It is not, so we have to check, and checking the deployed system against the requirements directly is far too difficult. The right branch of the V breaks the check up. Unit tests establish that a deployment satisfies its component architecture; integration testing then picks a subset of components and their corresponding specifications and checks that subset against them. <button type="button" class="slide-ref" data-slide="pretschner1:30" title="Open this slide">slide 30</button> The levels at which such a subset can be picked are unit, horizontal software integration, vertical software and hardware integration, software-in-the-loop and hardware-in-the-loop, plus horizontal hardware integration. <button type="button" class="slide-ref" data-slide="pretschner1:26" title="Open this slide">slides 26-27</button></p>
+
+  <h3 id="mk10-noncomposition">Why two correct units can still fail together</h3>
+
+  <p>Here is the question in its sharpest form. If I<sub>1</sub> satisfies its specification J<sub>1</sub> and I<sub>2</sub> satisfies J<sub>2</sub>, how can the composition of I<sub>1</sub> and I<sub>2</sub> fail to satisfy the composition of J<sub>1</sub> and J<sub>2</sub>? The lecture's answer is that we never actually showed the two premises. <button type="button" class="slide-ref" data-slide="pretschner1:31" title="Open this slide">slide 31</button></p>
+
+  <p>Testing samples the input space, it does not prove anything about all of it. Beyond that, a test implicitly encodes extra assumptions A<sub>i</sub> that come from the deployment context it was run in, and the specification itself makes implicit assumptions W about the runtime environment, while the real environment is W_real. So what a unit test establishes is not the clean implication at all, but something weaker, at three levels at once:</p>
+
+  <div class="formula">[ I<sub>i</sub> + A<sub>i</sub> + W_real ] &#8872; [ J<sub>i</sub> + W ]</div>
+
+  <p>Formal verification improves on this by proving instead of sampling, and by forcing the assumptions to be written down. That is a real gain, but it is not a cure: the stated assumptions may still be wrong or partial, because specifications are abstractions.</p>
+
+  <p>What do these assumptions look like? The deck separates them into assumptions between components and assumptions that cut across components and live in the infrastructure. <button type="button" class="slide-ref" data-slide="pretschner1:32" title="Open this slide">slide 32</button></p>
+
+  <div class="table-wrap">
+    <table>
+      <tr><th>Between components (A)</th><th>Across components, infrastructure (W)</th></tr>
+      <tr><td>the payload is JSON</td><td>no overflows</td></tr>
+      <tr><td>timestamps are UTC and strictly increasing</td><td>arbitrary precision</td></tr>
+      <tr><td>each order-ID reaches me at most once</td><td>little-endian encoding</td></tr>
+      <tr><td>forces are in newton-seconds</td><td>synchronous communication</td></tr>
+      <tr><td>the input list is shorter than 1024 entries</td><td>lossless FIFO communication, latency below 10 ms</td></tr>
+      <tr><td>I am never called concurrently</td><td>exactly-once communication</td></tr>
+    </table>
+  </div>
+
+  <div class="callout key">
+    <p><span class="co-tag">Key idea</span> In testing, these assumptions are almost always implicit, and for a structural reason: each harness constructs its own unit's environment, so the A<sub>i</sub> hold automatically and nobody ever has a reason to write them down. In a proof the A<sub>i</sub> must be stated to get the proof through, which at least makes them visible. Hyrum's law says the rest: what matters in the end is the observable behaviour, not the contract.</p>
+  </div>
+
+  <div class="quiz">
+    <script type="application/json">
+    {"type":"mc",
+     "q":"According to the lecture, why do the assumptions A_i normally stay unwritten during unit testing?",
+     "options":["Testing standards forbid documenting environment assumptions","The harness builds the unit's environment itself, so the assumptions hold automatically and nobody has a reason to record them","They are recorded, but only in the deployment descriptor","They are considered part of the hardware specification and belong to a different team"],
+     "answer":1,
+     "explain":"The harness supplies exactly the environment the unit needs. The assumption is satisfied silently, so there is no pressure to state it. Later, at integration, the partner component and the platform have to establish it, and now it matters that nobody knows what it was."}
+    </script>
+  </div>
+
+  <h3 id="mk10-obligations">Four obligations, four fault classes</h3>
+
+  <p>Once the weak form of the unit result is written out, the question of what composition needs becomes answerable. For the composed claim to hold, four things must be true. <button type="button" class="slide-ref" data-slide="pretschner1:33" title="Open this slide">slide 33</button></p>
+
+  <div class="algo" data-title="Obligations for [I1+A1+I2+A2+W_real] entails [J1+J2+W]">
+    <ol>
+      <li>(i) The deployment context establishes the assumptions: [D] &rArr; [A<sub>1</sub>] and [A<sub>2</sub>].</li>
+      <li>(ii) The platform satisfies its own description: [W_real] &rArr; [W].</li>
+      <li>(iii) Each implementation satisfies its own specification under its assumptions: [I<sub>1</sub> + A<sub>1</sub>] &#8872; [J<sub>1</sub>] and [I<sub>2</sub> + A<sub>2</sub>] &#8872; [J<sub>2</sub>].</li>
+      <li>(iv) The composition operator is compositional: [X + Y] = [X] and [Y].</li>
+    </ol>
+  </div>
+
+  <div class="callout def">
+    <p><span class="co-tag">Definition</span> These four obligations are the four fault classes. An <strong>integration fault</strong> is the breach of at least one of them.</p>
+  </div>
+
+  <div class="table-wrap">
+    <table>
+      <tr><th>Class</th><th>Obligation broken</th><th>Category</th><th>Attribution</th><th>Repair</th></tr>
+      <tr><td><span class="pill crit">a</span></td><td>(i) assumptions not established</td><td>Design</td><td>none, three admissible sites</td><td>interfaces, adapter, protocol, decomposition</td></tr>
+      <tr><td><span class="pill warn">b</span></td><td>(ii) platform does not satisfy W</td><td>Infrastructure</td><td>none, it sits beneath all units</td><td>fix the platform, or correct W and redesign</td></tr>
+      <tr><td><span class="pill good">c</span></td><td>(iii) a unit fails its own spec</td><td>Unit fault</td><td>one component or its environment</td><td>code or specification of that component</td></tr>
+      <tr><td><span class="pill">d</span></td><td>(iv) "+" is not compositional</td><td>Design, meta</td><td>impossible, the fault is in the frame</td><td>choice of formalism, resource architecture</td></tr>
+    </table>
+  </div>
+
+  <p>The split between design and infrastructure is not arbitrary. An integration fault cannot be canonically attributed to one component, and a fault attributable to no component has exactly two possible homes: the relation between the units, which the design step fixed, or the layer beneath them. <button type="button" class="slide-ref" data-slide="pretschner1:34" title="Open this slide">slide 34</button> Read against the V model, this is why high-level design faults show up as integration faults. Each subsystem specification may be correctly derived from its function, and yet their product fails to capture the conjunction of the functions, because the specifications were too liberal or their design decisions contradict each other. <button type="button" class="slide-ref" data-slide="pretschner1:36" title="Open this slide">slides 36-39</button></p>
+
+  <p>The tabs below give the detail for each class.</p>
+
+  <div class="tabs">
+    <div class="tab" data-label="(a) design">
+      <p><strong>Assumptions not established.</strong> Two sub-cases. In the first, the assumptions are contradictory in themselves: unit 1 was verified under "the payload is JSON", unit 2 under "the payload is XML". No architecture can establish both, so the failure is deterministic and is caught on the first end-to-end run. In the second, the assumptions are jointly satisfiable, nothing forbids them, and yet they are incompatible in practice: I<sub>2</sub> emits values with property P<sub>2</sub>, I<sub>1</sub> was verified under input assumption P<sub>1</sub>, and P<sub>2</sub> does not imply P<sub>1</sub>. A single input from P<sub>2</sub> outside P<sub>1</sub> is enough, so the system can survive for months, until the first apostrophe in a surname or the first 29 February. The fault was there on day one; only the witness was missing. Other instances of P: units of measurement (ground software in pound-force seconds, navigation in newton-seconds, both modules correct), frequency, byte order, timing, assumptions about call history. Test question: if the platform keeps exactly to W, does the fault go away? If no, it is class (a). Attribution: none, because there are three equally admissible repair sites, namely loosen I<sub>1</sub>, tighten I<sub>2</sub>, or insert an adapter. <button type="button" class="slide-ref" data-slide="pretschner1:44" title="Open this slide">slide 44</button></p>
+    </div>
+    <div class="tab" data-label="(b) infrastructure">
+      <p><strong>The platform does not satisfy the assumption.</strong> The design step was correct under W, but W describes reality wrongly: communication is asynchronous where synchronous was assumed, latency exceeds the stated bound, the channel is lossy, clocks drift, messages are duplicated or reordered. There are two repairs, and one of them is a reclassification. Either fix the platform by configuration or replacement, or correct W to the truth, at which point the same fault reappears as a now visible design fault and is handled as class (a). Test question: does the fault vanish if the platform satisfies W exactly? If yes, it is class (b). Attribution: none, because it sits beneath all units, in no component at all. Example: W says FIFO per channel, and the deployed middleware uses multipath routing and delivers out of order. <button type="button" class="slide-ref" data-slide="pretschner1:45" title="Open this slide">slide 45</button></p>
+    </div>
+    <div class="tab" data-label="(c) unit fault">
+      <p><strong>The unit fails its own specification.</strong> This is not an integration fault at all, even though it surfaces during integration. It is either an ordinary bug, or an over-idealised specification that no implementation on this machine can satisfy: the specification computes in the real numbers where the machine has IEEE-754 floating point, or it assumes unbounded memory. It surfaces at integration because the offending input is one the unit test never generated, and only the partner component or the platform's timing makes it reachable. Attribution here is settled: exactly one component violates its own specification in the given W_real, the artefacts single it out, and nothing else has to move. That is the dividing line. <button type="button" class="slide-ref" data-slide="pretschner1:47" title="Open this slide">slide 47</button></p>
+    </div>
+    <div class="tab" data-label="(d) compositionality">
+      <p><strong>The composition operator is not compositional.</strong> The meaning of the composed system is not the conjunction of the meanings of the parts. This is a fault in the frame itself rather than in any artefact within it, so attribution is not merely undecided, it is impossible. The repairs are correspondingly heavy: a different formalism, or a different resource architecture. This is also the one obligation a test cannot reach at all; only a proof can. <button type="button" class="slide-ref" data-slide="pretschner1:33" title="Open this slide">slides 33-34</button></p>
+    </div>
+  </div>
+
+  <figure class="fig" id="mk10-fig-classify">
+    <svg viewBox="0 0 660 290" style="width:100%;max-width:660px" role="img"
+         aria-label="A decision flow. Starting from a failing composition, ask whether some component violates its own specification, which gives class c. If not, ask whether the fault vanishes when the platform satisfies its description exactly, which gives class b, otherwise class a. Class d, non-compositional composition, sits outside the flow.">
+      <defs>
+        <marker id="mk10-arr-f" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" fill="var(--muted)"/>
+        </marker>
+      </defs>
+
+      <rect x="150" y="10" width="200" height="32" rx="8" fill="var(--surface)" stroke="var(--muted)" stroke-width="1.6"/>
+      <text x="250" y="31" font-size="13" text-anchor="middle" fill="currentColor">the composition fails</text>
+      <line x1="250" y1="42" x2="250" y2="60" stroke="var(--muted)" stroke-width="1.6" marker-end="url(#mk10-arr-f)"/>
+
+      <rect x="90" y="62" width="320" height="40" rx="8" fill="var(--surface)" stroke="var(--accent)" stroke-width="1.8"/>
+      <text x="250" y="87" font-size="12" text-anchor="middle" fill="currentColor">does some component violate its own spec?</text>
+      <line x1="410" y1="82" x2="452" y2="82" stroke="var(--muted)" stroke-width="1.6" marker-end="url(#mk10-arr-f)"/>
+      <text x="431" y="74" font-size="12" text-anchor="middle" fill="var(--muted)">yes</text>
+      <rect x="456" y="62" width="188" height="40" rx="8" fill="var(--surface)" stroke="var(--good)" stroke-width="1.8"/>
+      <text x="550" y="87" font-size="12" text-anchor="middle" fill="currentColor">(c) unit fault</text>
+
+      <line x1="250" y1="102" x2="250" y2="136" stroke="var(--muted)" stroke-width="1.6" marker-end="url(#mk10-arr-f)"/>
+      <text x="266" y="122" font-size="12" fill="var(--muted)">no</text>
+
+      <rect x="70" y="138" width="340" height="44" rx="8" fill="var(--surface)" stroke="var(--accent)" stroke-width="1.8"/>
+      <text x="240" y="157" font-size="12" text-anchor="middle" fill="currentColor">if the platform satisfies W exactly,</text>
+      <text x="240" y="173" font-size="12" text-anchor="middle" fill="currentColor">does the fault vanish?</text>
+      <line x1="410" y1="160" x2="452" y2="160" stroke="var(--muted)" stroke-width="1.6" marker-end="url(#mk10-arr-f)"/>
+      <text x="431" y="152" font-size="12" text-anchor="middle" fill="var(--muted)">yes</text>
+      <rect x="456" y="140" width="188" height="40" rx="8" fill="var(--surface)" stroke="var(--warn)" stroke-width="1.8"/>
+      <text x="550" y="165" font-size="12" text-anchor="middle" fill="currentColor">(b) infrastructure fault</text>
+
+      <line x1="240" y1="182" x2="240" y2="212" stroke="var(--muted)" stroke-width="1.6" marker-end="url(#mk10-arr-f)"/>
+      <text x="256" y="200" font-size="12" fill="var(--muted)">no</text>
+      <rect x="146" y="214" width="188" height="40" rx="8" fill="var(--surface)" stroke="var(--crit)" stroke-width="1.8"/>
+      <text x="240" y="239" font-size="12" text-anchor="middle" fill="currentColor">(a) design fault</text>
+
+      <rect x="380" y="208" width="264" height="52" rx="8" fill="none" stroke="var(--hairline)" stroke-width="1.6" stroke-dasharray="6 4"/>
+      <text x="512" y="230" font-size="12" text-anchor="middle" fill="var(--muted)">(d) "+" itself is not compositional:</text>
+      <text x="512" y="247" font-size="12" text-anchor="middle" fill="var(--muted)">outside the flow, a fault in the frame</text>
+    </svg>
+    <figcaption class="fig-caption">The two questions that separate the three reachable fault classes. After the decision questions printed on the class slides 44, 45 and 47.</figcaption>
+  </figure>
+
+  <h3 id="mk10-billed">Worked example: the customer billed twice</h3>
+
+  <p>The lecture works one example in full, and it is worth following line by line, because everything in it is individually correct. <button type="button" class="slide-ref" data-slide="pretschner1:46" title="Open this slide">slide 46</button></p>
+
+  <div class="stepper" data-title="A payment charged twice, with nothing broken">
+    <div class="step" data-label="The unit and its hidden assumption">
+      <p>Component I<sub>1</sub> offers an operation <code>charge(order)</code>. Its implicit assumption A is that each order-ID reaches it at most once. This is a perfectly reasonable thing to assume, and it is not written anywhere.</p>
+    </div>
+    <div class="step" data-label="The harness satisfies it silently">
+      <p>The unit test calls <code>charge</code> once. A is trivially satisfied inside the harness, so no test ever fails, and nobody ever has a reason to write A down. I<sub>1</sub> passes.</p>
+    </div>
+    <div class="step" data-label="The partner sits on an at-least-once channel">
+      <p>Component I<sub>2</sub> calls I<sub>1</sub> over a channel that retries on timeout, so delivery is at-least-once rather than exactly-once. That is the part W did not say. The middleware behaves exactly as described; the description was simply too abstract.</p>
+    </div>
+    <div class="step" data-label="The customer is billed twice">
+      <p>A retry delivers the same order-ID twice, A is violated, and the charge is applied twice. Both components satisfy their specifications. No unit test could have caught this, because no unit test constructs the environment that breaks A.</p>
+    </div>
+    <div class="step" data-label="Where the fault actually is">
+      <p>The architecture attached a component that requires exactly-once delivery to a channel that does not provide it. Note where this leaves attribution: the repair can be a deduplication key in the protocol, or making I<sub>1</sub> idempotent, or inserting an adapter. All three are legitimate. That is an architectural decision, not a bug fix.</p>
+    </div>
+  </div>
+
+  <details class="reveal" id="mk10-reveal-class">
+    <summary>Is the billed-twice example class (a) or class (b)?</summary>
+    <p>It depends on what W claimed, and the lecture's own reclassification rule settles it. Apply the test question: if the platform delivered exactly once, as W described, would the fault go away? Yes, so as stated it is class (b), an infrastructure fault. Now correct W to the truth, so that W states at-least-once delivery. The platform now satisfies its description, obligation (ii) holds, and the same failure reappears as a breach of obligation (i): the design attached a component needing exactly-once to a channel that does not provide it. It has become a class (a) design fault. That is exactly what the deck means when it says one of the two repairs for class (b) is a reclassification.</p>
+  </details>
+
+  <div class="quiz">
+    <script type="application/json">
+    {"type":"mc",
+     "q":"A team ships a service verified under the assumption that its input list is shorter than 1024 entries. A partner service, whose own specification says nothing about list length, occasionally sends 2000 entries. The platform behaves exactly as its description says. Which class is this?",
+     "options":["(a) design fault: the assumptions were never established, and there are several admissible repair sites","(b) infrastructure fault: the channel misbehaved","(c) unit fault: the first service should have handled any length","(d) compositionality fault: the composition operator is at fault"],
+     "answer":0,
+     "explain":"The platform keeps to W, so the decision question for (b) answers no. Both services meet their own specifications, so it is not (c). The two assumptions are jointly satisfiable but incompatible in the sense of sub-case 2, and the fix could equally be to loosen the first service, tighten the second, or insert an adapter. That undecided repair site is the signature of (a)."}
+    </script>
+  </div>
+
+  <h3 id="mk10-criterion">What makes an integration fault an integration fault</h3>
+
+  <p>With the classes in place, the lecture can state the criterion that the practitioner quotations were groping for. <button type="button" class="slide-ref" data-slide="pretschner1:49" title="Open this slide">slide 49</button></p>
+
+  <div class="callout def">
+    <p><span class="co-tag">Definition</span> A fault is an <strong>integration fault</strong> if it cannot be attributed to any single component: each part meets its own specification, and the specifications do not determine where to intervene. A <strong>unit fault</strong>, by contrast, is attributable: exactly one component's implementation violates its own specification, the artefacts themselves single it out, and the diagnosis is finished when they do.</p>
+  </div>
+
+  <div class="callout warn">
+    <p><span class="co-tag">Careful</span> This does not say the repair has to touch several components. It usually can be done in any one of them. If two specifications are silent about the wire format and the implementations disagree, either side can be changed and no specification needs to move. That is precisely the point: because the specifications leave the choice open, choosing is a design decision and not a diagnosis.</p>
+  </div>
+
+  <p>The criterion also resolves the disagreement between the two ISO entries: they are not competing definitions, they name two different targets. The first, about proper functioning in the complete system, is testing for design faults, that is, for conflicting assumptions where every part meets its own specification and the composition still fails. The second, about the interaction among combined components, is testing for communication and infrastructure faults, where the connection itself, the middleware, the bus or the timing, does not behave as the design assumed. So JSON against XML, or metres per second against kilometres per hour, is a design fault and not a communication fault. <button type="button" class="slide-ref" data-slide="pretschner1:50" title="Open this slide">slide 50</button></p>
+
+  <h3 id="mk10-testproof">What a test buys and what a proof buys</h3>
+
+  <p>The four obligations also make it possible to say precisely what each verification method can reach. <button type="button" class="slide-ref" data-slide="pretschner1:48" title="Open this slide">slide 48</button></p>
+
+  <div class="grid-2">
+    <div>
+      <p><strong>Test</strong></p>
+      <ul>
+        <li>Samples the input space and extrapolates, so it misses the offending input until something makes it reachable.</li>
+        <li>Scales to whole systems and to the real platform. It is the only method that observes W_real at all.</li>
+        <li>Needs an oracle only for the cases it actually runs, so the specification can stay informal.</li>
+        <li>The assumptions A live in the harness, unstated.</li>
+        <li>Cannot pass vacuously: a contradictory setup runs no cases.</li>
+      </ul>
+    </div>
+    <div>
+      <p><strong>Proof</strong></p>
+      <ul>
+        <li>Quantifies over the entire input range, with no extrapolation.</li>
+        <li>Scales in the input space but not in system size: cost grows with component complexity, and whole-system proofs stay rare.</li>
+        <li>Requires the specification, W and A to be stated precisely. This is often the real work, and often the real obstacle.</li>
+        <li>Forces part of the assumptions into the open, but only the part inside the model. Scheduler, clock, network, floating point and memory usually sit outside it.</li>
+        <li>Can pass vacuously.</li>
+      </ul>
+    </div>
+  </div>
+
+  <p>Matched against the obligations: a proof is the strong instrument for (iii) across all inputs and the only instrument for (iv). A test is the only access to (ii), because (ii) is a claim about hardware that nobody can prove from a model of the code. A proof settles (i) if the assumptions are written down somewhere, and (iv) does not concern tests at all. Whatever the method, the abstraction hiding behind the assumptions may still miss faults.</p>
+
+  <h3 id="mk10-negative">No specification for the composition, so use negative specifications</h3>
+
+  <p>A test is an input, an expected output and a set of infrastructure conditions, so a test requires a specification. For integrated components the obvious question is: against which one? There may well be specifications for named subsystems, but there is usually none for the composition of an arbitrary set of units, and it is not even clear what constitutes a subsystem. What remains is explorative matching of interfaces. <button type="button" class="slide-ref" data-slide="pretschner1:57" title="Open this slide">slides 57-58</button></p>
+
+  <p>The lecture's first idea for filling the gap is to use potential faults as an implicit specification: instead of stating what the composition should do, state what must not be the case. If integration faults exist at all, the subsystem specifications are abstractions and therefore necessarily incomplete, and the aspects they left out can be catalogued. <button type="button" class="slide-ref" data-slide="pretschner1:53" title="Open this slide">slide 53</button></p>
+
+  <div class="table-wrap">
+    <table>
+      <tr><th colspan="4">Aspects a subsystem specification may fail to pin down</th></tr>
+      <tr><td>unit of measurement</td><td>coding</td><td>data model</td><td>quantization</td></tr>
+      <tr><td>time</td><td>frequency</td><td>value range</td><td>format</td></tr>
+      <tr><td>data type</td><td>message synchronicity</td><td>communication</td><td>message ordering</td></tr>
+      <tr><td>call ordering</td><td>schedule</td><td>information freshness</td><td>WCET against timeout</td></tr>
+    </table>
+  </div>
+
+  <p>Each cell is a family of negative specifications, and the lecture pins two of them to known failures. The Mars Climate Orbiter is the "unit of measurement" cell: the ground software worked in pound-force seconds, the navigation software in newton-seconds, and both modules were correct. <button type="button" class="slide-ref" data-slide="pretschner1:54" title="Open this slide">slide 54</button> Flaky tests are the "worst-case execution time against timeout" cell. <button type="button" class="slide-ref" data-slide="pretschner1:55" title="Open this slide">slide 55</button></p>
+
+  <p>The catalogue also explains why the unit and integration boundary refuses to stay put. Because a fault is usually located in one unit, we could in principle reveal these integration faults with unit tests, if only we had sufficiently precise unit specifications. For that reason alone the boundary is blurred. For some failures there is genuinely no unique unit to blame, and the reason is the same throughout: unit specifications are partial, and refinements of them may be inconsistent with each other. <button type="button" class="slide-ref" data-slide="pretschner1:56" title="Open this slide">slide 56</button></p>
+
+  <div class="quiz">
+    <script type="application/json">
+    {"type":"fill",
+     "q":"Since there is usually no specification for the composition of an arbitrary set of units, the lecture proposes writing the specification in the form \"X must not be the case\". What is such a specification called on the slides? (two words)",
+     "accept":["negative specification","negative specifications","negative spec","implicit specification"],
+     "explain":"A negative specification, also described as using potential faults as an implicit specification. The catalogue of sixteen under-specified aspects, from units of measurement to worst-case execution time, is the source of the concrete negative specifications to test against."}
+    </script>
+  </div>
+
+  <h3 id="mk10-limits">What integration testing cannot reach</h3>
+
+  <p>Not every system failure is a unit fault or an integration fault, and the lecture fences off three cases this machinery does not cover. First, systemic or emergent properties do not follow from the conjunction of the subsystem specifications at all. Performance is one. Security is another, since a system is only as strong as its weakest link and confidentiality is not compositional. So is a functional property such as the minimum distance a drone must keep from its neighbours or from obstacles, illustrated with the SwarmLab drone swarm simulator of Soria, Schiano and Floreano (IROS 2020). <button type="button" class="slide-ref" data-slide="pretschner1:59" title="Open this slide">slide 59</button></p>
+
+  <p>Second, the answer can depend on where you draw the system boundary. The parameters of an adaptive cruise control planner, its speed, acceleration and time distance, can be optimised perfectly well at unit level. But if the system is taken to be a string of vehicles rather than one vehicle, traffic string stability becomes a property of that system, and it may simply not have been considered. The lecture calls this a design fault, not an integration fault, and notes that it can be addressed by optimising against a system-level simulation of the cars in front (Hauer, Stern and Pretschner, ITSC 2019). <button type="button" class="slide-ref" data-slide="pretschner1:60" title="Open this slide">slide 60</button></p>
+
+  <p>Third, feature interaction, illustrated with telephony. If T1 forwards to T2 and T2 forwards to T3, is a call to T1 forwarded to T3? If T1 is set to "do not disturb" and forwards to T2, which is not, is a call to T1 forwarded to T2? None of these has an answer in the individual feature specifications. This too is a design fault rather than an integration fault, and the underlying problem is the same: incomplete requirements for the overall system. <button type="button" class="slide-ref" data-slide="pretschner1:61" title="Open this slide">slide 61</button></p>
+
+  <h3 id="mk10-bottom">Bottom line</h3>
+
+  <p>Integration problems arise for three reasons: a design fault that is only understood after implementation, a deployment problem where the hardware does not meet the assumptions of the software, or a deployment problem where the communication does not meet those assumptions. In all three, the assumptions that cause the trouble are implicit and not recorded in any specification. <button type="button" class="slide-ref" data-slide="pretschner1:51" title="Open this slide">slide 51</button></p>
+
+  <p>Testing is risk-based and therefore defect-based, so integration testing has to target the specific faults that integration can produce: design faults and infrastructure faults. The underlying problem is not really a testing problem at all; it is a problem about specifications, abstractions and assumptions. Asked whether testing is the right remedy for that, the lecture answers no, and adds that it is the only realistic one. The practical consequence: use the fault classes to derive and to assess integration test suites, and use large language models to generate tests and to draft the missing subsystem specifications. <button type="button" class="slide-ref" data-slide="pretschner1:62" title="Open this slide">slides 62-63</button></p>
+
+  <div class="callout key">
+    <p><span class="co-tag">Key idea</span> The five-line summary the deck opens and closes with. Integration rests on a shared understanding of the world: explicit contracts such as APIs and data models, plus implicit assumptions about timing, units, ranges and ordering. Integration faults surface only under composition, when every part meets its own specification and the system still fails. In principle the unit and integration boundary is artificial, since sufficiently complete specifications would catch these faults earlier, and the real gap is the missing specification. The first remedy is to test against negative specifications, cataloguing the faults composition can produce. The second is to surface the implicit background knowledge, where generative AI can help fill in the unwritten assumptions.</p>
+  </div>
+</section>

@@ -1,0 +1,436 @@
+<section class="lecture" id="sec-mk-2" data-num="2" data-day="mk-dv" data-title="Weakest Preconditions" data-lecturer="Jean-Christophe Filliatre">
+  <header class="lec-head">
+    <div class="lec-num">2</div>
+    <div>
+      <h2 id="mk2-top">Weakest Preconditions: From Programs to Verification Conditions</h2>
+      <p class="lec-meta">Jean-Christophe Filliâtre, CNRS. Second lecture of "The Why and How of Deductive Program Verification", subtitled "from programs to provers".</p>
+    </div>
+  </header>
+
+  <p class="lead">The previous session demonstrated a verification tool from the outside. This lecture opens the box. Filliâtre defines a small imperative language, fixes what correctness means for it using Hoare triples, and then presents the mechanical procedure that turns a program together with its specification into logical formulas a prover can attack. That procedure is Dijkstra’s weakest precondition calculus. The lecture builds it rule by rule, adds loop invariants, runtime safety, function contracts and termination, and applies each addition to one running example: Egyptian multiplication. If you follow that example to the end, you have followed the whole path from source code to verification condition.</p>
+
+  <h3 id="mk2-language">A small language where everything is an expression</h3>
+
+  <p>Nothing can be proved about a language that has not been defined, so the lecture starts by defining one that is small enough to fit on two slides. The first layer is <strong>pure terms</strong> <button type="button" class="slide-ref" data-slide="filliatre2:3" title="Open this slide">slide 3</button>: integer constants, the Boolean constants <code>true</code> and <code>false</code>, immutable variables (written <code>v</code>), mutable variables (written <code>x</code>), and unary and binary operations. The operations are the arithmetic ones (+, -, ×), the comparisons (=, ≠, &lt;, &gt;, ≤, ≥) and the Boolean connectives (∧, ∨, ¬). There are exactly two data types here, mathematical integers and Booleans.</p>
+
+  <p>Two properties of pure terms carry the whole design. First, a well-typed term always evaluates without error, which is why division is deliberately missing at this stage: division can fail, and failure is postponed. Second, evaluating a term never changes the memory. Together these mean that a pure term can live on both sides of the fence, in the program and in the logic, with the same reading in both. That is what makes it possible later to write a specification that mentions program variables directly.</p>
+
+  <p>The second layer is <strong>program expressions</strong> <button type="button" class="slide-ref" data-slide="filliatre2:4" title="Open this slide">slide 4</button>, which may allocate and modify memory.</p>
+
+  <div class="table-wrap">
+    <table>
+      <tr><th>Expression</th><th>Reading</th></tr>
+      <tr><td><code>skip</code></td><td>do nothing</td></tr>
+      <tr><td><code>t</code></td><td>a pure term, used as an expression</td></tr>
+      <tr><td><code>x ← t</code></td><td>assignment to a mutable variable</td></tr>
+      <tr><td><code>e ; e</code></td><td>sequence, a binary operator on expressions</td></tr>
+      <tr><td><code>let v = e in e</code></td><td>bind an immutable variable, local to the second expression</td></tr>
+      <tr><td><code>let ref x = e in e</code></td><td>allocate a mutable variable, local to the second expression</td></tr>
+      <tr><td><code>if t then e else e</code></td><td>conditional, with a pure term as the guard</td></tr>
+      <tr><td><code>while t do e done</code></td><td>loop, with a pure term as the guard</td></tr>
+    </table>
+  </div>
+
+  <p>Mutable variables are not first-class values: a reference cannot be stored in another variable or passed around as data. Well-typed expressions still cannot fail, but unlike terms they can diverge, because of the loop. Notice also that the guard of a conditional and the right-hand side of an assignment are terms rather than arbitrary expressions. That looks restrictive, and it is not, because syntactic sugar recovers the general forms <button type="button" class="slide-ref" data-slide="filliatre2:6" title="Open this slide">slide 6</button>.</p>
+
+  <div class="formula">
+    <code>x ← e</code> is <code>let v = e in x ← v</code><br>
+    <code>if e then e<sub>1</sub> else e<sub>2</sub></code> is <code>let v = e in if v then e<sub>1</sub> else e<sub>2</sub></code><br>
+    <code>if e<sub>1</sub> then e<sub>2</sub></code> is <code>if e<sub>1</sub> then e<sub>2</sub> else skip</code><br>
+    <code>e<sub>1</sub> &amp;&amp; e<sub>2</sub></code> is <code>if e<sub>1</sub> then e<sub>2</sub> else false</code><br>
+    <code>e<sub>1</sub> || e<sub>2</sub></code> is <code>if e<sub>1</sub> then true else e<sub>2</sub></code>
+  </div>
+
+  <p>The last two lines are worth reading twice. Short-circuit conjunction and disjunction are not primitives with a special evaluation order bolted on: they are conditionals, and they inherit the right behaviour automatically. This works only because the conditional is an expression that returns a value.</p>
+
+  <blockquote class="anecdote">
+    <p>The language makes no distinction between expressions and statements. There are only expressions, and that is nicer and simpler. Many programming languages still separate the two for historical reasons, but if you are designing a new language, especially one meant for verification, it is easier to have expressions only.</p>
+    <footer>Jean-Christophe Filliâtre, on the design of the language</footer>
+  </blockquote>
+
+  <p>Before any verification happens, the language is statically typed in a completely standard way <button type="button" class="slide-ref" data-slide="filliatre2:5" title="Open this slide">slide 5</button>. Three types suffice: <code>int</code>, <code>bool</code> and <code>unit</code>, the last one for expressions that return no meaningful value. So <code>skip</code> and every assignment have type <code>unit</code>; in a sequence the left expression must have type <code>unit</code> and the type of the whole sequence is the type of the right expression; a loop has type <code>unit</code>. This ordering matters: typing comes first, and a program that does not type check never reaches the prover.</p>
+
+  <p>The running example is <strong>Egyptian multiplication</strong>, also known as Russian peasant multiplication <button type="button" class="slide-ref" data-slide="filliatre2:7" title="Open this slide">slide 7</button>. It computes a product using only additions, halving, and a parity test. It is the same algorithm as fast exponentiation, with multiplication replaced by addition and squaring replaced by doubling.</p>
+
+  <pre><code>let ref p = a in
+let ref q = b in
+let ref r = 0 in
+while q &gt; 0 do
+    if odd q then r ← r + p ;
+    p ← p + p ;
+    q ← half q
+done ;
+r</code></pre>
+
+  <p>The informal specification is short: at the beginning we require <code>b ≥ 0</code>, and at the end we ensure that the returned value equals <code>a × b</code>. The rest of the lecture is about making that sentence formal and then proving it mechanically.</p>
+
+  <h3 id="mk2-hoare">Hoare triples and partial correctness</h3>
+
+  <p>The statement to be proved is written as a triple <button type="button" class="slide-ref" data-slide="filliatre2:8" title="Open this slide">slide 8</button>.</p>
+
+  <div class="callout def">
+    <p><span class="co-tag">Definition</span> <strong>Hoare triple</strong> <code>{P} e {Q}</code>, where <code>P</code> is the precondition, <code>e</code> a program expression and <code>Q</code> the postcondition: if we execute <code>e</code> in a state that satisfies <code>P</code>, then the computation either diverges or terminates in a state that satisfies <code>Q</code>. This is <strong>partial correctness</strong>: nothing at all is claimed about termination.</p>
+  </div>
+
+  <p>Three valid triples make the definition concrete <button type="button" class="slide-ref" data-slide="filliatre2:9" title="Open this slide">slide 9</button>. The first is the obvious one: <code>{x = 1} x ← x + 2 {x = 3}</code>. The second, <code>{∃v. x = 4v} x + 42 {∃w. result = 2w}</code>, shows the convention for the value of an expression: the reserved name <code>result</code> stands in the postcondition for the value the expression produced. A multiple of four plus 42 is indeed even. The third is the interesting one: <code>{true} while true do skip done {false}</code>. Starting from any state whatsoever, that program diverges, so by the definition the triple holds, and it holds for every postcondition, including <code>false</code>.</p>
+
+  <div class="callout warn">
+    <p><span class="co-tag">Careful</span> A non-terminating program satisfies every specification under partial correctness. This is not a defect in the definition; it is the price of separating two independent questions. Termination is proved later, with variants, and only the two together give total correctness.</p>
+  </div>
+
+  <div class="quiz">
+    <script type="application/json">
+    {"type":"mc",
+     "q":"Why is the triple {true} while true do skip done {false} valid?",
+     "options":["Because false is a valid postcondition for any loop","Because the program never terminates, so partial correctness imposes no obligation on the final state","Because the loop guard is a pure term and pure terms cannot fail","Because the invariant true is preserved by the body"],
+     "answer":1,
+     "explain":"Partial correctness says the computation either diverges or ends in a state satisfying Q. This program always diverges, so the first alternative is taken and Q is never tested. Ruling this out is exactly what a termination proof adds."}
+    </script>
+  </div>
+
+  <p>For the running example the goal is therefore the triple <code>{b ≥ 0}</code> Egyptian multiplication <code>{result = a × b}</code>.</p>
+
+  <h3 id="mk2-wp">From deduction rules to weakest preconditions</h3>
+
+  <p>How does one establish that a triple is valid? Hoare’s 1969 paper answers with deduction rules, one per construct <button type="button" class="slide-ref" data-slide="filliatre2:11" title="Open this slide">slide 11</button>. The rule for the conditional, for example, says that if the two triples for the branches hold under the guard and its negation, then the triple for the conditional holds.</p>
+
+  <div class="formula">
+    premises: &nbsp; {P ∧ t} e<sub>1</sub> {Q} &nbsp;&nbsp; and &nbsp;&nbsp; {P ∧ ¬t} e<sub>2</sub> {Q}<br>
+    conclusion: &nbsp; {P} if t then e<sub>1</sub> else e<sub>2</sub> {Q}
+  </div>
+
+  <p>As a proof system this is fine. As a basis for a tool it is awkward. The rules are read from the conclusion upwards, and at many program points they require an intermediate assertion that nothing in the rule tells you how to choose. The rule for a sequence, for instance, needs a formula describing the state in the middle, and that formula has to come from somewhere. Mechanising this means guessing, and guessing is what we want to avoid.</p>
+
+  <p>The practical answer came a few years later, from Edsger Dijkstra in 1975 <button type="button" class="slide-ref" data-slide="filliatre2:12" title="Open this slide">slide 12</button>.</p>
+
+  <div class="callout key">
+    <p><span class="co-tag">Key idea</span> <strong>Weakest precondition.</strong> Given an expression <code>e</code> and a postcondition <code>Q</code>, compute the weakest precondition <code>P</code> such that <code>{P} e {Q}</code> holds. It is written <code>WP(e, Q)</code>. This is a <em>predicate transformer</em>: a function that takes a formula and returns a formula. Nothing has to be guessed, because the intermediate assertions are computed.</p>
+  </div>
+
+  <p>The intuition is easiest to see on an assignment. If you want <code>x</code> to be even after <code>x ← 3 × x × y</code>, then what you need before is that <code>3 × x × y</code> is even. In general, to obtain a postcondition that talks about <code>x</code>, you need the same formula with the assigned term put in the place of <code>x</code>. Here are all the rules of the calculus <button type="button" class="slide-ref" data-slide="filliatre2:25" title="Open this slide">slide 25</button>.</p>
+
+  <div class="table-wrap">
+    <table>
+      <tr><th>Rule</th><th>What it does</th></tr>
+      <tr><td><code>WP(skip, Q) = Q</code></td><td>Nothing happens, so nothing changes.</td></tr>
+      <tr><td><code>WP(t, Q) = Q[result ↦ t]</code></td><td>A pure term produces a value. Replace the reserved name <code>result</code> by that term.</td></tr>
+      <tr><td><code>WP(x ← t, Q) = Q[x ↦ t]</code></td><td>Assignment is substitution: every occurrence of <code>x</code> in the postcondition becomes <code>t</code>.</td></tr>
+      <tr><td><code>WP(e<sub>1</sub> ; e<sub>2</sub>, Q) = WP(e<sub>1</sub>, WP(e<sub>2</sub>, Q))</code></td><td>Compute the inner call first. <code>WP(e<sub>2</sub>, Q)</code> is the assertion that must hold in the middle of the sequence, and it becomes the postcondition of the first expression.</td></tr>
+      <tr><td><code>WP(let v = e<sub>1</sub> in e<sub>2</sub>, Q) = WP(e<sub>1</sub>, WP(e<sub>2</sub>, Q)[v ↦ result])</code></td><td>Like a sequence, with a rename. The middle assertion may mention <code>v</code>, whose value is the value produced by <code>e<sub>1</sub></code>, so <code>v</code> is renamed to <code>result</code> before the formula is used as the postcondition of <code>e<sub>1</sub></code>.</td></tr>
+      <tr><td><code>WP(let ref x = e<sub>1</sub> in e<sub>2</sub>, Q) = WP(e<sub>1</sub>, WP(e<sub>2</sub>, Q)[x ↦ result])</code></td><td>Identical. For the calculus there is no difference between introducing an immutable and a mutable variable; the difference shows up only in the assignment rule and in typing.</td></tr>
+      <tr><td><code>WP(if t then e<sub>1</sub> else e<sub>2</sub>, Q) = (t ⇒ WP(e<sub>1</sub>, Q)) ∧ (¬t ⇒ WP(e<sub>2</sub>, Q))</code></td><td>Both branches must be covered, each under its own hypothesis about the guard.</td></tr>
+    </table>
+  </div>
+
+  <p>Every rule reduces the problem to smaller expressions, so the computation terminates and is completely mechanical. The direction is the point: the calculus starts at the postcondition and moves towards the front of the program.</p>
+
+  <div class="quiz">
+    <script type="application/json">
+    {"type":"fill",
+     "q":"In the rule for a sequence, WP(e1 ; e2, Q), which of the two subexpressions has its weakest precondition computed first? Answer with the name of the subexpression.",
+     "accept":["e2","the second","second","e 2","e_2"],
+     "explain":"The rule is WP(e1, WP(e2, Q)). The inner call is evaluated first: the weakest precondition of the second expression is the assertion that must hold in the middle, and it then serves as the postcondition of the first. The whole calculus runs backwards."}
+    </script>
+  </div>
+
+  <h3 id="mk2-waterfall">Swimming up the waterfall: the loop body</h3>
+
+  <p>The lecture applies the rules to the three lines that make up the body of the running example <button type="button" class="slide-ref" data-slide="filliatre2:26" title="Open this slide">slides 26-33</button>. Write <code>Q[p, q, r]</code> for an arbitrary postcondition about the three mutable variables, so that <code>Q[p + p, half q, r]</code> means the same formula with <code>p + p</code> in the slot for <code>p</code> and <code>half q</code> in the slot for <code>q</code>. The computation starts at the bottom, under the last line, and works upwards.</p>
+
+  <figure class="fig" id="mk2-fig-waterfall">
+    <svg viewBox="0 0 660 306" role="img" font-family="inherit"
+         aria-label="The three lines of the loop body with an assertion between each pair of lines; the assertions are computed from the bottom one upwards, each assignment substituting its assigned term into the assertion below it">
+      <defs>
+        <marker id="mk2-arr-up" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" fill="var(--accent)"/>
+        </marker>
+      </defs>
+
+      <rect x="24" y="16" width="430" height="54" rx="8" fill="var(--wash-green)" stroke="var(--good)" stroke-width="1.5">
+        <title>The weakest precondition of the whole body</title>
+      </rect>
+      <text x="38" y="38" font-size="12.5" font-family="monospace" fill="var(--ink)">( odd q  ⇒  Q[p + p, half q, r + p]) ∧</text>
+      <text x="38" y="58" font-size="12.5" font-family="monospace" fill="var(--ink)">(¬ odd q  ⇒  Q[p + p, half q, r    ])</text>
+      <text x="466" y="47" font-size="11.5" font-weight="600" fill="var(--good-ink)">result</text>
+
+      <text x="46" y="94" font-size="12.5" font-family="monospace" fill="var(--ink-2)">if odd q then r ← r + p ;</text>
+
+      <rect x="24" y="106" width="430" height="28" rx="8" fill="var(--wash-blue)" stroke="var(--accent)" stroke-width="1.5"/>
+      <text x="38" y="125" font-size="12.5" font-family="monospace" fill="var(--ink)">Q[p + p, half q, r]</text>
+      <circle cx="466" cy="120" r="10" fill="var(--surface)" stroke="var(--accent)" stroke-width="1.5"/>
+      <text x="466" y="124" font-size="11" text-anchor="middle" fill="var(--ink)">3</text>
+
+      <text x="46" y="158" font-size="12.5" font-family="monospace" fill="var(--ink-2)">p ← p + p ;</text>
+
+      <rect x="24" y="170" width="430" height="28" rx="8" fill="var(--wash-blue)" stroke="var(--accent)" stroke-width="1.5"/>
+      <text x="38" y="189" font-size="12.5" font-family="monospace" fill="var(--ink)">Q[p, half q, r]</text>
+      <circle cx="466" cy="184" r="10" fill="var(--surface)" stroke="var(--accent)" stroke-width="1.5"/>
+      <text x="466" y="188" font-size="11" text-anchor="middle" fill="var(--ink)">2</text>
+
+      <text x="46" y="222" font-size="12.5" font-family="monospace" fill="var(--ink-2)">q ← half q</text>
+
+      <rect x="24" y="234" width="430" height="28" rx="8" fill="var(--surface)" stroke="var(--muted)" stroke-width="1.5"/>
+      <text x="38" y="253" font-size="12.5" font-family="monospace" fill="var(--ink)">Q[p, q, r]</text>
+      <text x="452" y="253" font-size="11.5" font-weight="600" fill="var(--muted)">given</text>
+
+      <line x1="580" y1="252" x2="580" y2="30" stroke="var(--accent)" stroke-width="1.6" marker-end="url(#mk2-arr-up)"/>
+      <text x="604" y="150" font-size="12" fill="var(--ink-2)" text-anchor="middle" transform="rotate(-90 604 150)">WP is computed upwards</text>
+      <text x="558" y="150" font-size="12" fill="var(--muted)" text-anchor="middle" transform="rotate(-90 558 150)">the program runs downwards</text>
+    </svg>
+    <figcaption class="fig-caption">Each assignment rewrites the assertion below it by substitution, so the assertions are produced from the bottom up while the program executes from the top down. After the lecture’s figure.</figcaption>
+  </figure>
+
+  <div class="stepper" data-title="Computing WP for the loop body, one line at a time">
+    <div class="step" data-label="Start at the bottom">
+      <p>We are given the postcondition of the body, <code>Q[p, q, r]</code>. Nothing else is known yet.</p>
+    </div>
+    <div class="step" data-label="q ← half q">
+      <p>The last line is an assignment, so apply <code>WP(x ← t, Q) = Q[x ↦ t]</code>. Every occurrence of <code>q</code> becomes <code>half q</code>; <code>p</code> and <code>r</code> are untouched by this assignment and stay as they are. Result: <code>Q[p, half q, r]</code>.</p>
+    </div>
+    <div class="step" data-label="p ← p + p">
+      <p>The same rule again, this time substituting <code>p + p</code> for <code>p</code> in the formula we just obtained. Result: <code>Q[p + p, half q, r]</code>. This formula is now the postcondition of the conditional on the first line.</p>
+    </div>
+    <div class="step" data-label="The else branch">
+      <p>The conditional has no <code>else</code>, so by the sugar rule the missing branch is <code>skip</code>. Since <code>WP(skip, Q) = Q</code>, the precondition of that branch is unchanged: <code>Q[p + p, half q, r]</code>.</p>
+    </div>
+    <div class="step" data-label="The then branch">
+      <p>The other branch is the assignment <code>r ← r + p</code>. Substituting <code>r + p</code> for <code>r</code> gives <code>Q[p + p, half q, r + p]</code>.</p>
+    </div>
+    <div class="step" data-label="Combine the branches">
+      <p>The conditional rule joins the two results, each guarded by the test: <code>( odd q ⇒ Q[p + p, half q, r + p]) ∧ (¬ odd q ⇒ Q[p + p, half q, r])</code>. This is the weakest precondition of the whole body. No intermediate assertion was invented at any point: every formula was produced by a substitution.</p>
+    </div>
+  </div>
+
+  <h3 id="mk2-loops">Loops: the one place the user has to help</h3>
+
+  <p>Every construct so far had a rule that computes. The loop does not, and this is where the user enters the picture. One can define the weakest precondition of a loop by asserting that a suitable invariant exists, but an existential quantifier over properties is not something a first-order prover can handle. The practical version asks the user to write the invariant down as an annotation <button type="button" class="slide-ref" data-slide="filliatre2:34" title="Open this slide">slides 34-35</button>.</p>
+
+  <div class="formula">
+    WP(while t invariant J do e done, Q) =<br>
+    J ∧<br>
+    ∀ x<sub>1</sub> ... x<sub>k</sub> . (J ∧ t ⇒ WP(e, J)) ∧ (J ∧ ¬t ⇒ Q)
+  </div>
+
+  <p>The formula packages three separate proof obligations.</p>
+
+  <div class="table-wrap">
+    <table>
+      <tr><th>Obligation</th><th>Formula</th><th>Meaning</th></tr>
+      <tr><td>Establishment</td><td><code>J</code></td><td>The invariant holds when the loop is first reached.</td></tr>
+      <tr><td>Preservation</td><td><code>J ∧ t ⇒ WP(e, J)</code></td><td>Starting from any state that satisfies the invariant and the guard, one iteration of the body restores the invariant.</td></tr>
+      <tr><td>Exit</td><td><code>J ∧ ¬t ⇒ Q</code></td><td>When the guard is false, the invariant alone is strong enough to give the postcondition.</td></tr>
+    </table>
+  </div>
+
+  <p>The universal quantifier over <code>x<sub>1</sub> ... x<sub>k</sub></code>, which ranges over exactly the references modified in the body, is the subtle part. We cannot know the values of those references after an unknown number of iterations, so preservation and exit have to be proved for arbitrary values of them. The consequence is a practical one: the invariant has to carry every piece of information about the modified variables that the rest of the proof needs, because outside the invariant nothing is known about them. Variables the loop does not modify are not quantified, so facts about them, such as the precondition <code>b ≥ 0</code> in the running example, remain available as free hypotheses <button type="button" class="slide-ref" data-slide="filliatre2:44" title="Open this slide">slide 44</button>.</p>
+
+  <p>Finding an invariant is hard in general: it amounts to constructing a proof of the postcondition by induction. In a tool such as Why3 the invariant is either written by the user or produced by another method, for instance abstract interpretation.</p>
+
+  <div class="quiz">
+    <script type="application/json">
+    {"type":"mc",
+     "q":"Why does the loop rule quantify universally over the references modified by the loop body?",
+     "options":["To allow the loop to be executed in parallel","Because the number of iterations is unknown, so preservation and exit must hold for arbitrary values of those references","Because the prover cannot handle free variables","To make the invariant weaker and therefore easier to prove"],
+     "answer":1,
+     "explain":"After n iterations the values of the modified references are unknown, so the proof is done for arbitrary values. This is why the invariant must state everything the rest of the proof needs about those variables. References that the body does not modify are not quantified, and facts about them stay available."}
+    </script>
+  </div>
+
+  <p>With the annotation in place, the whole verification condition for Egyptian multiplication can be assembled <button type="button" class="slide-ref" data-slide="filliatre2:36" title="Open this slide">slides 36-41</button>.</p>
+
+  <div class="stepper" data-title="Assembling the verification condition for Egyptian multiplication">
+    <div class="step" data-label="The postcondition">
+      <p>We start from <code>result = a × b</code>, placed after the entire program.</p>
+    </div>
+    <div class="step" data-label="The returned term">
+      <p>The last expression of the program is the pure term <code>r</code>. By <code>WP(t, Q) = Q[result ↦ t]</code>, the assertion just before it is <code>r = a × b</code>. This is what must hold when the loop exits.</p>
+    </div>
+    <div class="step" data-label="The loop body">
+      <p>The user supplies an invariant <code>J[p, q, r]</code>. Preservation needs <code>WP(body, J)</code>, and we computed exactly that in the previous stepper, with <code>J</code> in place of <code>Q</code>: <code>( odd q ⇒ J[p + p, half q, r + p]) ∧ (¬ odd q ⇒ J[p + p, half q, r])</code>.</p>
+    </div>
+    <div class="step" data-label="The loop">
+      <p>Apply the loop rule, quantifying over the three modified references:</p>
+      <div class="formula">
+        J[p, q, r] ∧<br>
+        ∀ p q r . J[p, q, r] ⇒<br>
+        &nbsp;&nbsp;(q &gt; 0 ⇒ ( odd q ⇒ J[p + p, half q, r + p]) ∧ (¬ odd q ⇒ J[p + p, half q, r])) ∧<br>
+        &nbsp;&nbsp;(q ≤ 0 ⇒ r = a × b)
+      </div>
+    </div>
+    <div class="step" data-label="The three allocations">
+      <p>The three <code>let ref</code> bindings initialise <code>p</code>, <code>q</code> and <code>r</code> with <code>a</code>, <code>b</code> and <code>0</code>. Their rule substitutes those terms for the variables, and only the first line changes: the first conjunct becomes <code>J[a, b, 0]</code>. The quantified part is untouched, because <code>p</code>, <code>q</code> and <code>r</code> are bound there by the universal quantifier.</p>
+    </div>
+    <div class="step" data-label="The precondition">
+      <p>By the soundness corollary, proving the triple means proving that the precondition implies the weakest precondition:</p>
+      <div class="formula">
+        b ≥ 0 ⇒ ( J[a, b, 0] ∧ ∀ p q r . J[p, q, r] ⇒ ... )
+      </div>
+      <p>Note where <code>b ≥ 0</code> sits: outside the quantifier, so it is available when proving establishment. There is no need to repeat it inside the loop invariant.</p>
+    </div>
+  </div>
+
+  <details class="reveal">
+    <summary>Exercise 2 from the lecture: find a suitable invariant J[p, q, r] <button type="button" class="slide-ref" data-slide="filliatre2:42" title="Open this slide">slide 42</button></summary>
+    <p>One invariant that works is <code>q ≥ 0 ∧ r + p × q = a × b</code>. Establishment: with <code>p = a</code>, <code>q = b</code>, <code>r = 0</code> it reduces to <code>b ≥ 0 ∧ a × b = a × b</code>, and <code>b ≥ 0</code> is exactly the free hypothesis coming from the precondition. Preservation: when <code>q</code> is even, <code>r + 2p × (q/2) = r + p × q</code>; when <code>q</code> is odd, <code>(r + p) + 2p × ((q - 1)/2) = r + p × q</code>. Exit: <code>q ≥ 0</code> together with <code>q ≤ 0</code> forces <code>q = 0</code>, so <code>r = r + p × 0 = a × b</code>. The conjunct <code>q ≥ 0</code> is needed precisely because the exit obligation knows nothing else about <code>q</code>.</p>
+  </details>
+
+  <p>What justifies the whole construction is a soundness theorem <button type="button" class="slide-ref" data-slide="filliatre2:43" title="Open this slide">slide 43</button>: for any <code>e</code> and any <code>Q</code>, the triple <code>{WP(e, Q)} e {Q}</code> is valid. It is proved by induction on the structure of the program with respect to a reasonable semantics, for example an operational one. The corollary is the working recipe: to show that <code>{P} e {Q}</code> holds, it suffices to prove the single formula <code>P ⇒ WP(e, Q)</code>. That is what Why3 does.</p>
+
+  <h3 id="mk2-safety">Runtime safety</h3>
+
+  <p>So far a program could diverge but never fail. Real programs fail: arithmetic operations overflow or divide by zero, memory accesses hit null pointers or run past the end of a buffer, and assertions written by the programmer can be violated. The definition of the triple is therefore strengthened <button type="button" class="slide-ref" data-slide="filliatre2:46" title="Open this slide">slides 46-47</button>: if we execute <code>e</code> in a state satisfying <code>P</code>, then there will be <em>no runtime error</em>, and the computation either diverges or terminates normally in a state satisfying <code>Q</code>. Divergence is still allowed under partial correctness; failure is not.</p>
+
+  <p>The first new construct is the assertion, <code>assert R</code>, which fails if <code>R</code> does not hold <button type="button" class="slide-ref" data-slide="filliatre2:48" title="Open this slide">slide 48</button>. Its rule looks trivial and hides a practical trick.</p>
+
+  <div class="formula">
+    WP(assert R, Q) = R ∧ Q = R ∧ (R ⇒ Q)
+  </div>
+
+  <p>The two right-hand sides are logically equivalent, and yet the second is the one tools use. The reason appears when the conjunction is split into separate proof obligations: the first one asks you to prove <code>R</code>, and in the second one <code>R</code> arrives as a hypothesis in the context, so the fact you just asserted can be used to discharge everything that comes after it in the program. That is usually the whole point of writing the assertion.</p>
+
+  <div class="quiz">
+    <script type="application/json">
+    {"type":"mc",
+     "q":"WP(assert R, Q) is written R and (R implies Q) rather than the equivalent R and Q. Why?",
+     "options":["The second form is weaker, so it is easier to prove","When the conjunction is split into separate goals, the implication form puts R into the context of the second goal, so the asserted fact can be used afterwards","Only the second form is sound when the assertion fails","It avoids duplicating R in the generated formula"],
+     "answer":1,
+     "explain":"The two forms are logically equivalent, so neither is weaker. The difference is practical: after splitting, the second goal has R as a hypothesis, which is exactly what an assertion is for."}
+    </script>
+  </div>
+
+  <p>Partially defined operations get the same treatment <button type="button" class="slide-ref" data-slide="filliatre2:49" title="Open this slide">slide 49</button>. Adding Euclidean division and array access to the language gives two more rules.</p>
+
+  <div class="formula">
+    WP(t<sub>1</sub> div t<sub>2</sub>, Q) = t<sub>2</sub> ≠ 0 ∧ Q[result ↦ (t<sub>1</sub> div t<sub>2</sub>)]<br>
+    WP(a[t], Q) = 0 ≤ t &lt; |a| ∧ Q[result ↦ a[t]]
+  </div>
+
+  <p>Each rule has the same shape: a safety condition, then the ordinary substitution. Notice that the division on the left of each rule is the program operation, which can fail, while the one inside the substituted term is the logical function, which is total. The same symbol appears on both sides of the fence with two different meanings.</p>
+
+  <h3 id="mk2-contracts">Functions and contracts</h3>
+
+  <p>A program is not one big expression, so the language gains functions <button type="button" class="slide-ref" data-slide="filliatre2:51" title="Open this slide">slide 51</button>. There are two forms: <code>let f (v<sub>1</sub>: τ<sub>1</sub>) ... : τ C = e</code> defines a function with a body, and <code>val f (v<sub>1</sub>: τ<sub>1</sub>) ... : τ C</code> declares an abstract one with no implementation at all. Both carry a contract <code>C</code> made of three kinds of clause: <code>requires P</code> for the precondition, <code>ensures Q</code> for the postcondition, and <code>writes x<sub>1</sub> ... x<sub>k</sub></code> listing the global references the function may modify. For a defined function the tool can infer the <code>writes</code> clause; for a declared one the user must state it.</p>
+
+  <pre><code>val ref r : int   (* a global reference *)
+
+let incr_r (v: int) : int
+  requires { v &gt; 0 }
+  writes   { r }
+  ensures  { result = old r /\ r = old r + v }
+= let u = r in
+  r &lt;- u + v;
+  u</code></pre>
+
+  <p>The postcondition needs to relate the state at the end of the function to the state at the beginning, which is what the <code>old</code> notation provides: <code>old r</code> denotes the value of <code>r</code> in the pre-state. Verifying the definition means discharging one formula <button type="button" class="slide-ref" data-slide="filliatre2:52" title="Open this slide">slides 52-53</button>: quantify over the global references and the parameters, assume the precondition, and prove the weakest precondition of the body against the postcondition, with the old references replaced by the current ones since we are standing in the pre-state.</p>
+
+  <div class="formula">
+    VC(incr_r) = ∀ r v . v &gt; 0 ⇒ ( r = r<sup>o</sup> ∧ r + v = r<sup>o</sup> + v )[r<sup>o</sup> ↦ r]<br>
+    which reduces to &nbsp; ∀ r v . v &gt; 0 ⇒ r = r ∧ r + v = r + v
+  </div>
+
+  <p>At a call site the contract is used in the other direction <button type="button" class="slide-ref" data-slide="filliatre2:57" title="Open this slide">slide 57</button>. The rule for <code>f t<sub>1</sub> ... t<sub>n</sub></code> is a conjunction of two parts. The first is the precondition of <code>f</code> with the formal parameters replaced by the actual arguments: the caller must establish it. The second says that the postcondition of <code>f</code>, similarly instantiated, implies the postcondition we are trying to prove after the call. That second part is under a universal quantifier over <code>result</code> and over the references the function may modify, because after the call their values are unknown except for what the postcondition says, and fresh variables are used to remember the pre-state values so that <code>old</code> keeps its meaning. The substitutions look heavy, and their job is simply to avoid variable capture.</p>
+
+  <p>The result is that verification is modular: each function is verified once, on its own <button type="button" class="slide-ref" data-slide="filliatre2:58" title="Open this slide">slide 58</button>.</p>
+
+  <figure class="fig" id="mk2-fig-contract">
+    <svg viewBox="0 0 660 236" role="img" font-family="inherit"
+         aria-label="Two boxes, caller and callee. The precondition arrow points from caller to callee: the caller establishes it and the callee assumes it. The postcondition arrow points back: the callee ensures it and the caller assumes it.">
+      <defs>
+        <marker id="mk2-arr-r" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" fill="var(--c-blue)"/>
+        </marker>
+        <marker id="mk2-arr-l" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" fill="var(--good)"/>
+        </marker>
+      </defs>
+
+      <rect x="20" y="24" width="230" height="180" rx="10" fill="var(--surface)" stroke="var(--hairline)" stroke-width="1.5"/>
+      <text x="135" y="46" font-size="12.5" font-weight="700" text-anchor="middle" fill="var(--ink)">caller</text>
+      <text x="40" y="76" font-size="12" font-family="monospace" fill="var(--muted)">...</text>
+      <text x="40" y="104" font-size="12" font-family="monospace" fill="var(--c-blue)">P established</text>
+      <text x="40" y="132" font-size="12" font-family="monospace" fill="var(--ink)">f 42 true;</text>
+      <text x="40" y="160" font-size="12" font-family="monospace" fill="var(--good-ink)">Q assumed</text>
+      <text x="40" y="188" font-size="12" font-family="monospace" fill="var(--muted)">...</text>
+
+      <rect x="410" y="24" width="230" height="180" rx="10" fill="var(--surface)" stroke="var(--hairline)" stroke-width="1.5"/>
+      <text x="525" y="46" font-size="12.5" font-weight="700" text-anchor="middle" fill="var(--ink)">callee</text>
+      <text x="430" y="76" font-size="12" font-family="monospace" fill="var(--ink)">let f u v =</text>
+      <text x="430" y="104" font-size="12" font-family="monospace" fill="var(--c-blue)">P assumed</text>
+      <text x="430" y="132" font-size="12" font-family="monospace" fill="var(--muted)">...</text>
+      <text x="430" y="160" font-size="12" font-family="monospace" fill="var(--good-ink)">Q ensured</text>
+
+      <line x1="250" y1="100" x2="410" y2="100" stroke="var(--c-blue)" stroke-width="1.6" marker-end="url(#mk2-arr-r)"/>
+      <text x="330" y="90" font-size="12" text-anchor="middle" fill="var(--ink-2)">precondition</text>
+
+      <line x1="410" y1="156" x2="250" y2="156" stroke="var(--good)" stroke-width="1.6" marker-end="url(#mk2-arr-l)"/>
+      <text x="330" y="176" font-size="12" text-anchor="middle" fill="var(--ink-2)">postcondition</text>
+    </svg>
+    <figcaption class="fig-caption">The duality of a contract: what one side must establish, the other side may assume. After the lecture’s figure on modularity.</figcaption>
+  </figure>
+
+  <p>Filliâtre draws the analogy with static typing explicitly. A compiler checks the declared types against the body when it compiles a function, and afterwards assumes those types at every call. A verifier does the same with the contract, one level up. The body is checked once against the contract, and each caller then works against the contract alone, never against the body.</p>
+
+  <p>This also gives a cleaner account of unsafe operations than the special rules of the previous section <button type="button" class="slide-ref" data-slide="filliatre2:59" title="Open this slide">slide 59</button>. Division and array access need not be built into the language at all: they can be declared as program functions whose contracts state the safety condition and relate the result to the corresponding logical function.</p>
+
+  <pre><code>val (/) (x: int) (y: int) : int
+  requires { y &lt;&gt; 0 }
+  ensures  { result = div x y }
+
+val ([]) (a: array 'a) (i: int) : 'a
+  requires { 0 &lt;= i &lt; size a }
+  ensures  { result = a[i] }</code></pre>
+
+  <p>Applying the function-call rule to these declarations produces exactly the weakest preconditions given earlier for the built-in versions. This is how Why3 actually handles unsafe operations: they live in the library, not in the calculus.</p>
+
+  <h3 id="mk2-termination">Termination, variants and total correctness</h3>
+
+  <p>Everything so far is partial correctness. The remaining question is whether the program terminates for every initial state satisfying the precondition <button type="button" class="slide-ref" data-slide="filliatre2:61" title="Open this slide">slide 61</button>. Two things suffice: every loop makes a finite number of iterations, and recursive calls cannot go on indefinitely. Partial correctness plus termination is called <strong>total correctness</strong>.</p>
+
+  <div class="callout def">
+    <p><span class="co-tag">Definition</span> A <strong>variant</strong> is a value attached to a loop or a recursive function which is required to decrease at each iteration or each call, with respect to a well-founded order, that is, an order with no infinite decreasing chain <button type="button" class="slide-ref" data-slide="filliatre2:62" title="Open this slide">slide 62</button>. For signed integers a practical choice is <code>i ≺ j</code> defined as <code>i &lt; j ∧ 0 ≤ j</code>.</p>
+  </div>
+
+  <p>Note where the non-negativity sits in that order: it constrains the larger value <code>j</code>, not the smaller one. That is convenient in practice, because it allows the variant to become negative in the very last state, after the final iteration, without breaking anything.</p>
+
+  <p>The loop rule gains one clause <button type="button" class="slide-ref" data-slide="filliatre2:63" title="Open this slide">slide 63</button>. With a variant <code>s</code>, preservation becomes <code>J ∧ t ⇒ WP(e, J ∧ s ≺ w)[w ↦ s]</code>, where <code>w</code> is a fresh variable holding the value of the variant at the start of the iteration. So each iteration must both restore the invariant and strictly decrease the variant.</p>
+
+  <details class="reveal">
+    <summary>Exercise 3 from the lecture: find a suitable variant for Egyptian multiplication <button type="button" class="slide-ref" data-slide="filliatre2:64" title="Open this slide">slide 64</button></summary>
+    <p>The variant is <code>q</code>. Inside the loop the guard gives <code>q &gt; 0</code>, so <code>half q &lt; q</code>, and the order requires only that the larger value be non-negative, which the guard already provides. The invariant conjunct <code>q ≥ 0</code> is what the postcondition proof needs; the guard is what the variant needs.</p>
+  </details>
+
+  <p>Recursive functions get a <code>variant</code> clause in their contract. At each recursive call inside the body, the call rule gains one extra conjunct next to the precondition: the variant evaluated at the call site must be smaller, in the well-founded order, than the variant evaluated at the entry of the function. Mutually recursive functions each need their own variant term, and all of them must use a common well-founded order <button type="button" class="slide-ref" data-slide="filliatre2:65" title="Open this slide">slides 65-67</button>.</p>
+
+  <p>The example is McCarthy’s 91 function <button type="button" class="slide-ref" data-slide="filliatre2:66" title="Open this slide">slide 66</button>.</p>
+
+  <pre><code>let rec f91 (n: int) : int
+  ensures { result = if n &lt;= 100 then 91 else n - 10 }
+  variant { 101 - n }
+= if n &lt;= 100 then
+    f91 (f91 (n + 11))
+  else
+    n - 10</code></pre>
+
+  <p>The inner call is easy: its argument is <code>n + 11</code>, so the variant drops from <code>101 - n</code> to <code>90 - n</code>. The outer call is the interesting one, because its argument is the value returned by the inner call, and syntactically nothing is known about that value. What saves the proof is the postcondition of the inner call, which says the returned value is 91 when <code>n + 11 ≤ 100</code> and <code>n + 1</code> otherwise; in both cases it is strictly greater than <code>n</code>, so the variant strictly decreases. Since the decrease of the variant is generated as part of the verification condition, the postcondition of the inner call is available in the context exactly where it is needed. Specification and termination are not independent: here one is proved with the help of the other.</p>
+
+  <div class="quiz">
+    <script type="application/json">
+    {"type":"mc",
+     "q":"In McCarthy's 91 function, why is the postcondition needed in order to prove that the variant decreases at the outer recursive call?",
+     "options":["Because the variant 101 - n can become negative","Because the argument of the outer call is the value returned by the inner call, and only the postcondition says what that value is","Because the well-founded order is not total on the integers","Because the function has no precondition"],
+     "answer":1,
+     "explain":"Syntactically the argument of the outer call is just an unknown result. The postcondition of the inner call pins it down to 91 or to n + 1, both greater than n, which is what makes the variant decrease. The decrease obligation is generated inside the same verification condition, so that information is in the context."}
+    </script>
+  </div>
+
+  <h3 id="mk2-takeaways">What to remember</h3>
+
+  <p>The calculus turns a program and its specification into verification conditions completely mechanically <button type="button" class="slide-ref" data-slide="filliatre2:84" title="Open this slide">slide 84</button>. Everything is computed by substitution, working backwards from the postcondition, with two exceptions: loop invariants and variants, which the user provides. That division of labour is the practical shape of deductive verification. The prover never has to guess an intermediate assertion, and the human only has to supply the inductive content of the proof.</p>
+
+  <p>The second point is that termination matters as much as partial correctness <button type="button" class="slide-ref" data-slide="filliatre2:85" title="Open this slide">slide 85</button>. A specification that says nothing about a diverging program is satisfied by a program that simply loops forever, so partial correctness alone is not a meaningful specification. The two together are.</p>
+
+  <details class="reveal">
+    <summary>Not covered for lack of time: exceptions <button type="button" class="slide-ref" data-slide="filliatre2:69" title="Open this slide">slides 69-82</button></summary>
+    <p>The deck continues with exceptions, treated as additional destinations of a computation next to divergence, failure and normal termination. Each exception <code>E</code> gets its own postcondition <code>Q<sub>E</sub></code>, declared in the contract with a <code>raises</code> clause, and the calculus simply carries a second postcondition through every rule: <code>WP(raise E, Q, Q<sub>E</sub>) = Q<sub>E</sub></code>, while a sequence propagates the exceptional postcondition unchanged and <code>try e<sub>1</sub> with E → e<sub>2</sub></code> passes the weakest precondition of the handler in as the exceptional postcondition of the protected expression. Exceptions carrying data reuse the machinery of <code>let</code>. The typical specification given is binary search, whose contract requires a sorted array, ensures that the returned index holds the value, and states under <code>raises</code> that if <code>Not_found</code> is raised then the value occurs nowhere in the array.</p>
+  </details>
+</section>

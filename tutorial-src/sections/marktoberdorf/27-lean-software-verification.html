@@ -1,0 +1,412 @@
+<section class="lecture" id="sec-mk-dm3" data-num="27" data-day="mk-lean" data-title="Software Verification in Lean" data-lecturer="Leonardo de Moura">
+  <header class="lec-head">
+    <div class="lec-num">27</div>
+    <div>
+      <h2 id="mkl3-top">Software Verification in Lean</h2>
+      <p class="lec-meta">Leonardo de Moura, from the deck <em>Software Verification in Lean</em>, 49 pages. No recording of this lecture survives, so the deck is the only source and every claim below is cited to a page of it. Its own recap slide places it last in his series, after the foundations, the programming and proving, and the automation lectures.</p>
+    </div>
+  </header>
+
+  <p class="lead">Four lectures of this school wrote programs and then handed them to a tool that already knew Hoare logic. This one builds the tool. The deck takes a small imperative language, declares it inside Lean as ordinary data, gives it an operational semantics as an inductive relation, defines the Hoare triple over that semantics as a plain definition, proves the rules of Hoare logic as ordinary theorems, writes a verification condition generator as an ordinary Lean function, and then proves that function sound. Nothing in the chain is primitive, and nothing is taken on faith except the semantics itself and the kernel that checks everything above it. That is where the two halves of this tutorial join: sections 1 to 4 used a program logic from the outside through Why3, section 5 used one through Viper, and here the same machinery is visible from the inside, with a derivation for every rule. The deck then repeats the exercise with a shallow embedding, and closes on what it costs to make any of it scale.</p>
+
+  <h3 id="mkl3-frameworks">Verification frameworks as Lean libraries</h3>
+
+  <p>The opening quarter of the deck is a survey, and it is there to establish that the small development which follows is a scale model of something real. The framing comes from the course abstract, quoted on the slide: Lean's extensibility enables the construction of entire domain specific verification frameworks, including custom specification languages, proof strategies and automation pipelines, all within Lean itself, with no need for external tools or trusted code generators <button type="button" class="slide-ref" data-slide="demoura3:4" title="Open this slide">page 4</button>. The last clause is the one this lecture cashes out.</p>
+
+  <p>Five systems are named. SampCert is an open source Lean library of verified differential privacy primitives, deployed in AWS Clean Rooms, whose correctness arguments need Fourier analysis, number theory and topology out of Mathlib, and whose verified implementation replaced an earlier one and runs twice as fast <button type="button" class="slide-ref" data-slide="demoura3:5" title="Open this slide">page 5</button>. Waimea is a CompCert style verified compiler for AWS Trainium, around 500,000 lines of Lean, aimed at a target whose instruction set specification changes several times a week rather than a fixed one like x86; the Lean model doubles as a simulator shared by hardware and verification engineers <button type="button" class="slide-ref" data-slide="demoura3:6" title="Open this slide">page 6</button>. Kraken is a formal model of x64 for verifying sequential machine code, started at Google by Jonathan Protzenko, whose own lectures are sections 19 and 20 of these notes, together with Andres Erbsen <button type="button" class="slide-ref" data-slide="demoura3:7" title="Open this slide">page 7</button>. Veil verifies distributed protocols, offering push button verification through cvc5 and Z3 on decidable fragments with interactive Lean proofs when automation falls short, and its VC generator is proved sound against the semantics of its specification language <button type="button" class="slide-ref" data-slide="demoura3:8" title="Open this slide">page 8</button>. Strata is an extensible platform for formalizing language syntax and semantics, organised around composable dialects in the manner of MLIR, with a pipeline from Python, Java or JavaScript through Laurel and Strata Core to VC generation and SMT <button type="button" class="slide-ref" data-slide="demoura3:10" title="Open this slide">page 10</button>.</p>
+
+  <div class="callout key">
+    <p><span class="co-tag">Key idea</span> Every one of those systems has the same four part architecture <button type="button" class="slide-ref" data-slide="demoura3:11" title="Open this slide">page 11</button>. <strong>Embed</strong> the object language (Rust, a protocol language, an instruction set) in Lean. <strong>Give it a semantics</strong>, either a function or an inductive relation. <strong>Compute verification conditions</strong>. <strong>Discharge them</strong> with <code>simp</code>, <code>grind</code>, <code>bv_decide</code> or interactive proof. The rest of this lecture is those four steps carried out in full on a language small enough to fit on four slides.</p>
+  </div>
+
+  <h3 id="mkl3-imp">The language, as data</h3>
+
+  <p>The first step is a deep embedding: programs are values of an inductive type, not Lean code <button type="button" class="slide-ref" data-slide="demoura3:13" title="Open this slide">page 13</button>. Two declarations do the whole job. An assertion is a predicate on states, and a statement is one of five shapes.</p>
+
+<pre class="algo"><code>def Assertion : Type := State → Prop
+
+inductive Stmt where
+  | skip
+  | assign  (x : String) (e : Expr)
+  | seq     (s₁ s₂ : Stmt)
+  | ite     (c : BExpr) (s₁ s₂ : Stmt)
+  | whileDo (c : BExpr) (inv : Assertion) (body : Stmt)</code></pre>
+
+  <p><code>State</code> with its <code>get</code> and <code>set</code> interface, and the expression evaluator, are carried over unchanged from the earlier programming lecture; <code>BExpr</code> adds boolean tests, and only <code>Stmt</code> is new. One field deserves attention immediately. The <code>whileDo</code> constructor carries an <code>inv</code> field of type <code>Assertion</code>, which is an invariant annotation: input for the verifier, and something the semantics is going to ignore entirely. Building the annotation into the syntax rather than into a separate table is what later lets the verification condition generator be a total function on <code>Stmt</code>.</p>
+
+  <p>Writing programs as raw constructor applications would be unbearable, so the deck spends a slide on notation <button type="button" class="slide-ref" data-slide="demoura3:14" title="Open this slide">page 14</button>. Statements are not terms, so they get their own grammar through <code>declare_syntax_cat impStmt</code>, with <code>impStmt*</code> meaning a sequence of them, and a single bridge back into the term language.</p>
+
+<pre class="algo"><code>declare_syntax_cat impStmt
+
+syntax ident " := " term "; " : impStmt
+syntax "while" " (" term ")" " invariant" " (" term ")" ppLine " {" impStmt* "}" : impStmt
+syntax "[Imp|" impStmt* "]" : term
+
+macro_rules
+  | `([Imp| ]) =&gt; `(Stmt.skip)
+  | `([Imp| while ($c) invariant ($I) { $bs* }]) =&gt; `(Stmt.whileDo [BExpr| $c] $I [Imp| $bs*])
+  | `([Imp| $s $ss*]) =&gt; `(Stmt.seq [Imp| $s] [Imp| $ss*])</code></pre>
+
+  <p>The payoff is that a program can be written the way a programmer writes one, and after elaboration the quotation is gone: <code>factorial</code> is a value of type <code>Stmt</code> built from <code>seq</code>, <code>assign</code> and <code>whileDo</code> like any other piece of data <button type="button" class="slide-ref" data-slide="demoura3:15" title="Open this slide">page 15</button>. The same machinery runs in reverse, so unexpanders print states and programs back in this syntax and proof goals stay readable while stepping.</p>
+
+<pre class="algo"><code>def factorial : Stmt := [Imp|
+  n := 10;
+  r := 1;
+  while (0 &lt; n) {
+    r := r * n;
+    n := n - 1;
+  }
+]</code></pre>
+
+  <h3 id="mkl3-semantics">The semantics, and an interpreter that agrees with it</h3>
+
+  <p>Meaning is given by a big step relation with one constructor per rule <button type="button" class="slide-ref" data-slide="demoura3:16" title="Open this slide">page 16</button>. <code>BigStep σ s σ'</code> reads: executing <code>s</code> from state <code>σ</code> terminates in <code>σ'</code>. Because derivations are finite trees, the relation captures exactly the terminating runs, which is why the triple built on it will be a partial correctness judgment. Note that <code>inv</code> appears in the two while constructors as a bystander: it is threaded through and never inspected, so the annotation has no semantic content at all.</p>
+
+<pre class="algo"><code>inductive BigStep : State → Stmt → State → Prop where
+  | skip :
+      BigStep σ .skip σ
+  | assign :
+      BigStep σ (.assign x e) (σ.set x (e.eval σ))
+  | seq (h₁ : BigStep σ s₁ σ') (h₂ : BigStep σ' s₂ σ'') :
+      BigStep σ (.seq s₁ s₂) σ''
+  | ifTrue (hc : c.eval σ = true) (h : BigStep σ s₁ σ') :
+      BigStep σ (.ite c s₁ s₂) σ'
+  | ifFalse (hc : c.eval σ = false) (h : BigStep σ s₂ σ') :
+      BigStep σ (.ite c s₁ s₂) σ'
+  | whileTrue (hc : c.eval σ = true) (hbody : BigStep σ body σ')
+      (hrest : BigStep σ' (.whileDo c inv body) σ'') :
+      BigStep σ (.whileDo c inv body) σ''
+  | whileFalse (hc : c.eval σ = false) :
+      BigStep σ (.whileDo c inv body) σ</code></pre>
+
+  <p>A relation cannot be run, so the deck adds a fuel bounded interpreter, <code>Stmt.run</code>, and with it <code>#eval factorial.runGet "r"</code> answers <code>some 3628800</code> and two <code>#guard</code> lines pin that down as a test <button type="button" class="slide-ref" data-slide="demoura3:17" title="Open this slide">page 17</button>. The interesting part is the next slide, which makes the tests more than tests <button type="button" class="slide-ref" data-slide="demoura3:18" title="Open this slide">page 18</button>. Four results are stated: <code>Stmt.run_mono</code>, that more fuel never changes an answer; <code>Stmt.run_sound</code>, that whatever the interpreter computes the semantics derives; <code>Stmt.run_complete</code>, that whatever the semantics derives some amount of fuel computes; and <code>BigStep.deterministic</code>. Together <code>run</code> and <code>BigStep</code> describe the same language, so every <code>#guard</code> on the previous slide is a theorem about the semantics rather than a spot check of an unrelated evaluator. Fuel monotonicity is the workhorse lemma.</p>
+
+  <h3 id="mkl3-triple">The triple is a definition, not a logic</h3>
+
+  <p>With a semantics in hand the specification language is one line <button type="button" class="slide-ref" data-slide="demoura3:19" title="Open this slide">page 19</button>.</p>
+
+<pre class="algo"><code>def Triple (P : Assertion) (s : Stmt) (Q : Assertion) : Prop :=
+  ∀ σ σ', P σ → BigStep σ s σ' → Q σ'
+
+def Stmt.wlp (s : Stmt) (Q : Assertion) : Assertion :=
+  fun σ => Triple (· = σ) s Q
+
+theorem wlp_iff (s : Stmt) (Q : Assertion) (σ : State)
+    : s.wlp Q σ ↔ ∀ σ', BigStep σ s σ' → Q σ' := by
+  unfold Stmt.wlp Triple; simp; constructor
+  · intro h σ'; exact h σ σ' rfl
+  · intro h σ' σ'' he hb; subst σ'; apply h σ'' hb</code></pre>
+
+  <div class="callout def">
+    <p><span class="co-tag">Definition</span> <code>Triple P s Q</code> is partial correctness spelled out: if <code>P</code> holds initially <em>and</em> <code>s</code> terminates, then <code>Q</code> holds finally. Divergence is invisible to it because a diverging run has no <code>σ'</code> and therefore no <code>BigStep</code> derivation to quantify over. <code>s.wlp Q</code> is the safe region of <code>s</code>, the set of states from which every terminating run establishes <code>Q</code>, which is Dijkstra's weakest liberal precondition.</p>
+  </div>
+
+  <p>This is the same judgment section 2 introduced as <code>{P} e {Q}</code>, defined there in prose and taken as a primitive of the tool. Here it is a Lean definition sitting on top of <code>BigStep</code>, which changes what the rules of Hoare logic are. The deck states the consequence flatly: this is not a new logic, <code>Triple</code> is a definition, and the rules of Hoare logic will be ordinary theorems about it.</p>
+
+  <h3 id="mkl3-rules">The rules are theorems</h3>
+
+  <p>Three rules come first, and their proofs are four lines each <button type="button" class="slide-ref" data-slide="demoura3:20" title="Open this slide">page 20</button>. The method is always the same: unfold <code>Triple</code>, then invert the derivation with <code>cases</code>. Because the statement in the goal has a fixed shape, only the matching <code>BigStep</code> constructors can apply, and the case analysis collapses to one or two branches.</p>
+
+<pre class="algo"><code>theorem Triple.skip (Q : Assertion) : Triple Q .skip Q := by
+  intro σ σ' h hstep
+  cases hstep
+  exact h
+
+theorem Triple.assign (Q : Assertion) (x : String) (e : Expr) :
+    Triple (fun σ => Q (σ.set x (e.eval σ))) (.assign x e) Q := by
+  intro σ σ' h hstep
+  cases hstep
+  exact h
+
+theorem Triple.consequence (h : Triple P s Q)
+    (hpre : ∀ σ, P' σ → P σ) (hpost : ∀ σ, Q σ → Q' σ) :
+    Triple P' s Q' := by
+  intro σ σ' hP' hstep
+  exact hpost _ (h _ _ (hpre _ hP') hstep)</code></pre>
+
+  <div class="stepper" data-title="Where the assignment rule comes from">
+    <div class="step" data-label="The statement"><p><code>Triple (fun σ => Q (σ.set x (e.eval σ))) (.assign x e) Q</code>. Read it aloud: to have <code>Q</code> afterwards, require <code>Q</code> of the state already updated. It is Hoare's assignment axiom, with substitution into the assertion replaced by an update of the state, because assertions here are functions on states rather than syntax.</p></div>
+    <div class="step" data-label="Unfold"><p><code>Triple</code> is a definition, so the goal is literally <code>∀ σ σ', Q (σ.set x (e.eval σ)) → BigStep σ (.assign x e) σ' → Q σ'</code>. There is no proof system to appeal to; there is a universally quantified statement to prove.</p></div>
+    <div class="step" data-label="intro σ σ' h hstep"><p>Now <code>h : Q (σ.set x (e.eval σ))</code> and <code>hstep : BigStep σ (.assign x e) σ'</code> are hypotheses, and the goal is <code>Q σ'</code>. Nothing yet connects <code>σ'</code> to <code>σ</code>.</p></div>
+    <div class="step" data-label="cases hstep"><p>This is the step that does the work. The statement is fixed to <code>.assign x e</code>, so of the eight constructors of <code>BigStep</code> only <code>assign</code> can have produced this derivation, and its conclusion is <code>BigStep σ (.assign x e) (σ.set x (e.eval σ))</code>. Matching forces <code>σ'</code> to be <code>σ.set x (e.eval σ)</code>, and the goal becomes <code>Q (σ.set x (e.eval σ))</code>.</p></div>
+    <div class="step" data-label="exact h"><p>Goal and hypothesis are now the same term. Four tactic lines, and the assignment axiom is proved.</p></div>
+    <div class="step" data-label="What that means"><p>The rule was not postulated and it is not built into anything. It is a consequence of exactly one constructor of the semantics. Change how <code>assign</code> evaluates, say by making it read the old value of <code>x</code> somewhere, and this proof stops working at the <code>cases</code> step, immediately and loudly. That link between the rule and the meaning of the language is what a verifier with a built-in weakest precondition calculus cannot offer from inside itself.</p></div>
+  </div>
+
+  <p>The next slide raises a point about tactics that shapes the whole design <button type="button" class="slide-ref" data-slide="demoura3:21" title="Open this slide">page 21</button>. <code>Triple.assign</code>'s precondition has a fixed shape, the postcondition pushed through the update, so an arbitrary precondition written by a user does not unify with it and <code>apply Triple.assign</code> simply fails. The fix is a primed variant that fuses the rule with <code>consequence</code>, so that its proof term <em>is</em> the combination and its statement applies to any pre and postcondition, leaving an ordinary implication as the remaining goal. The deck turns this into a design rule: theorems meant for <code>apply</code> must be stated for arbitrary goals.</p>
+
+<pre class="algo"><code>theorem Triple.assign' (P Q : Assertion) (x : String) (e : Expr) :
+    (∀ σ, P σ → Q (σ.set x (e.eval σ))) →
+    Triple P (.assign x e) Q :=
+  fun h => Triple.consequence (Triple.assign Q x e) h (fun _ h => h)</code></pre>
+
+  <div class="quiz">
+    <script type="application/json">
+    {"type":"mc","q":"Why does the deck introduce Triple.assign' alongside Triple.assign, rather than just using the plain rule?","options":["The plain rule is unsound for expressions with side effects, so the primed one adds a side condition","The plain rule's precondition has a fixed shape, so apply cannot unify it with a user-written precondition; the primed rule fuses it with consequence and applies to any goal","The primed rule proves total correctness while the plain one proves only partial correctness","The primed rule avoids a metavariable for the intermediate assertion that the plain rule would create"],"answer":1,"explain":"Triple.assign states its precondition as Q pushed through the update, a specific term. A goal whose precondition is anything else does not unify, so apply fails. Triple.assign' takes arbitrary P and Q and asks instead for the implication between them, which is exactly Triple.consequence composed with the plain rule. The metavariable problem in the last option is real but belongs to seq, not assign."}
+    </script>
+  </div>
+
+  <p>Sequencing has a problem of its own <button type="button" class="slide-ref" data-slide="demoura3:22" title="Open this slide">page 22</button>. The textbook rule needs an intermediate assertion <code>R</code> shared by two premises, and applying it invents a metavariable for <code>R</code> whose filling is left to unification and elaboration order. Section 2 met the same difficulty from the other side and called it the reason weakest preconditions exist at all: the sequence rule needs a formula describing the state in the middle, and it has to come from somewhere. The deck's answer is <code>Triple.seq'</code>, whose postcondition for the first statement is definitionally <code>s₂.wlp Q</code>, so it produces one goal and no metavariables, and intermediate states arrive later as <code>intro</code> bound variables rather than as holes.</p>
+
+<pre class="algo"><code>theorem Triple.seq (h₁ : Triple P s₁ R) (h₂ : Triple R s₂ Q) :
+    Triple P (.seq s₁ s₂) Q := by
+  intro σ σ' hP hstep
+  cases hstep with
+  | seq hs₁ hs₂ => exact h₂ _ _ (h₁ _ _ hP hs₁) hs₂
+
+theorem Triple.seq' :
+    Triple P s₁ (fun σ => Triple (· = σ) s₂ Q) →
+    Triple P (.seq s₁ s₂) Q := by
+  intro h₁ σ₁ σ₃ hp hb
+  cases hb
+  next σ₂ h₂ h₃ => exact h₁ σ₁ σ₂ hp h₂ σ₂ σ₃ rfl h₃</code></pre>
+
+  <p>The while rule is the only one whose proof needs a real idea <button type="button" class="slide-ref" data-slide="demoura3:23" title="Open this slide">page 23</button>: the statement has to be generalized before inducting on the derivation, which is why the code delegates to an auxiliary lemma. Its primed form is the important one, because it takes the invariant from the annotation stored in the syntax instead of from a metavariable, and its three premises are entry, preservation and exit. Those three are the loop's verification conditions, arrived at before the deck has defined <code>vc</code> at all.</p>
+
+<pre class="algo"><code>theorem Triple.whileDo {inv : Assertion}
+    (h : Triple (fun σ => I σ ∧ c.eval σ = true) body I) :
+    Triple I (.whileDo c inv body) (fun σ => I σ ∧ c.eval σ = false) := by
+  intro σ σ' hI hstep
+  exact Triple.whileDo_aux h hstep rfl hI
+
+theorem Triple.whileDo' {inv : Assertion}
+    (hpre : ∀ σ, P σ → inv σ)
+    (hbody : Triple (fun σ => inv σ ∧ c.eval σ = true) body inv)
+    (hpost : ∀ σ, inv σ → c.eval σ = false → Q σ) :
+    Triple P (.whileDo c inv body) Q :=
+  Triple.consequence (Triple.whileDo hbody) hpre (fun σ h => hpost σ h.1 h.2)</code></pre>
+
+  <h3 id="mkl3-swap">A first verified program, twice</h3>
+
+  <p>The rules are now enough to verify something. <code>swapProg</code> exchanges <code>x</code> and <code>y</code> through a temporary, and the first proof composes the rules backwards from the postcondition by hand, closes the gap to the specification with <code>consequence</code>, and lets <code>grind</code> do the state bookkeeping using the two <code>[grind =]</code> lemmas about <code>get</code> and <code>set</code> from the automation lecture <button type="button" class="slide-ref" data-slide="demoura3:24" title="Open this slide">page 24</button>. It is correct but manual: one rule application per statement, written out.</p>
+
+  <p>The second proof is the one that matters, because it is a shape rather than an ad hoc term <button type="button" class="slide-ref" data-slide="demoura3:25" title="Open this slide">page 25</button>. Only the <code>apply</code> friendly rules appear, <code>seq'</code> and <code>assign'</code>, and the proof follows the structure of the program, one rule per statement, receiving each intermediate state with <code>intro</code>. That is symbolic execution, carried out in the deep embedding by the tactic framework.</p>
+
+<pre class="algo"><code>def swapProg := [Imp|
+  t := x;
+  x := y;
+  y := t;
+]
+
+theorem swap_correct' (a b : Int) :
+    Triple (fun σ => σ⟦x⟧ = a ∧ σ⟦y⟧ = b)
+      swapProg
+      (fun σ => σ⟦x⟧ = b ∧ σ⟦y⟧ = a) := by
+  unfold swapProg
+  apply Triple.seq'
+  apply Triple.assign'
+  intro σ₁ h₁
+  apply Triple.seq'
+  apply Triple.assign'
+  intro σ₂ h₂
+  apply Triple.assign'
+  intro σ₃ h₃
+  simp [Expr.eval] at *
+  grind</code></pre>
+
+  <h3 id="mkl3-vcgen">The generator, and its soundness theorem</h3>
+
+  <p>Doing that by hand for every program is not a verifier. The deck's next move is to take the backwards composition and write it down as a function <button type="button" class="slide-ref" data-slide="demoura3:27" title="Open this slide">page 27</button>. <code>Stmt.pre</code> maps a statement and a postcondition to a precondition, structurally, and on a loop it simply returns the annotation. The invariant field that the semantics ignored finally earns its place in the syntax.</p>
+
+<pre class="algo"><code>def Stmt.pre : Stmt → Assertion → Assertion
+  | .skip, Q => Q
+  | .assign x e, Q => fun σ => Q (σ.set x (e.eval σ))
+  | .seq s₁ s₂, Q => s₁.pre (s₂.pre Q)
+  | .ite c s₁ s₂, Q => fun σ => if c.eval σ then s₁.pre Q σ else s₂.pre Q σ
+  | .whileDo _ inv _, _ => inv
+
+def Stmt.vc : Stmt → Assertion → Prop
+  | .skip, _ => True
+  | .assign _ _, _ => True
+  | .seq s₁ s₂, Q => s₁.vc (s₂.pre Q) ∧ s₂.vc Q
+  | .ite _ s₁ s₂, Q => s₁.vc Q ∧ s₂.vc Q
+  | .whileDo c inv body, Q =>
+    (∀ σ, inv σ → c.eval σ = true → body.pre inv σ) ∧
+    (∀ σ, inv σ → c.eval σ = false → Q σ) ∧
+    body.vc inv</code></pre>
+
+  <p>Anyone who followed section 2 will recognise the first function immediately: the <code>seq</code> clause is <code>WP(e₁ ; e₂, Q) = WP(e₁, WP(e₂, Q))</code>, the <code>assign</code> clause is substitution done semantically, and the conditional clause is the same case split. The deck is explicit that this is the textbook construction, naming Nipkow and Klein's <em>Concrete Semantics</em> section 12.2.2, which defines <code>pre</code> and <code>vc</code> under those very names over annotated commands, alongside Gordon's Hoare logic notes and the Hoare2 chapter of <em>Software Foundations</em> <button type="button" class="slide-ref" data-slide="demoura3:27" title="Open this slide">page 27</button>.</p>
+
+  <p><code>Stmt.vc</code> collects what remains to be proved <button type="button" class="slide-ref" data-slide="demoura3:28" title="Open this slide">page 28</button>. Assignment and skip contribute nothing, since <code>pre</code> already handles them exactly; loops contribute preservation of the invariant and the exit implication. So on a loop free program <code>vc</code> is a conjunction of <code>True</code>s and there are no proof obligations at all, with <code>pre</code> alone carrying the meaning.</p>
+
+  <p>Then comes the slide the whole lecture is arranged around <button type="button" class="slide-ref" data-slide="demoura3:29" title="Open this slide">page 29</button>.</p>
+
+<pre class="algo"><code>vcgen_sound (s : Stmt) (Q : Assertion) (h : s.vc Q) : Triple (s.pre Q) s Q
+
+theorem Stmt.verify (s : Stmt) (P Q : Assertion)
+    (hvc : s.vc Q) (hpre : ∀ σ, P σ → s.pre Q σ) : Triple P s Q :=
+  Triple.consequence (vcgen_sound s Q hvc) hpre (fun _ h => h)</code></pre>
+
+  <p>Discharge the verification conditions and the triple holds. The proof is by induction on the statement, and the loop case is <code>Triple.whileDo'</code> applied to the induction hypothesis, which is why the three premises of that rule were arranged to match the three conjuncts of <code>vc</code> on a <code>whileDo</code>. A two line tactic macro then packages the whole thing for users: <code>vcg</code> applies <code>Stmt.verify</code> and unfolds the computed <code>vc</code> and <code>pre</code> <button type="button" class="slide-ref" data-slide="demoura3:30" title="Open this slide">page 30</button>.</p>
+
+<pre class="algo"><code>macro "vcg" : tactic => `(tactic|
+  apply Stmt.verify &lt;;&gt;
+    try simp [Stmt.vc, Stmt.pre, Expr.eval, BExpr.eval])
+
+def copyProg (a : Int) := [Imp|
+  y := 0;
+  while (0 &lt; x) invariant (fun σ => σ⟦x⟧ + σ⟦y⟧ = a ∧ 0 ≤ σ⟦x⟧) {
+    x := x - 1;
+    y := y + 1;
+  }
+]
+
+theorem copy_correct (a : Int) :
+    Triple (fun σ => σ⟦x⟧ = a ∧ 0 ≤ a)
+      (copyProg a)
+      (fun σ => σ⟦y⟧ = a) := by
+  unfold copyProg
+  vcg &lt;;&gt; grind</code></pre>
+
+  <p>On <code>swapProg</code>, which is loop free, no verification conditions survive and the single remaining goal is the entailment between the written specification and the computed precondition, which <code>grind</code> closes <button type="button" class="slide-ref" data-slide="demoura3:30" title="Open this slide">page 30</button>. On <code>copyProg</code> the loop's obligations do survive, and the same <code>vcg &lt;;&gt; grind</code> discharges them, with state bookkeeping by E-matching and the arithmetic by <code>cutsat</code> <button type="button" class="slide-ref" data-slide="demoura3:31" title="Open this slide">page 31</button>. Two notes on the slides guard against overclaiming. On the loop free fragment <code>pre</code> genuinely computes the weakest liberal precondition, weakest provably and not merely by name, and liberal means partial correctness, where Dijkstra's <code>wp</code> would additionally demand termination. On loops <code>pre</code> returns the annotation, which is sound but only as strong as the invariant you wrote. Choosing the invariant remains the one creative step, exactly as it was in section 2.</p>
+
+  <div class="quiz">
+    <script type="application/json">
+    {"type":"fill","q":"Stmt.pre is defined by cases on the statement. On a whileDo, what does it return? Answer in two words.","accept":["the invariant","the annotation","inv","the inv","invariant","annotation","the stored invariant","the annotated invariant"],"explain":"On .whileDo _ inv _ the function returns inv, the invariant annotation carried in the constructor. This is the only clause that does not compute anything from the postcondition, and it is why the loop's obligations reappear in Stmt.vc as preservation and exit conditions. It also explains the deck's warning: the generator is sound, but no stronger than the invariant the user supplied."}
+    </script>
+  </div>
+
+  <figure class="fig" id="mkl3-fig-tower">
+    <svg viewBox="0 0 680 372" role="img" aria-label="Six boxes stacked vertically. From the bottom: Stmt, the syntax as data; BigStep, the semantics; Triple, the definition of the Hoare judgment; the Hoare rules as theorems; Stmt.pre and Stmt.vc as functions; and vcgen_sound as a theorem at the top. A long arrow on the left points upwards, labelled each level is proved from the one below. A note at the bottom says only BigStep and the kernel are assumed.">
+      <defs>
+        <marker id="mkl3-arw" markerWidth="9" markerHeight="8" refX="8" refY="4" orient="auto" markerUnits="userSpaceOnUse">
+          <path d="M0,0 L9,4 L0,8 z" fill="var(--accent)"></path>
+        </marker>
+      </defs>
+
+      <line x1="30" y1="326" x2="30" y2="22" stroke="var(--accent)" stroke-width="1.6" marker-end="url(#mkl3-arw)"></line>
+
+      <rect x="52" y="26" width="430" height="42" rx="10" fill="var(--accent)" fill-opacity="0.10" stroke="var(--hairline)"></rect>
+      <text x="68" y="52" font-size="11.5" font-family="ui-monospace, monospace" fill="var(--ink)">vcgen_sound : s.vc Q → Triple (s.pre Q) s Q</text>
+      <text x="500" y="52" font-size="11.5" fill="var(--accent)">theorem</text>
+
+      <rect x="52" y="78" width="430" height="42" rx="10" fill="var(--surface)" stroke="var(--hairline)"></rect>
+      <text x="68" y="104" font-size="11.5" font-family="ui-monospace, monospace" fill="var(--ink)">Stmt.pre · Stmt.vc</text>
+      <text x="500" y="104" font-size="11.5" fill="var(--muted)">functions</text>
+
+      <rect x="52" y="130" width="430" height="42" rx="10" fill="var(--accent)" fill-opacity="0.10" stroke="var(--hairline)"></rect>
+      <text x="68" y="156" font-size="11.5" font-family="ui-monospace, monospace" fill="var(--ink)">skip · assign' · seq' · whileDo' · consequence</text>
+      <text x="500" y="156" font-size="11.5" fill="var(--accent)">theorems</text>
+
+      <rect x="52" y="182" width="430" height="42" rx="10" fill="var(--surface)" stroke="var(--hairline)"></rect>
+      <text x="68" y="208" font-size="11.5" font-family="ui-monospace, monospace" fill="var(--ink)">Triple P s Q := ∀ σ σ', P σ → BigStep σ s σ' → Q σ'</text>
+      <text x="500" y="208" font-size="11.5" fill="var(--muted)">definition</text>
+
+      <rect x="52" y="234" width="430" height="42" rx="10" fill="var(--surface)" stroke="var(--border)" stroke-width="1.8"></rect>
+      <text x="68" y="260" font-size="11.5" font-family="ui-monospace, monospace" fill="var(--ink)">BigStep : State → Stmt → State → Prop</text>
+      <text x="500" y="260" font-size="11.5" fill="var(--ink-2)">the meaning</text>
+
+      <rect x="52" y="286" width="430" height="42" rx="10" fill="var(--surface)" stroke="var(--hairline)"></rect>
+      <text x="68" y="312" font-size="11.5" font-family="ui-monospace, monospace" fill="var(--ink)">Stmt : skip · assign · seq · ite · whileDo</text>
+      <text x="500" y="312" font-size="11.5" fill="var(--muted)">data</text>
+
+      <text x="52" y="352" font-size="11.5" fill="var(--muted)">Each level is proved from the one below. Only the semantics is chosen; the kernel checks the rest.</text>
+    </svg>
+    <figcaption class="fig-caption">The development of pages 13 to 29, bottom to top. Everything above <code>BigStep</code> is derived from it, and <code>vcgen_sound</code> is the statement that the topmost level is faithful to the bottom one.</figcaption>
+  </figure>
+
+  <h3 id="mkl3-bridge">Where this meets sections 1 to 5</h3>
+
+  <p>Sections 1 to 4 wrote WhyML, and Why3's verification condition generator turned it into proof obligations that SMT solvers discharged. Section 5 wrote Viper, whose front ends encode Rust, Go or Python programs into an intermediate verification language, and whose obligations again go to an SMT solver. In both cases the program logic is a feature of the tool. You can read section 2's table of weakest precondition rules and believe it, because it is a correct presentation of a calculus whose soundness is a theorem in the literature, but nothing the tool produces is that theorem, and nothing the tool checks depends on it.</p>
+
+  <p>This lecture makes the same object out of parts you can open. <code>Stmt.pre</code> is section 2's table, written as a Lean function you can print. <code>vcgen_sound</code> is the soundness theorem for that table, stated about the semantics on page 16 and proved by induction. <code>Triple.assign</code> is the assignment rule with a derivation five lines long. When the user runs <code>vcg &lt;;&gt; grind</code> and Lean accepts it, what has been produced is a proof term for <code>Triple P s Q</code>, and unfolding that term reaches <code>vcgen_sound</code>, the Hoare rules, and finally the constructors of <code>BigStep</code>. The kernel checks the lot.</p>
+
+  <p>The practical difference is where the trust boundary sits. Section 5 stated Viper's honestly and threefold: you must trust the SMT solver, Viper itself, and the encoding performed by the front end. Here the corresponding list has two entries. You must trust that <code>BigStep</code> says what you meant by the language, which is an irreducible obligation that no amount of proof removes and which every one of the industrial systems on pages 5 to 10 also carries. And you must trust Lean's kernel, which is small, fixed, and shared with every other proof in the system. The verifier is not on the list, because it was proved. That is what the abstract meant by no external tools and no trusted code generators.</p>
+
+  <figure class="fig" id="mkl3-fig-trust">
+    <svg viewBox="0 0 680 268" role="img" aria-label="Three columns comparing what must be trusted. Why3 in sections 1 to 4: the weakest precondition calculus inside the tool, and the SMT solvers, both trusted. Viper in section 5: the front end encoding, Viper itself, and the SMT solver, all three trusted. Lean in this section: the verification condition generator and the Hoare rules are proved, and only the BigStep semantics and the kernel are trusted.">
+      <text x="16" y="20" font-size="12.5" font-weight="700" fill="var(--ink)">Why3 · sections 1 to 4</text>
+      <text x="236" y="20" font-size="12.5" font-weight="700" fill="var(--ink)">Viper · section 5</text>
+      <text x="456" y="20" font-size="12.5" font-weight="700" fill="var(--ink)">Lean · this section</text>
+
+      <rect x="16" y="32" width="208" height="46" rx="9" fill="var(--surface)" stroke="var(--muted)" stroke-dasharray="4 3"></rect>
+      <text x="30" y="52" font-size="11.5" fill="var(--ink)">WP calculus, built into</text>
+      <text x="30" y="68" font-size="11.5" fill="var(--ink)">the tool</text>
+      <rect x="16" y="86" width="208" height="46" rx="9" fill="var(--surface)" stroke="var(--muted)" stroke-dasharray="4 3"></rect>
+      <text x="30" y="106" font-size="11.5" fill="var(--ink)">SMT solvers behind</text>
+      <text x="30" y="122" font-size="11.5" fill="var(--ink)">the transformations</text>
+      <rect x="16" y="140" width="208" height="46" rx="9" fill="var(--surface)" stroke="var(--hairline)"></rect>
+      <text x="30" y="160" font-size="11.5" fill="var(--muted)">soundness of the</text>
+      <text x="30" y="176" font-size="11.5" fill="var(--muted)">calculus: on paper</text>
+
+      <rect x="236" y="32" width="208" height="46" rx="9" fill="var(--surface)" stroke="var(--muted)" stroke-dasharray="4 3"></rect>
+      <text x="250" y="52" font-size="11.5" fill="var(--ink)">front end encoding</text>
+      <text x="250" y="68" font-size="11.5" fill="var(--ink)">into Viper</text>
+      <rect x="236" y="86" width="208" height="46" rx="9" fill="var(--surface)" stroke="var(--muted)" stroke-dasharray="4 3"></rect>
+      <text x="250" y="106" font-size="11.5" fill="var(--ink)">Viper itself: inhale,</text>
+      <text x="250" y="122" font-size="11.5" fill="var(--ink)">exhale, the mask</text>
+      <rect x="236" y="140" width="208" height="46" rx="9" fill="var(--surface)" stroke="var(--muted)" stroke-dasharray="4 3"></rect>
+      <text x="250" y="160" font-size="11.5" fill="var(--ink)">the SMT solver</text>
+
+      <rect x="456" y="32" width="208" height="46" rx="9" fill="var(--accent)" fill-opacity="0.10" stroke="var(--hairline)"></rect>
+      <text x="470" y="52" font-size="11.5" fill="var(--ink)">pre and vc: proved</text>
+      <text x="470" y="68" font-size="11.5" fill="var(--ink)">sound (vcgen_sound)</text>
+      <rect x="456" y="86" width="208" height="46" rx="9" fill="var(--accent)" fill-opacity="0.10" stroke="var(--hairline)"></rect>
+      <text x="470" y="106" font-size="11.5" fill="var(--ink)">Hoare rules: theorems</text>
+      <text x="470" y="122" font-size="11.5" fill="var(--ink)">about BigStep</text>
+      <rect x="456" y="140" width="208" height="46" rx="9" fill="var(--surface)" stroke="var(--muted)" stroke-dasharray="4 3"></rect>
+      <text x="470" y="160" font-size="11.5" fill="var(--ink)">BigStep as the intended</text>
+      <text x="470" y="176" font-size="11.5" fill="var(--ink)">meaning, and the kernel</text>
+
+      <rect x="16" y="212" width="18" height="14" rx="4" fill="var(--surface)" stroke="var(--muted)" stroke-dasharray="4 3"></rect>
+      <text x="42" y="224" font-size="11.5" fill="var(--muted)">taken on trust</text>
+      <rect x="150" y="212" width="18" height="14" rx="4" fill="var(--accent)" fill-opacity="0.10" stroke="var(--hairline)"></rect>
+      <text x="176" y="224" font-size="11.5" fill="var(--muted)">proved inside the system and checked by the kernel</text>
+
+      <text x="16" y="252" font-size="11.5" fill="var(--muted)">The obligation that never goes away is the first line of every column: that the model is the language you meant.</text>
+    </svg>
+    <figcaption class="fig-caption">Viper's threefold trust assumption is stated on its own deck and quoted in section 5. The right hand column is what this lecture builds instead.</figcaption>
+  </figure>
+
+  <div class="quiz">
+    <script type="application/json">
+    {"type":"mc","q":"After vcgen_sound has been proved and vcg <;> grind has closed copy_correct, what is still assumed rather than proved in this development?","options":["The verification condition generator, since a function cannot be verified against itself","The SMT solver used to discharge the loop obligations","That BigStep is the intended meaning of the language, plus Lean's kernel","The loop invariant, which vcg accepts without checking that it is preserved"],"answer":2,"explain":"The generator is proved sound by vcgen_sound, so it is not assumed. No SMT solver is involved: grind is a Lean tactic whose output the kernel checks. The invariant's preservation is precisely one of the three obligations Stmt.vc emits on a whileDo, so it is checked. What remains is the semantics itself, an inductive relation someone wrote down and claimed models the language, and the kernel that checks every proof. That pair is irreducible, and section 5's Viper carries the same first obligation on top of two more."}
+    </script>
+  </div>
+
+  <h3 id="mkl3-shallow">The same programs, shallowly embedded</h3>
+
+  <p>The deck now removes the object language <button type="button" class="slide-ref" data-slide="demoura3:33" title="Open this slide">page 33</button>. Imp was a deep embedding, where programs are data and the semantics is a relation. The shallow alternative is to write programs as ordinary monadic Lean code in <code>StateM</code>, which is the style of mvcgen, Velvet and Aeneas <button type="button" class="slide-ref" data-slide="demoura3:34" title="Open this slide">page 34</button>.</p>
+
+<pre class="algo"><code>def Triple (P : S → Prop) (k : StateM S α) (Q : α → S → Prop) : Prop :=
+  ∀ s, P s → Q (k s).1 (k s).2
+
+def double : StateM Nat Unit := do
+  let s ← get
+  set (s + s)</code></pre>
+
+  <p>The judgment is the same Hoare triple; only the semantics changed. A <code>StateM</code> program is a function, so quantifying over every terminating run collapses to running it: what was <code>BigStep σ s σ'</code> becomes the pair <code>(k s).1</code>, the returned value, and <code>(k s).2</code>, the final state. No inductive semantics is needed, and partial and total correctness coincide, because these programs are total and deterministic. Everything else carries over verbatim <button type="button" class="slide-ref" data-slide="demoura3:35" title="Open this slide">page 35</button>: <code>Triple.get</code> has the shape of <code>assign'</code>, <code>Triple.bind</code> is <code>seq'</code> with the result value passed to the continuation, and rules for <code>pure</code>, <code>set</code>, <code>modify</code>, <code>ite</code> and <code>consequence</code> complete the set. Proving a small program is again <code>apply</code> the rule for the head, <code>intro</code> the reached state, repeat <button type="button" class="slide-ref" data-slide="demoura3:36" title="Open this slide">page 36</button>.</p>
+
+  <p>That loop is mechanical, and mechanical is the cue for a metaprogram <button type="button" class="slide-ref" data-slide="demoura3:37" title="Open this slide">page 37</button>. A tactic in Lean is a Lean program, so <code>sym_step</code> reads the goal, checks it is a <code>Triple</code>, inspects the head of the program, and applies the matching rule. Twenty lines. The reason it dispatches on the head rather than trying rules blindly with <code>apply</code> is performance: unification would send the elaborator unfolding <code>&gt;&gt;=</code> and <code>StateT</code> looking for a match.</p>
+
+<pre class="algo"><code>open Lean Elab Tactic in
+elab "sym_step" : tactic => do
+  let goal ← getMainGoal
+  let tgt ← goal.withContext do instantiateMVars (← goal.getType)
+  let_expr Triple _ _ _ k _ := tgt.headBeta
+    | throwError "sym_step: not a `Triple` goal"
+  let app (r : Name) : TacticM Unit := do
+    evalTactic (← `(tactic| apply $(mkIdent r) &lt;;&gt; intro _ _))
+  match k.getAppFn.constName? with
+  | some ``Bind.bind => evalTactic (← `(tactic| apply Triple.bind))
+  | some ``get       => app ``Triple.get
+  | some ``set       => app ``Triple.set
+  | some ``modify    => app ``Triple.modify
+  | some ``pure      => app ``Triple.pure
+  | some ``ite       => evalTactic (← `(tactic| apply Triple.ite &lt;;&gt; intro _ _))
+  | _ => throwError "sym_step: no rule for{indentExpr k}"
+
+macro "sym_run" : tactic => `(tactic| repeat' sym_step)</code></pre>
+
+  <p>With <code>sym_run</code> the pattern extends to recursion, and the slide's title is the point: recursion becomes induction <button type="button" class="slide-ref" data-slide="demoura3:38" title="Open this slide">page 38</button>. Verifying <code>addN</code> is an induction on <code>n</code>, generalizing <code>a</code> because the recursive call starts from a different state, where <code>sym_run</code> executes symbolically up to the recursive call and the induction hypothesis plays the role the loop invariant played in part A. <code>Triple.consequence</code> bridges the hypothesis to the goal, the same role it had there.</p>
+
+  <h3 id="mkl3-scale">What it costs to scale</h3>
+
+  <p>The last part is engineering, and it starts by naming the idiom just built as an industrial one: Aeneas verifies Rust by translation to Lean, Velvet is a Dafny style verifier built in Lean, and mvcgen is Lean's own generator for monadic programs <button type="button" class="slide-ref" data-slide="demoura3:40" title="Open this slide">page 40</button>. The slide adds that verification condition generation inside proof assistants has historically not scaled, documented for Rocq by Chlipala's group, and that the same held in Lean. Two bottlenecks are marked on the diagram: the generator is superlinear, and the obligations share many hypotheses which a naive pipeline reprocesses for every obligation.</p>
+
+  <p>Andres Erbsen distilled that into a minimal benchmark at the Lean at Google hackathon: symbolically execute a generated <em>n</em> step program, which is exactly this lecture's <code>apply</code> and <code>simp</code> loop at size <em>n</em> <button type="button" class="slide-ref" data-slide="demoura3:41" title="Open this slide">page 41</button>. On Lean's general purpose tactic framework, <code>MetaM</code>, the curve is superlinear: 2073 ms at n = 100, and failure before n = 700. The diagnosis is a list of things the loop needs and a general framework does not provide <button type="button" class="slide-ref" data-slide="demoura3:42" title="Open this slide">page 42</button>: efficient <code>apply</code> without unification search, which is why <code>sym_step</code> dispatches on the head; efficient metavariable management; term sharing preserved by every operation, with no copied trees; simplifier results cached and reused across obligations and steps; and no repeated traversal of the same subterms.</p>
+
+  <p>The answer is <code>SymM</code>, a monadic framework for symbolic simulation and VC generation now in the Lean sources <button type="button" class="slide-ref" data-slide="demoura3:43" title="Open this slide">page 43</button>. Its key invariant is that the local context grows monotonically, with no reverts and no deletions, which makes pointer equality a valid cache key and lets automation state survive from one verification condition to the next. Around that sit precompiled backward rules matched mostly syntactically on the hot path, a new simplifier with pointer keyed caches on maximally shared terms, and <code>grind</code> state threaded through the loop so facts learned once are reused. On the same benchmark the result is 16 ms at n = 100 against 2073 ms, roughly a hundredfold, and linear out to n = 700 <button type="button" class="slide-ref" data-slide="demoura3:44" title="Open this slide">page 44</button>. Ported frameworks report the same shape <button type="button" class="slide-ref" data-slide="demoura3:45" title="Open this slide">page 45</button>: mvcgen linear to n = 1000; Velvet, previously about three times slower than Dafny, faster on 24 of 27 benchmarks after the port, with the difference in kind that Dafny trusts its VC generator and an SMT solver while Velvet's chain is checked by the kernel; and DyLean, on cryptographic protocols, a fiftyfold speedup in VC discharge.</p>
+
+  <p>The closing summary reads the four lectures back as one argument <button type="button" class="slide-ref" data-slide="demoura3:47" title="Open this slide">page 47</button>: dependent type theory with the kernel as the single arbiter; inductive types, type classes and macros, with lemmas designed so that proofs follow definitions; automation that is inspectable, extensible and kernel checked, with AI as a user of the same machinery; and verification as Hoare logic in the form of theorems, VC generation as a verified function, symbolic execution as a metaprogram, and the engineering that scales it, all inside Lean, where one kernel checks the programs, the specifications, the proofs and the verifier itself. The exercises are <code>Lecture4.lean</code> for the generator and <code>Lecture4b.lean</code> for the shallow embedding with <code>sym_step</code>, both with full solutions <button type="button" class="slide-ref" data-slide="demoura3:48" title="Open this slide">page 48</button>.</p>
+</section>

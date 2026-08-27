@@ -1,0 +1,14 @@
+# Personal working notes, not part of the published tutorial
+suggestions.txt
+
+# Python bytecode from the build scripts
+__pycache__/
+*.pyc
+
+# LibreOffice profile used by pptx_to_pdf.py for headless conversion
+tutorial-src/.lo-profile/
+
+# Raw recordings of the lectures and of the discussion sessions. They contain private
+# conversation between participants that was caught incidentally, so they stay out of version
+# control. The tutorial is built from them, not from a copy in the repository.
+marktoberdorf/transcript/

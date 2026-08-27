@@ -1,0 +1,230 @@
+<section class="lecture" id="sec-mk-ryu" data-num="15" data-day="mk-sem" data-title="Mechanized Specifications for Real Languages" data-lecturer="Sukyoung Ryu">
+  <header class="lec-head">
+    <div class="lec-num">15</div>
+    <div>
+      <h2 id="mkr-top">Mechanized Specifications for Real Languages: JavaScript and ESMeta</h2>
+      <p class="lec-meta">Sukyoung Ryu (KAIST), from the deck <em>Mechanized Specifications Adopted by Real-World PLs</em>, 17 August 2026.</p>
+    </div>
+  </header>
+
+  <p class="lead">Almost everything we build in formal methods sits on top of a semantics for some programming language. Whether an analysis is sound, whether an optimisation preserves behaviour, whether a verifier can be believed: all of it depends on having got the semantics of the real language right. This lecture is about what happens when the real language is JavaScript, whose semantics is genuinely difficult and whose standard is republished every year. The answer the lecturer's group arrived at is unusual and worth understanding in detail: stop writing the tool by hand, and generate it from the standard document itself.</p>
+
+  <h3 id="mkr-series">Where this sits in the series</h3>
+
+  <p>This is the first of four lectures on mechanized specifications for languages that industry actually uses. The plan on the outline slide is: JavaScript and ESMeta first, then WebAssembly and SpecTec, then P4 and P4-SpecTec, and finally other programming languages together with non-PL software <button type="button" class="slide-ref" data-slide="ryu1:5" title="Open this slide">slide 5</button>. The through line is the same in each case. Take a standards document written for human implementers, turn it into something a machine can execute and analyse, and then persuade the people who own the document that this is worth having.</p>
+
+  <p>She opened with a point about research taste, borrowed from a talk Thomas Reps gave at the PLMW workshop at PLDI 2026 <button type="button" class="slide-ref" data-slide="ryu1:2" title="Open this slide">slides 2-4</button>. There are two honest ways to choose a problem. One is problem-driven and technique-agnostic: you want to solve something real and you will use whatever works. The other is technique-driven and problem-agnostic: you have a favourite method and you look for places to apply it. Her own group started firmly in the second camp, because they liked static analysis, and the JavaScript work gradually pushed them into the first. The advice she drew out of it was practical: think about impact, build artifacts, build tools, engage with industry, and reach out. The adoption story later in this section is what that advice looks like when it works.</p>
+
+  <h3 id="mkr-quirk">One line of JavaScript that should not surprise you, but does</h3>
+
+  <p>Before any of the machinery, it helps to feel why this language is hard. Consider a function that compares its argument with the negation of that argument <button type="button" class="slide-ref" data-slide="ryu1:10" title="Open this slide">slide 10</button>.</p>
+
+<pre class="algo"><code>function f(x) { return x == !x; }
+
+// Always false?  No.
+f([])  ->  [] == ![]
+       ->  [] == false
+       ->  +[] == +false
+       ->  0 == 0
+       ->  true</code></pre>
+
+  <p>The reason is that the two operators in the expression convert their operands through different types. The logical negation operator applies ToBoolean to its operand. Every object is truthy in JavaScript, including an empty array, so ToBoolean of <code>[]</code> is true and <code>![]</code> is therefore <code>false</code>. We are now asking whether <code>[]</code> is loosely equal to <code>false</code>.</p>
+
+  <p>Loose equality does not stop there. Its rules say that when one side is a Boolean, that side is replaced by its numeric value, so <code>false</code> becomes <code>0</code>. That leaves an object compared with a number, and the rule for that case converts the object to a primitive: the empty array becomes the empty string, and the empty string converts to <code>0</code>. So both sides arrive at <code>0</code>, and the comparison is true. A value and its own negation are equal, because <code>!</code> travels through Boolean and <code>==</code> travels through Number, and the two roads meet at zero.</p>
+
+  <div class="callout warn"><p><span class="co-tag">Careful</span> This is not a curiosity bolted on to an otherwise tidy language. ECMA-262 devotes an entire chapter to implicit conversions. The reason is historical and deliberate: JavaScript was designed for the web, where getting stuck is worse than being wrong. Rather than raise an exception, the language coerces its way onward. Every one of those coercions is a rule someone has to model correctly before any analysis built on the language can be called sound.</p></div>
+
+  <details class="reveal"><summary>Does <code>f</code> return true for everything, then?</summary><p>No, and the contrast is instructive. Take <code>f(0)</code>. ToBoolean of <code>0</code> is false, so <code>!0</code> is <code>true</code>, which loose equality converts to the number <code>1</code>. We end at <code>0 == 1</code>, which is false. The same rule chain that makes <code>f([])</code> true makes <code>f(0)</code> false. Following the chain is the only way to know which you get, and following the chain is exactly what a hand-written analyser has to reproduce for every operator in the language.</p></details>
+
+  <div class="quiz">
+    <script type="application/json">
+    {"type":"mc","q":"Why does f([]) evaluate to true?","options":["Because an empty array is a falsy value, so both sides are false","Because ![] is false, and loose equality then converts the boolean to 0 and the array to 0 as well","Because loose equality never converts array operands, so [] is compared with itself","Because the negation operator leaves objects unchanged"],"answer":1,"explain":"The negation operator goes through ToBoolean, and every object is truthy, so ![] is false. Loose equality then replaces the boolean with its numeric value 0, converts the array to the empty string and then to 0, and compares 0 with 0."}
+    </script>
+  </div>
+
+  <h3 id="mkr-spec">What the standard actually contains</h3>
+
+  <p>ECMA-262, the ECMAScript language specification, is maintained by TC39, the technical committee that owns the language. It defines both halves of what a semantics needs <button type="button" class="slide-ref" data-slide="ryu1:11" title="Open this slide">slide 11</button>. The syntax appears as grammar productions: the deck uses the production for <code>ArrayLiteral</code> as its running illustration. The semantics appears as numbered evaluation algorithms attached to those productions: for the same example, the evaluation algorithm for the third alternative of <code>ArrayLiteral</code>. The algorithms are written in English, but in a very particular English.</p>
+
+  <p>Two facts about the document set the problem. It is large: ECMAScript 2021, the twelfth edition, runs to 879 pages <button type="button" class="slide-ref" data-slide="ryu1:19" title="Open this slide">slide 19</button>. And since 2015 it has been on an annual release cadence with an open development process, so it changes continuously and ships a new edition every year. The lecturer keeps a full printout in her office and described reading it line by line, the way one studies for an exam.</p>
+
+  <div class="quiz">
+    <script type="application/json">
+    {"type":"fill","q":"Which committee maintains ECMA-262, the JavaScript language specification?","accept":["tc39","tc-39","tc 39"],"explain":"TC39 is the Ecma technical committee that owns ECMAScript. It defines both the grammar productions and the evaluation algorithms, and it publishes a new edition every year."}
+    </script>
+  </div>
+
+  <h3 id="mkr-hand">The hand-written era, and what it cost</h3>
+
+  <p>The conventional approach is that a person reads the standard and writes an analyser. Three long-running JavaScript analysers did exactly this: SAFE at KAIST, TAJS at Aarhus University, and WALA at IBM T.J. Watson <button type="button" class="slide-ref" data-slide="ryu1:6" title="Open this slide">slide 6</button>. The deck's picture of the situation is blunt: ECMA-262 goes in, an analyzer developer reads it, defines the formal semantics by hand, and hand-writes an abstract JavaScript static analyser out the other end, with both the definition and the implementation carrying the word "manual" on the arrow <button type="button" class="slide-ref" data-slide="ryu1:18" title="Open this slide">slide 18</button>. The same picture holds for the formal semantics line of work that the deck lists alongside it, including KJS, JSIL and JSCert.</p>
+
+  <p>The second picture is the damaging one. Laid against the timeline of ECMAScript editions from ES1 in 1997 to ES12 in 2021, each of those tools appears at the version it was built for and then falls behind <button type="button" class="slide-ref" data-slide="ryu1:19" title="Open this slide">slide 19</button>. ES6 in 2015 brought classes and modules, ES7 brought destructuring patterns, ES8 brought new object manipulation, and every one of those releases meant reading the diff and patching the analyser by hand. As the lecturer put it, this is labour-intensive and error-prone work, and after late 2014 the annual cadence turned it from a burden into a treadmill.</p>
+
+  <p>The group's own decade in that era produced a chain of extensions rather than a single tool. They had to model the DOM, because a JavaScript program that never touches the browser is not a realistic program. They modelled host APIs described in WebIDL, because JavaScript programs interoperate with code written in other languages. They worked on abstracting minified or bundled code whose source is not available, by leveraging dynamic analysis to obtain results and abstracting from those. And when purely static analysis did not scale, they combined forces with the WALA group at IBM: WALA was fast but unsound, SAFE was sound but slow, and the joint work traded one property against the other deliberately <button type="button" class="slide-ref" data-slide="ryu1:13" title="Open this slide">slides 13-17</button>. Some of that was driven by wanting to optimise real applications, including programs written at Samsung Electronics. Ten years of it were later written up as a survey of JavaScript analysis, and the journey itself became a Communications of the ACM article on JavaScript language design and implementation in tandem <button type="button" class="slide-ref" data-slide="ryu1:7" title="Open this slide">slide 7</button>.</p>
+
+  <blockquote class="anecdote"><p>In the beginning we were two teachers, but we soon became good friends, because we were struggling with the same weird, crazy language.</p><footer>Sukyoung Ryu, on how the SAFE, TAJS and WALA groups ended up collaborating</footer></blockquote>
+
+  <h3 id="mkr-idea">The question that changed the approach</h3>
+
+  <p>The breakthrough came from a change of question rather than from a new technique. Jihyeok Park argued that maintaining an analyser by hand was the wrong thing to be spending the effort on, and that a different approach was needed <button type="button" class="slide-ref" data-slide="ryu1:20" title="Open this slide">slide 20</button>. His question was: can we generate static analyzers automatically, straight from the book <button type="button" class="slide-ref" data-slide="ryu1:21" title="Open this slide">slide 21</button>? This was before large language models were a practical option, so the answer had to come from the structure of the document itself.</p>
+
+  <p>The observation that made it possible is on the next slide, and it is the whole idea in one sentence: the specification is written in very simple English prose <button type="button" class="slide-ref" data-slide="ryu1:22" title="Open this slide">slide 22</button>. The evaluation algorithms are not free-form natural language. They are numbered steps built out of a small, stylised set of phrase forms that recur across the whole document, because the editors of a standard write in a house style on purpose <button type="button" class="slide-ref" data-slide="ryu1:25" title="Open this slide">slide 25</button>. If the set of phrase forms is small and closed, then a compiler from those phrases into an executable language is not only possible, it is small.</p>
+
+  <div class="callout key"><p><span class="co-tag">Key idea</span> Treat a prose specification as a program. The English is the source language; the machine-readable semantics is the target. What stands between them is a compiler, and because the English is stylised the compiler is a table of phrase patterns rather than an exercise in natural language understanding.</p></div>
+
+  <p>The target language is IR<sub>ES</sub>, an intermediate representation for ECMAScript designed to say the things ECMA-262 says <button type="button" class="slide-ref" data-slide="ryu1:26" title="Open this slide">slides 26-27</button>. It has functions that can be ordinary or syntax-directed, instructions for reference update, object allocation, call, branch and return, and values that include addresses, primitive values such as booleans, integers and strings, and JavaScript abstract syntax trees as first-class values. That last point matters: because IR<sub>ES</sub> treats JavaScript ASTs as values, a syntax-directed function in the metalanguage corresponds directly to an evaluation algorithm attached to a grammar production in the standard.</p>
+
+  <div class="callout def"><p><span class="co-tag">Definition</span> A <em>mechanized specification</em> here means a machine-readable, executable rendering of the standard: a parser generated from its grammar productions and a set of IR<sub>ES</sub> functions generated from its evaluation algorithms. Together those functions are a JavaScript interpreter, and that interpreter is itself just a program, which is what makes everything downstream possible. The umbrella framework holding the tools built on it is called ESMeta.</p></div>
+
+  <h3 id="mkr-pipeline">From book to interpreter</h3>
+
+  <p>The extraction toolchain is JISET, the JavaScript IR-based Semantics Extraction Toolchain, by Jihyeok Park, Jihee Park, Seungmin An and Sukyoung Ryu, published at ASE 2020 <button type="button" class="slide-ref" data-slide="ryu1:24" title="Open this slide">slide 24</button>. Its architecture has two lanes running in parallel from the same document: one for syntax, one for semantics <button type="button" class="slide-ref" data-slide="ryu1:28" title="Open this slide">slide 28</button>.</p>
+
+  <div class="stepper" data-title="JISET: extracting an interpreter from ECMA-262">
+    <div class="step" data-label="Take the HTML"><p>The standard is published as HTML as well as PDF, and the HTML carries structural annotations that mark grammar productions and algorithm steps. Those annotations are what make parsing the document tractable rather than a heuristic mess. The group took the HTML and parsed it.</p></div>
+    <div class="step" data-label="Extract the grammar"><p>A BNF production extractor pulls the grammar out of the syntax sections. ECMAScript's grammar is not context free in the convenient sense, so the productions are turned into a parsing expression grammar with lookahead, which is what the standard's own side conditions amount to.</p></div>
+    <div class="step" data-label="Generate a parser"><p>A parser generator turns that grammar into an actual JavaScript parser. No one writes this parser; it is a function of the edition you fed in, so a new edition gives a new parser for free.</p></div>
+    <div class="step" data-label="Extract the algorithms"><p>In the other lane, the abstract algorithms are collected: the numbered English steps attached to productions and to the built-in library functions.</p></div>
+    <div class="step" data-label="Compile the English"><p>An algorithm compiler matches each step against a pattern and emits IR<sub>ES</sub>. This is where the small-and-stylised observation pays off: the paper reports 118 compile rules, and the deck notes 126 as of today. That is the entire English-to-IR translation table for a document of several hundred pages.</p></div>
+    <div class="step" data-label="Fill the last few percent"><p>About 96 percent of the algorithms compile automatically <button type="button" class="slide-ref" data-slide="ryu1:29" title="Open this slide">slide 29</button>. The remainder is genuinely awkward prose. The lecturer singled out one chapter that reads less like English than like a translation of C++ code, a description its own author cheerfully accepted. Rather than spend effort on the residue for every edition, they picked the latest edition and filled in the missing parts by hand.</p></div>
+    <div class="step" data-label="Check against Test262"><p>Test262 is the official ECMAScript conformance test suite. Of it, 18,556 tests are applicable. The generated parser passes all 18,556 parsing tests, and the generated interpreter passes all 18,556 evaluation tests <button type="button" class="slide-ref" data-slide="ryu1:29" title="Open this slide">slide 29</button>. That is the evidence that the extracted specification is not merely plausible but correct in the sense the committee itself uses.</p></div>
+  </div>
+
+  <figure class="fig">
+    <svg viewBox="0 0 660 250" role="img" aria-label="Two pipelines from ECMA-262 to an analysis result: the manual one, in which a developer reads the standard and writes the analyser by hand and must redo the work each edition, and the generated one, in which the standard is compiled into a mechanized specification from which the analyser is derived.">
+      <defs>
+        <marker id="mkr-ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="var(--ink-2)"/></marker>
+      </defs>
+      <text x="20" y="24" font-size="12" font-weight="600" fill="var(--ink)">Hand-written, one edition at a time</text>
+      <rect x="20" y="36" width="120" height="46" rx="6" fill="var(--surface)" stroke="var(--hairline)"/>
+      <text x="80" y="58" font-size="12" text-anchor="middle" fill="var(--ink)">ECMA-262</text>
+      <text x="80" y="73" font-size="10" text-anchor="middle" fill="var(--muted)">879 pages</text>
+      <line x1="142" y1="59" x2="228" y2="59" stroke="var(--ink-2)" stroke-width="1.5" marker-end="url(#mkr-ah)"/>
+      <text x="185" y="52" font-size="10" text-anchor="middle" fill="var(--muted)">read by hand</text>
+      <rect x="232" y="36" width="150" height="46" rx="6" fill="var(--surface)" stroke="var(--hairline)"/>
+      <text x="307" y="58" font-size="12" text-anchor="middle" fill="var(--ink)">Static analyser</text>
+      <text x="307" y="73" font-size="10" text-anchor="middle" fill="var(--muted)">written by a person</text>
+      <line x1="384" y1="59" x2="470" y2="59" stroke="var(--ink-2)" stroke-width="1.5" marker-end="url(#mkr-ah)"/>
+      <rect x="474" y="36" width="120" height="46" rx="6" fill="var(--surface)" stroke="var(--hairline)"/>
+      <text x="534" y="64" font-size="12" text-anchor="middle" fill="var(--ink)">Analysis result</text>
+      <text x="20" y="102" font-size="11" fill="var(--warn)">Every new edition: read the diff, patch the analyser, hope nothing was missed.</text>
+
+      <line x1="20" y1="118" x2="640" y2="118" stroke="var(--hairline)" stroke-width="1"/>
+
+      <text x="20" y="146" font-size="12" font-weight="600" fill="var(--ink)">Generated from the document</text>
+      <rect x="20" y="158" width="120" height="46" rx="6" fill="var(--surface)" stroke="var(--hairline)"/>
+      <text x="80" y="180" font-size="12" text-anchor="middle" fill="var(--ink)">ECMA-262</text>
+      <text x="80" y="195" font-size="10" text-anchor="middle" fill="var(--muted)">annotated HTML</text>
+      <line x1="142" y1="181" x2="228" y2="181" stroke="var(--accent)" stroke-width="1.5" marker-end="url(#mkr-ah)"/>
+      <text x="185" y="174" font-size="10" text-anchor="middle" fill="var(--accent)">118 rules</text>
+      <rect x="232" y="158" width="150" height="46" rx="6" fill="var(--surface)" stroke="var(--accent)"/>
+      <text x="307" y="178" font-size="12" text-anchor="middle" fill="var(--ink)">Mechanized spec</text>
+      <text x="307" y="193" font-size="10" text-anchor="middle" fill="var(--muted)">parser + interpreter</text>
+      <line x1="384" y1="181" x2="470" y2="181" stroke="var(--accent)" stroke-width="1.5" marker-end="url(#mkr-ah)"/>
+      <text x="427" y="174" font-size="10" text-anchor="middle" fill="var(--accent)">derive</text>
+      <rect x="474" y="158" width="120" height="46" rx="6" fill="var(--surface)" stroke="var(--hairline)"/>
+      <text x="534" y="186" font-size="12" text-anchor="middle" fill="var(--ink)">Analysis result</text>
+      <text x="20" y="224" font-size="11" fill="var(--good)">Every new edition: re-run the extractor and re-run Test262.</text>
+    </svg>
+    <figcaption>The change JISET makes is not that the analyser gets better. It is that the arrow labelled "manual" disappears, so the cost of a new edition stops being a person-month of careful reading <button type="button" class="slide-ref" data-slide="ryu1:18" title="Open this slide">slides 18, 21, 28</button>.</figcaption>
+  </figure>
+
+  <div class="quiz">
+    <script type="application/json">
+    {"type":"fill","q":"How many compile rules did JISET need to translate the stylised English of ECMA-262 into its metalanguage, as reported in the paper?","accept":["118","118 rules","one hundred and eighteen"],"explain":"118 compile rules in the ASE 2020 paper, and 126 as of the day of the lecture. The point is the size: a document of several hundred pages is written with only around a hundred distinct phrase forms."}
+    </script>
+  </div>
+
+  <h3 id="mkr-tools">What you can build once the interpreter is generated</h3>
+
+  <p>Extraction is only the first of three steps in the overall approach: mechanized specification extraction, then a validity check on the extracted specification, then derivation of static analysers <button type="button" class="slide-ref" data-slide="ryu1:24" title="Open this slide">slide 24</button>. The second and third steps are where the payoff is, and they are only available because the specification is now a program.</p>
+
+  <div class="tabs">
+    <div class="tab" data-label="JEST"><p><strong>JEST</strong>, by Jihyeok Park, Seungmin An, Dongjun Youn, Gyeongwon Kim and Sukyoung Ryu (ICSE 2021), does N+1-version differential testing of JavaScript engines <button type="button" class="slide-ref" data-slide="ryu1:30" title="Open this slide">slides 30-34</button>. Classical differential testing compares implementations against each other. Here the extracted specification acts as an extra participant, so when engines disagree you can tell which of them is wrong, and when they all agree but the specification says otherwise you have found a specification bug. Programs are synthesised from the syntax and semantics of the specification, mutated under coverage guidance, and then turned into conformance tests by injecting assertions in seven kinds: exceptions, aborts, variable values, object values, object property descriptors, property keys, and internal methods and slots <button type="button" class="slide-ref" data-slide="ryu1:35" title="Open this slide">slides 35-37</button>. From ES11 it synthesised 1,700 conformance tests and found 44 bugs in engines and 27 in the specification <button type="button" class="slide-ref" data-slide="ryu1:38" title="Open this slide">slide 38</button>.</p></div>
+    <div class="tab" data-label="JSTAR"><p><strong>JSTAR</strong>, by Jihyeok Park, Seungmin An, Wonho Shin, Yusung Sim and Sukyoung Ryu (ASE 2021), turns the tables and analyses the specification itself <button type="button" class="slide-ref" data-slide="ryu1:40" title="Open this slide">slides 40-42</button>. Because the extracted algorithms are IR<sub>ES</sub> functions, you can run a type analysis over them and look for the kinds of mistake any untyped program has: unknown variables, duplicated variables, wrong arity, failed assertions, operands of the wrong type, and unchecked abrupt completions. The illustrative bug is a numeric comparison applied to a value that can be a boolean, which is why <code>Math.round(true)</code> and <code>Math.round(false)</code> had to be pinned down as 1 and 0 <button type="button" class="slide-ref" data-slide="ryu1:41" title="Open this slide">slide 41</button>. Run across 864 versions of ECMA-262 spanning three years, JSTAR reported 157 candidate bugs of which 93 were true bugs, a precision of 59.2 percent once condition-based refinement is switched on, and 14 of those bugs were still present in ES12 at the time <button type="button" class="slide-ref" data-slide="ryu1:49" title="Open this slide">slide 49</button>.</p></div>
+    <div class="tab" data-label="JSAVER"><p><strong>JSAVER</strong>, by Jihyeok Park, Seungmin An and Sukyoung Ryu (FSE 2022), closes the loop by deriving the static analyser <button type="button" class="slide-ref" data-slide="ryu1:50" title="Open this slide">slides 50-52</button>. The trick is a change of level. The usual, compiler-based route writes a hand-made compiler from JavaScript to some IR and then analyses the IR. JSAVER instead takes the generated interpreter, which is itself an IR program, and runs an abstract interpretation of that interpreter on the program of interest. The analyser you get is derived, not written, so it conforms to whichever edition you extracted. On the 18,556 applicable Test262 tests it analysed the programs with 99.0 percent precision at 590 milliseconds on average <button type="button" class="slide-ref" data-slide="ryu1:53" title="Open this slide">slide 53</button>.</p></div>
+    <div class="tab" data-label="JEST_fs"><p><strong>JEST_fs</strong>, by Jihyeok Park, Dongjun Yoon, Kanguk Lee and Sukyoung Ryu (PLDI 2023), sharpens the conformance testing with feature-sensitive coverage <button type="button" class="slide-ref" data-slide="ryu1:59" title="Open this slide">slide 59</button>. Plain coverage of the specification's algorithms treats every execution of a step alike; feature sensitivity distinguishes the language feature under which a step was reached, which exposes gaps that undirected coverage reports as already covered. The line of work continued into a journal version and a tool demonstration at FSE 2025 <button type="button" class="slide-ref" data-slide="ryu1:66" title="Open this slide">slides 66, 68</button>.</p></div>
+  </div>
+
+  <figure class="fig">
+    <svg viewBox="0 0 660 250" role="img" aria-label="Two ways to build a JavaScript static analyser. The compiler-based approach translates the JavaScript program into an intermediate representation with a hand-written compiler and analyses that. The interpreter-based approach analyses the generated interpreter, which is itself an intermediate representation program, applied to the JavaScript program.">
+      <defs>
+        <marker id="mkr-ah2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="var(--ink-2)"/></marker>
+      </defs>
+      <text x="20" y="22" font-size="12" font-weight="600" fill="var(--ink)">Compiler-based (existing tools)</text>
+      <rect x="20" y="34" width="120" height="42" rx="6" fill="var(--surface)" stroke="var(--hairline)"/>
+      <text x="80" y="60" font-size="11" text-anchor="middle" fill="var(--ink)">JS program</text>
+      <line x1="142" y1="55" x2="178" y2="55" stroke="var(--ink-2)" stroke-width="1.5" marker-end="url(#mkr-ah2)"/>
+      <rect x="182" y="34" width="140" height="42" rx="6" fill="var(--surface)" stroke="var(--warn)"/>
+      <text x="252" y="52" font-size="11" text-anchor="middle" fill="var(--ink)">JS-to-IR compiler</text>
+      <text x="252" y="67" font-size="10" text-anchor="middle" fill="var(--warn)">written and kept</text>
+      <line x1="324" y1="55" x2="360" y2="55" stroke="var(--ink-2)" stroke-width="1.5" marker-end="url(#mkr-ah2)"/>
+      <rect x="364" y="34" width="140" height="42" rx="6" fill="var(--surface)" stroke="var(--hairline)"/>
+      <text x="434" y="60" font-size="11" text-anchor="middle" fill="var(--ink)">IR static analyser</text>
+      <line x1="506" y1="55" x2="542" y2="55" stroke="var(--ink-2)" stroke-width="1.5" marker-end="url(#mkr-ah2)"/>
+      <text x="548" y="59" font-size="11" fill="var(--ink)">result</text>
+      <text x="182" y="94" font-size="10" fill="var(--warn)">conformant with ECMA-262 only as long as someone maintains it</text>
+
+      <line x1="20" y1="112" x2="640" y2="112" stroke="var(--hairline)" stroke-width="1"/>
+
+      <text x="20" y="138" font-size="12" font-weight="600" fill="var(--ink)">Interpreter-based (JSAVER)</text>
+      <rect x="20" y="150" width="120" height="42" rx="6" fill="var(--surface)" stroke="var(--hairline)"/>
+      <text x="80" y="176" font-size="11" text-anchor="middle" fill="var(--ink)">ECMA-262</text>
+      <line x1="142" y1="171" x2="178" y2="171" stroke="var(--accent)" stroke-width="1.5" marker-end="url(#mkr-ah2)"/>
+      <text x="160" y="164" font-size="9" text-anchor="middle" fill="var(--accent)">extract</text>
+      <rect x="182" y="150" width="140" height="42" rx="6" fill="var(--surface)" stroke="var(--accent)"/>
+      <text x="252" y="168" font-size="11" text-anchor="middle" fill="var(--ink)">JS interpreter</text>
+      <text x="252" y="183" font-size="10" text-anchor="middle" fill="var(--muted)">an IR program</text>
+      <line x1="324" y1="171" x2="360" y2="171" stroke="var(--accent)" stroke-width="1.5" marker-end="url(#mkr-ah2)"/>
+      <rect x="364" y="150" width="140" height="42" rx="6" fill="var(--surface)" stroke="var(--hairline)"/>
+      <text x="434" y="176" font-size="11" text-anchor="middle" fill="var(--ink)">IR static analyser</text>
+      <line x1="506" y1="171" x2="542" y2="171" stroke="var(--ink-2)" stroke-width="1.5" marker-end="url(#mkr-ah2)"/>
+      <text x="548" y="175" font-size="11" fill="var(--ink)">result</text>
+      <rect x="182" y="206" width="140" height="30" rx="6" fill="var(--surface)" stroke="var(--hairline)"/>
+      <text x="252" y="225" font-size="11" text-anchor="middle" fill="var(--ink)">JS program</text>
+      <path d="M324,221 L400,221 L400,196" fill="none" stroke="var(--ink-2)" stroke-width="1.5" marker-end="url(#mkr-ah2)"/>
+      <text x="20" y="225" font-size="10" fill="var(--good)">nothing on this</text>
+      <text x="20" y="238" font-size="10" fill="var(--good)">path is hand-written</text>
+    </svg>
+    <figcaption>Meta-level static analysis. Instead of analysing the JavaScript program, JSAVER abstractly interprets the generated interpreter running on that program, which removes the hand-written compiler that had to be kept conformant by hand <button type="button" class="slide-ref" data-slide="ryu1:51" title="Open this slide">slide 51</button>.</figcaption>
+  </figure>
+
+  <div class="quiz">
+    <script type="application/json">
+    {"type":"mc","q":"In JSAVER's interpreter-based approach, what does the IR static analyser abstractly interpret?","options":["The JavaScript program, after a hand-written compiler has translated it into the IR","The generated JavaScript interpreter, which is itself an IR program, applied to the JavaScript program","The English prose of ECMA-262 directly, without any intermediate representation","The output traces produced by running the program in a real JavaScript engine"],"answer":1,"explain":"The mechanized specification is a JavaScript interpreter expressed as an IR program. JSAVER analyses that interpreter at the meta level, so the resulting JavaScript analyser is derived from the standard rather than written by hand, and no hand-maintained JavaScript-to-IR compiler is needed."}
+    </script>
+  </div>
+
+  <h3 id="mkr-tc39">How the work got adopted</h3>
+
+  <p>A formalisation that the standards body ignores is a paper. This one is in the committee's own infrastructure, and the lecturer raised the question of how that happened herself, because another well regarded group had done comparable work, had published it, had presented it to TC39, and had not been taken up. The question put to her was, in effect, how did you convince them, given the community's reputation for being hard to convince. The recording garbles the name of the group involved, so it is not reproduced here.</p>
+
+  <p>The recording does not preserve the spoken answer: the question is the last thing on the tape. What the deck does preserve is the sequence of events, and the sequence is itself the argument <button type="button" class="slide-ref" data-slide="ryu1:70" title="Open this slide">slide 70</button>.</p>
+
+  <table>
+    <thead><tr><th>When</th><th>What</th></tr></thead>
+    <tbody>
+      <tr><td>September 2020</td><td>JISET paper (ASE): extraction of the mechanized specification</td></tr>
+      <tr><td>May 2021</td><td>JEST paper (ICSE): bugs found in engines and in the specification</td></tr>
+      <tr><td>November 2021</td><td>JSTAR paper (ASE): type analysis of the specification itself</td></tr>
+      <tr><td>November 2021</td><td>Meeting with the TC39 editors</td></tr>
+      <tr><td>January 2022</td><td>Presentation at the TC39 meeting</td></tr>
+      <tr><td>November 2022</td><td>ESMeta integrated into the continuous integration of ECMA-262 and Test262</td></tr>
+      <tr><td>November 2022</td><td>JSAVER paper (FSE): derived static analysers</td></tr>
+      <tr><td>June 2023</td><td>JEST_fs paper (PLDI): feature-sensitive conformance coverage</td></tr>
+      <tr><td>May 2024</td><td>CACM article on the whole journey</td></tr>
+    </tbody>
+  </table>
+
+  <p>Read in order, the tools arrive first and the meetings come after. By the time the group sat down with the editors they were not proposing that the committee learn a formalism; they were reporting concrete defects in the document the editors were responsible for, and defects in the engines that implement it. The eventual integration is the part that matters: ESMeta runs in the continuous integration of ECMA-262 and Test262, so it checks each proposed change to the standard as that change is made, rather than checking a snapshot after the fact. Ecma International went on to publish a note about the arrangement between the KAIST group and TC39 <button type="button" class="slide-ref" data-slide="ryu1:69" title="Open this slide">slide 69</button>, and the current specification is served in exactly the annotated HTML form the extractor consumes <button type="button" class="slide-ref" data-slide="ryu1:55" title="Open this slide">slides 55, 58</button>.</p>
+
+  <p>The same pattern shows up one level down, with implementers rather than editors. After JEST reported 16 engine bugs in GraalJS, one of which crashed the engine outright when the prefix increment operator was applied to <code>undefined</code>, so that developers could not even catch the exception, the response was not scepticism about the method <button type="button" class="slide-ref" data-slide="ryu1:39" title="Open this slide">slide 39</button>.</p>
+
+  <blockquote class="anecdote"><p>Right now, we are running Test262 and the V8 and Nashorn unit test suites in our CI for every change. It might make sense to add your suite as well.</p><footer>A developer of GraalVM, quoted on the deck</footer></blockquote>
+
+  <div class="callout key"><p><span class="co-tag">Key idea</span> The adoption argument was never "our semantics is more rigorous than your prose". It was "here are bugs in your document and your implementations, found automatically, and the finder can be wired into your build". Rigour was the means. Defects that someone was already obliged to care about were the currency.</p></div>
+
+  <h3 id="mkr-next">Where this goes next</h3>
+
+  <p>The JavaScript work is the hard case, because ECMA-262 was never written with mechanisation in mind and the extraction has to cope with prose that grew organically over twenty-five years. The lecturer's verdict on the next language in the series was short: they met WebAssembly, and its specification is really nice. That is tomorrow's topic, together with SpecTec, the specification framework built for it <button type="button" class="slide-ref" data-slide="ryu1:5" title="Open this slide">slide 5</button>. The interesting question to carry across is what changes when the standards document is designed from the start to be a formal artifact rather than reverse-engineered into one, and whether the same adoption strategy is still needed when the committee is already sympathetic.</p>
+</section>

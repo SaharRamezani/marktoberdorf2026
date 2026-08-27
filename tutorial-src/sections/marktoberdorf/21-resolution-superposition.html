@@ -1,0 +1,335 @@
+<section class="lecture" id="sec-mk-bl" data-num="16" data-day="mk-atp" data-title="Provers and Solvers: Saturation and Resolution" data-lecturer="Jasmin Blanchette">
+  <header class="lec-head">
+    <div class="lec-num">16</div>
+    <div>
+      <h2 id="mkb-top">Provers and Solvers: Saturation and Resolution</h2>
+      <p class="lec-meta">Lecture by Jasmin Blanchette (LMU Munich), the first of four on provers and solvers. This section follows his deck <em>Provers and Solvers, Lecture 1: Resolution</em> together with the recording of the session. The deck is built up overlay by overlay, so a page reference names the page on which the slide is complete.</p>
+    </div>
+  </header>
+
+  <p class="lead">This series fits the rest of the school closely: Blanchette works on interactive theorem proving, on automated provers and solvers, and on making the two work together. That combination shapes the first lecture. Before any calculus appears, he says what an automatic prover is actually for and why it has not been made redundant by generative models. Then he introduces saturation, the proof-search framework that all four lectures share, and the given clause algorithm that turns the framework into something you can run. The rest of the lecture builds resolution up in three passes: the ground case first, where clauses carry no variables, then an ordering restriction that stops the ground calculus from drowning, then variables, unification and the lifting of the whole theory to first-order clauses.</p>
+
+  <h3 id="mkb-application">What the prover is for</h3>
+
+  <p>Blanchette comes to automated deduction from the interactive side. In a proof assistant the user writes the proof and the system checks it step by step, and the ambition is that a step the user considers obvious should not have to be written out at all. Instead the assistant passes the step to an automatic theorem prover running as a back end. The user clicks a button, and a second or two later the step is either discharged or reported as not proved.</p>
+
+  <p>The example he opened with is an elementary fact about divisibility and greatest common divisors <button type="button" class="slide-ref" data-slide="blanchette1:3" title="Open this slide">pages 3-4</button>: if <em>d</em> divides <em>a</em>&middot;<em>b</em>, and <em>A</em> = gcd(<em>d</em>, <em>a</em>), and <em>B</em> = gcd(<em>d</em>, <em>b</em>), then <em>d</em> divides <em>A</em>&middot;<em>B</em>. The deck puts it in a mock proof assistant window under a "Find Proof" button, and the next page shows the button having produced a tick. The same formula returns later as a specimen of what a first-order problem looks like <button type="button" class="slide-ref" data-slide="blanchette1:17" title="Open this slide">page 17</button>. The point is that this is a small, purely first-order fact that a mathematician would call obvious and would never write out, and whose manual proof inside a proof assistant is tedious out of all proportion to its interest. Until a few years ago that tedium was simply part of the job. How recently depends on the system: he noted that users of Rocq were still doing proofs of this kind by hand around five years ago.</p>
+
+  <p>Program verification is the other large consumer of exactly the same technology, and he acknowledged it, but the interactive setting is where his own interest comes from and it is the setting the lectures keep in view.</p>
+
+  <h3 id="mkb-ai">Why not just ask a model</h3>
+
+  <p>He raised the objection himself, and answered it before starting on the technical material. Against a generative model, an automatic prover has four concrete advantages.</p>
+
+  <ul>
+    <li>It is faster on the things it is good at. Its range is relatively simple formulas, but "relatively simple" here often means harder than a human can dispatch in a few minutes.</li>
+    <li>It is far less energy hungry.</li>
+    <li>It runs on a laptop, with no service to call.</li>
+    <li>A model can use it. The prover can serve as one proof step inside a larger, model-driven argument, which makes the relationship complementary rather than competitive.</li>
+  </ul>
+
+  <p>He also turned the framing round. When he says AI in this argument he means generative AI, the kind behind current chat and image systems. But an automatic theorem prover is itself a form of AI, of the older, classical sort. His conclusion was measured rather than defensive: what follows is not obsoleted by generative AI, at least not yet, and it is something to use in collaboration with a model, or without one.</p>
+
+  <h3 id="mkb-plan">The plan of the four lectures</h3>
+
+  <p>The outline slide lists them by method rather than by topic <button type="button" class="slide-ref" data-slide="blanchette1:5" title="Open this slide">page 5</button>.</p>
+
+  <table>
+    <thead><tr><th>Lecture</th><th>Method</th></tr></thead>
+    <tbody>
+      <tr><td>1</td><td><strong>Resolution.</strong> The classical calculus, and the entry point to everything else.</td></tr>
+      <tr><td>2</td><td><strong>Superposition.</strong> An extension of resolution that supports equality reasoning natively. Less famous than resolution, but it is what is implemented in practice.</td></tr>
+      <tr><td>3</td><td><strong>&lambda;-superposition,</strong> a variant developed by his team together with colleagues at several institutes, which lifts the calculus to a higher-order logic with lambda-abstraction.</td></tr>
+      <tr><td>4</td><td><strong>AVATAR,</strong> which adds case splitting, and therefore branching, on top of the above.</td></tr>
+    </tbody>
+  </table>
+
+  <p>The remark about lecture two is worth pausing on, because it says something about the state of the field. Almost no pure resolution provers are left; almost all of them are superposition provers. If you have heard of Vampire or E, those are superposition provers, which can still perform resolution inferences when that is what a problem calls for. Resolution is taught first because it is the simpler calculus and because superposition is best understood as a generalisation of it, not because it is what you would reach for today.</p>
+
+  <h3 id="mkb-saturation">Saturation, the shared framework</h3>
+
+  <p>All four lectures are based on saturation, so that is where the technical content starts <button type="button" class="slide-ref" data-slide="blanchette1:6" title="Open this slide">pages 6-9</button>. The setting is a proof goal: a set of axioms or hypotheses <em>F</em><sub>1</sub> to <em>F</em><sub>n</sub>, and a conjecture <em>G</em> to be proved from them.</p>
+
+  <div class="algo" data-title="Saturation, as stated in the lecture">
+    <ol>
+      <li>Take <em>F</em><sub>1</sub>, ..., <em>F</em><sub>n</sub> and <strong>&not;<em>G</em></strong>, the negation of the goal.</li>
+      <li>Put them all into a normal form. This yields a set of formulas, call it <strong>F</strong>.</li>
+      <li>Repeat:
+        <ol>
+          <li>apply an inference rule to members of <strong>F</strong>, and add the conclusion to <strong>F</strong>;</li>
+          <li>delete from <strong>F</strong> any formula that has become redundant.</li>
+        </ol>
+      </li>
+      <li>Stop when &perp; (falsity) has been derived.</li>
+    </ol>
+  </div>
+
+  <p>The move in step 1 is the one that makes the whole thing a search for a contradiction rather than a search for a proof. You do not start from the axioms and try to reach the goal. You start from the axioms <em>together with the assumption that the goal is false</em>, and try to reach absurdity. In classical logic, deriving &perp; from that set establishes the goal: if the axioms plus &not;<em>G</em> are jointly unsatisfiable, then every model of the axioms is a model of <em>G</em>. This is why saturation provers are called refutational, and why the answer they give you is not a proof of <em>G</em> directly but a refutation of its negation.</p>
+
+  <div class="callout def">
+    <p><span class="co-tag">Definition</span> <strong>Saturation.</strong> A proof procedure that maintains a growing set of formulas, closes it under the inference rules of a calculus, and deletes formulas that have become redundant, until falsity appears. The set is "saturated" when every inference between formulas in it has already been performed, or made unnecessary by deletion.</p>
+  </div>
+
+  <h3 id="mkb-redundancy">Redundancy, and why deletion complicates the theory</h3>
+
+  <p>Step 3b is the one that is easy to skip past and should not be. A saturation prover does not only add formulas. If it notices that some formula cannot help, typically because it now has a better formula in hand, it throws that formula away. Without deletion the set of derived formulas grows without limit and the prover drowns in its own conclusions.</p>
+
+  <p>The example on the slide itself is the simplest possible one <button type="button" class="slide-ref" data-slide="blanchette1:9" title="Open this slide">page 9</button>. Suppose you have derived <em>P</em>. Then <em>P</em> &or; <em>Q</em> becomes redundant, in most calculi he knows of, because <em>P</em> is a strictly better formula: it tells you more.</p>
+
+  <blockquote class="anecdote">
+    <p>"<em>P</em> could be, the sky is blue. And <em>P</em> or <em>Q</em> is, the sky is blue or it is raining. Which one of the two is more informative? The first, the sky is blue, because then you know for sure the sky is blue."</p>
+    <footer>Jasmin Blanchette, on redundancy</footer>
+  </blockquote>
+
+  <p>Anything derivable with the help of the disjunction is derivable from <em>P</em> alone, so nothing is lost by discarding it, and a formula that would otherwise have generated inferences of its own is removed from the search space.</p>
+
+  <div class="callout warn">
+    <p><span class="co-tag">Careful</span> Because formulas can be removed as well as added, saturation is <strong>not monotone</strong>. The set <strong>F</strong> does not simply grow over time. Blanchette flagged this explicitly as one of the reasons saturation is tricky to reason about: a proof of completeness cannot argue that whatever was once derivable stays available, since the prover may have deleted it. The redundancy criterion has to be strong enough to guarantee that deletion never removes anything the refutation actually needed.</p>
+  </div>
+
+  <div class="quiz">
+    <script type="application/json">
+    {"type":"mc","q":"Once a saturation prover has derived P, why may it delete P ∨ Q?","options":["Because P ∨ Q is unsatisfiable whenever P holds","Because P is strictly more informative, so anything derivable using P ∨ Q is derivable from P alone","Because disjunctions are not allowed in the normal form used by saturation provers","Because Q has not yet been derived, so the disjunction cannot be used"],"answer":1,"explain":"P entails P ∨ Q, so the disjunction adds no information and generates only inferences that P already covers. Deleting it shrinks the search space. This kind of deletion is also what makes saturation non-monotone, and therefore awkward to prove complete."}
+    </script>
+  </div>
+
+  <h3 id="mkb-given">The given clause algorithm</h3>
+
+  <p>The saturation loop as stated says "apply an inference rule" without saying which one, or to what. Left like that it is a specification, not a program: you could perform one inference, then another, in any order at all, and re-do inferences you have already done. The organisation used in practice is the <strong>given clause algorithm</strong>, which the deck presents as an animated picture of two boxes labelled passive and active <button type="button" class="slide-ref" data-slide="blanchette1:10" title="Open this slide">pages 10-12</button>, and it works by splitting the formulas into those two sets.</p>
+
+  <figure class="fig">
+    <svg viewBox="0 0 660 300" role="img" aria-label="Two boxes side by side. The left box is the passive set, holding several dots including two hollow ones marked as newly created children. The right box is the active set, holding filled dots. One dot, the given clause, is shown in transit from the passive box to the active box. A curved arrow runs from the active box back to the passive box, labelled as the conclusions of the inferences returning to passive.">
+      <defs>
+        <marker id="mkb-arw" markerWidth="9" markerHeight="8" refX="8" refY="4" orient="auto" markerUnits="userSpaceOnUse">
+          <path d="M0,0 L9,4 L0,8 z" fill="var(--muted)"></path>
+        </marker>
+      </defs>
+
+      <text x="135" y="44" text-anchor="middle" font-size="13" fill="var(--muted)">Passive: not yet processed</text>
+      <rect x="20" y="56" width="230" height="164" rx="12" fill="var(--surface)" stroke="var(--hairline)"></rect>
+      <circle cx="62" cy="96" r="6" fill="var(--muted)"></circle>
+      <circle cx="104" cy="86" r="6" fill="var(--muted)"></circle>
+      <circle cx="148" cy="106" r="6" fill="var(--muted)"></circle>
+      <circle cx="84" cy="132" r="6" fill="var(--muted)"></circle>
+      <circle cx="196" cy="122" r="6" fill="var(--muted)"></circle>
+      <circle cx="128" cy="170" r="6" fill="var(--surface)" stroke="var(--accent)" stroke-width="1.8"></circle>
+      <circle cx="176" cy="182" r="6" fill="var(--surface)" stroke="var(--accent)" stroke-width="1.8"></circle>
+      <text x="135" y="208" text-anchor="middle" font-size="11.5" fill="var(--accent)">hollow: children just added</text>
+
+      <line x1="258" y1="104" x2="312" y2="104" stroke="var(--muted)" stroke-width="1.6" marker-end="url(#mkb-arw)"></line>
+      <circle cx="332" cy="104" r="8" fill="var(--accent)"></circle>
+      <text x="332" y="82" text-anchor="middle" font-size="12.5" fill="var(--accent)">given clause</text>
+      <line x1="352" y1="104" x2="404" y2="104" stroke="var(--muted)" stroke-width="1.6" marker-end="url(#mkb-arw)"></line>
+      <text x="332" y="136" text-anchor="middle" font-size="11.5" fill="var(--muted)">all inferences against</text>
+      <text x="332" y="152" text-anchor="middle" font-size="11.5" fill="var(--muted)">the active set</text>
+
+      <text x="525" y="44" text-anchor="middle" font-size="13" fill="var(--muted)">Active: already processed</text>
+      <rect x="410" y="56" width="230" height="164" rx="12" fill="var(--accent)" fill-opacity="0.07" stroke="var(--hairline)"></rect>
+      <circle cx="462" cy="98" r="6" fill="var(--accent)"></circle>
+      <circle cx="506" cy="88" r="6" fill="var(--accent)"></circle>
+      <circle cx="556" cy="112" r="6" fill="var(--accent)"></circle>
+      <circle cx="486" cy="140" r="6" fill="var(--accent)"></circle>
+      <circle cx="536" cy="164" r="6" fill="var(--accent)"></circle>
+      <circle cx="592" cy="150" r="6" fill="var(--accent)"></circle>
+
+      <path d="M 520 224 C 520 272, 240 286, 128 226" fill="none" stroke="var(--muted)" stroke-width="1.6" stroke-dasharray="5 4" marker-end="url(#mkb-arw)"></path>
+      <text x="330" y="288" text-anchor="middle" font-size="12" fill="var(--muted)">conclusions go back to passive</text>
+    </svg>
+    <figcaption>The saturation loop as Blanchette drew it: passive formulas on the left, active formulas on the right, one given clause crossing over per turn, and every conclusion of its inferences landing back in passive.</figcaption>
+  </figure>
+
+  <div class="stepper" data-title="One turn of the given clause algorithm">
+    <div class="step" data-label="Start"><p>The normalised axioms and the negated goal all begin in the <strong>passive</strong> set. The <strong>active</strong> set is empty. Active means "already processed": every formula in it has already had all its inferences with all the other active formulas performed.</p></div>
+    <div class="step" data-label="Select"><p>Pick one formula out of passive. This is the <strong>given clause</strong> for this turn. Which one you pick is a heuristic choice, and it is where much of a real prover's cleverness lives.</p></div>
+    <div class="step" data-label="Infer"><p>Perform every possible inference between the given clause and the members of the active set. If two active formulas can be combined with it, do both. Each conclusion is a child of the given clause.</p></div>
+    <div class="step" data-label="Return the children"><p>The children go into the passive set, where they wait their turn like everything else. They are not immediately usable as inference partners, which is exactly what keeps the bookkeeping finite: inferences only ever happen between the given clause and active formulas.</p></div>
+    <div class="step" data-label="Promote"><p>Move the given clause itself from passive to active. It has now been fully processed against everything active, so the invariant is restored, and the loop can begin again.</p></div>
+    <div class="step" data-label="Terminate, or not"><p>If &perp; is derived, stop: the goal is proved. Otherwise repeat. The aim is to move everything from passive to active, which the prover may well not manage in finite time.</p></div>
+  </div>
+
+  <p>That last point needs the <strong>fairness</strong> condition, which Blanchette stated informally but clearly. You may not be able to empty the passive set in finite time, but you can always arrange to empty it in the limit, provided you select formulas fairly: no formula may be left sitting in passive forever. If selection is fair, every formula is eventually chosen as the given clause, and so every possible inference is eventually performed. Without fairness the prover can starve exactly the formula the refutation needed, and then it will search forever without finding a proof that exists.</p>
+
+  <div class="quiz">
+    <script type="application/json">
+    {"type":"fill","q":"What is the name of the formula moved from the passive set to the active set on each turn of the loop?","accept":["given clause","given","the given clause","given-clause"],"explain":"It is the given clause, and the whole organisation is named after it. On each turn exactly one formula is selected from passive, all its inferences against the active set are performed, and it is then promoted to active."}
+    </script>
+  </div>
+
+  <h3 id="mkb-fol">The logic underneath</h3>
+
+  <p>With the loop in place the lecture goes back to first principles and fixes the logic the calculus works over <button type="button" class="slide-ref" data-slide="blanchette1:13" title="Open this slide">pages 13-15</button>. A signature supplies function symbols, such as 1, multiplication and gcd, and predicate symbols, such as equality, divisibility and prime. A variable is a term, and so is <em>f</em>(<em>t</em><sub>1</sub>, ..., <em>t</em><sub>n</sub>) for a function symbol <em>f</em> and terms <em>t</em><sub>i</sub>. A formula is a predicate symbol applied to terms, or one of ⊥, ⊤, ¬<em>F</em>, <em>F</em> ∧ <em>G</em>, <em>F</em> ∨ <em>G</em>, <em>F</em> → <em>G</em>, ∀<em>x</em>. <em>F</em> and ∃<em>x</em>. <em>F</em>. Besides the gcd statement, the deck's example is a puzzle <button type="button" class="slide-ref" data-slide="blanchette1:16" title="Open this slide">page 16</button>: Johanna likes everything that is food; anything that someone eats and is not killed by it is food; Bill eats peanuts and Bill is alive; nothing alive was killed by anything; therefore Johanna likes peanuts. He noted that the implication is valid as it stands, and that the example uses only nullary function symbols, that is, constants.</p>
+
+  <p>An interpretation <em>J</em> consists of a nonempty domain <em>D</em>, a function on <em>D</em> for each function symbol and a relation on <em>D</em> for each predicate symbol, lifted compositionally to ground terms, meaning that a truth value is assigned to ground formulas <button type="button" class="slide-ref" data-slide="blanchette1:18" title="Open this slide">pages 18-20</button>. Nothing is said about variables: the clausal fragment makes them implicitly universal, and they are dealt with only in the last third of the lecture, by grounding rather than by variable assignments.</p>
+
+  <h3 id="mkb-clauses">Clauses and clause normal form</h3>
+
+  <p>Resolution does not operate on formulas of that generality but on clauses, and the clausal fragment is deliberately narrow <button type="button" class="slide-ref" data-slide="blanchette1:21" title="Open this slide">pages 21-24</button>. An atom is a predicate symbol applied to terms; a literal is an atom or a negated atom; a clause is a disjunction <em>L</em><sub>1</sub> ∨ ... ∨ <em>L</em><sub>n</sub> of literals, and the case <em>n</em> = 0 is the empty clause, written ⊥. There is no ⊤, no conjunction, no implication and no quantifier, and the variables that occur are read as universally quantified so that no prefix is written <button type="button" class="slide-ref" data-slide="blanchette1:24" title="Open this slide">page 24</button>. One convention matters later: a clause is a <strong>multiset</strong> of literals rather than a set, so duplicates are kept rather than merged, a detail that starts to count once equality reasoning arrives.</p>
+
+  <p>Any formula can be turned into clauses by a fixed procedure <button type="button" class="slide-ref" data-slide="blanchette1:25" title="Open this slide">page 25</button>.</p>
+
+  <div class="algo" data-title="Clausification, in six steps">
+    <ol>
+      <li>Rewrite every implication <em>F</em> → <em>G</em> to ¬<em>F</em> ∨ <em>G</em>.</li>
+      <li>Push negations inwards using De Morgan's laws, and eliminate double negations.</li>
+      <li>Pull ∀ and ∃ outwards, to the front of the formula.</li>
+      <li>Replace each existential quantifier with a <strong>Skolem</strong> function symbol: a fresh symbol applied to the universally quantified variables the existential sits under.</li>
+      <li>Remove the universal quantifiers, which are now the only ones left, and so leave the variables universally implicit.</li>
+      <li>Distribute ∨ inwards over ∧.</li>
+    </ol>
+    <p>Each conjunct of the result is a clause.</p>
+  </div>
+
+  <p>The worked example is the syllogism <button type="button" class="slide-ref" data-slide="blanchette1:26" title="Open this slide">pages 26-28</button>. From (∀<em>x</em>. human(<em>x</em>) → mortal(<em>x</em>)) and human(anne) one wants mortal(anne), so the input to clausification is those two hypotheses together with the negated goal ¬mortal(anne). Step 1 turns the implication into ∀<em>x</em>. ¬human(<em>x</em>) ∨ mortal(<em>x</em>) and step 5 drops the quantifier, leaving three clauses: ¬human(<em>x</em>) ∨ mortal(<em>x</em>), human(anne), and ¬mortal(anne). Step 6 is the dangerous one in practice, since distributing naively can enlarge a formula badly, and the deck's reading list carries a reference on doing it properly.</p>
+
+  <h3 id="mkb-ground">The ground resolution rule</h3>
+
+  <p>The rule is stated first for ground clauses, so that variables and unification can be dealt with separately later <button type="button" class="slide-ref" data-slide="blanchette1:29" title="Open this slide">page 29</button>.</p>
+
+  <div class="callout def">
+    <p><span class="co-tag">Rule</span> <strong>Ground resolution.</strong> If the clauses <em>C</em> ∨ <em>A</em> and ¬<em>A</em> ∨ <em>D</em> are contained in <strong>F</strong>, then add the clause <em>C</em> ∨ <em>D</em> to <strong>F</strong>. Here <em>A</em> is an atom, and <em>C</em> and <em>D</em> are the remainders of the two clauses, either of which may be empty.</p>
+  </div>
+
+  <p>The premises agree on an atom and disagree on its sign, and the conclusion is what survives once the complementary literals cancel. If both premises are single literals, <em>A</em> and ¬<em>A</em>, the conclusion is ⊥. On the ground version of the syllogism the refutation is two steps long <button type="button" class="slide-ref" data-slide="blanchette1:30" title="Open this slide">pages 30-34</button>: ¬human(anne) ∨ mortal(anne) with human(anne) gives mortal(anne), and that with ¬mortal(anne) gives ⊥.</p>
+
+  <p>Soundness is proved by a two-row table on the truth value of <em>A</em> <button type="button" class="slide-ref" data-slide="blanchette1:35" title="Open this slide">pages 35-47</button>. If <em>A</em> is true then ¬<em>A</em> is false, so <em>D</em> must be true for the second premise to hold, and <em>C</em> ∨ <em>D</em> is true. If <em>A</em> is false then <em>C</em> must be true for the first premise to hold, and again <em>C</em> ∨ <em>D</em> is true. There is no third case, so a derivation of ⊥ genuinely certifies that the input was unsatisfiable, which is what makes the refutational reading of step 1 legitimate.</p>
+
+  <h3 id="mkb-branching">No branching, until lecture four</h3>
+
+  <p>One structural property is worth fixing in mind now, because it distinguishes this family of calculi from the case analysis that SMT solvers perform. When resolution finishes a proof, that is the whole proof. There is no branching and there are no cases to discharge separately: a single derivation of &perp; from the initial set is the entire argument. The same holds for superposition. Branching arrives only in the fourth lecture, where case splitting is added. There the prover does split into multiple cases, and &perp; has to be derived separately in each of them before the goal counts as proved. Until then, every loop in the diagram above works on one undivided set of formulas.</p>
+
+  <h3 id="mkb-completeness">Completeness, and the model that proves it</h3>
+
+  <p>Completeness is the converse of soundness and it is where fairness earns its keep <button type="button" class="slide-ref" data-slide="blanchette1:48" title="Open this slide">pages 48-49</button>: if the ground clause set <strong>F</strong> is unsatisfiable to begin with and inferences are performed fairly, then <strong>F</strong> will eventually contain ⊥. The proof is in two moves. Fairness gives that the limit of the run is saturated, meaning every available inference has been performed. A separate result, called <strong>static completeness</strong>, then says that a saturated unsatisfiable set already contains ⊥.</p>
+
+  <div class="callout key">
+    <p><span class="co-tag">Key idea</span> The split turns a statement about a run of a prover into a statement about a single set of clauses, so a new calculus need only re-prove static completeness and inherits the rest. Blanchette co-authored the paper the deck cites for the general version <button type="button" class="slide-ref" data-slide="blanchette1:147" title="Open this slide">page 147</button>.</p>
+  </div>
+
+  <p>Static completeness is proved in contrapositive form <button type="button" class="slide-ref" data-slide="blanchette1:50" title="Open this slide">pages 50-52</button>: a saturated set that does not contain ⊥ has a model. The model the deck builds is a <strong>term model</strong> <button type="button" class="slide-ref" data-slide="blanchette1:53" title="Open this slide">pages 53-54</button>, in which every term denotes itself, so that it is completely described by the set of ground atoms it makes true: {<em>p</em>(<em>f</em>(<em>a</em>))} makes <em>p</em>(<em>f</em>(<em>a</em>)) true and everything else false.</p>
+
+  <p>It is built by walking through the clauses in increasing order under an ordering on clauses, carrying a set of true atoms along <button type="button" class="slide-ref" data-slide="blanchette1:55" title="Open this slide">pages 55-63</button>. At each clause there are three cases: if it is already true, nothing happens; if it is false and its maximal literal is a positive atom, that atom is added and the clause is said to produce it; if it is false and its maximal literal is negative, the construction is stuck. The deck's run reaches the stuck case on the last of five clauses.</p>
+
+  <table>
+    <thead><tr><th>Clause</th><th>Model so far</th><th>Added</th><th>Why</th></tr></thead>
+    <tbody>
+      <tr><td><em>p</em> ∨ <em>q</em></td><td>{}</td><td>{<em>q</em>}</td><td><em>q</em> is maximal</td></tr>
+      <tr><td><em>q</em> ∨ <em>r</em></td><td>{<em>q</em>}</td><td>{}</td><td>already true</td></tr>
+      <tr><td>¬<em>q</em> ∨ <em>r</em></td><td>{<em>q</em>}</td><td>{<em>r</em>}</td><td><em>r</em> is maximal</td></tr>
+      <tr><td>¬<em>q</em> ∨ <em>t</em> ∨ <em>s</em></td><td>{<em>q</em>, <em>r</em>}</td><td>{<em>t</em>}</td><td><em>t</em> is maximal</td></tr>
+      <tr><td>¬<em>q</em> ∨ ¬<em>t</em> ∨ <em>s</em></td><td>{<em>q</em>, <em>r</em>, <em>t</em>}</td><td>{}</td><td>false, and its maximal literal is negative</td></tr>
+    </tbody>
+  </table>
+
+  <p>The last row is the whole argument in miniature. The clause is false in {<em>q</em>, <em>r</em>, <em>t</em>} and its maximal literal ¬<em>t</em> is negative, so nothing can be added. But the set is saturated, so the inference between it and the clause that produced <em>t</em> has already been performed: resolving ¬<em>q</em> ∨ <em>t</em> ∨ <em>s</em> with ¬<em>q</em> ∨ ¬<em>t</em> ∨ <em>s</em> on <em>t</em> yields ¬<em>q</em> ∨ ¬<em>q</em> ∨ <em>s</em> ∨ <em>s</em>, which is false in the same model and smaller in the ordering <button type="button" class="slide-ref" data-slide="blanchette1:64" title="Open this slide">pages 64-65</button>. That contradicts the choice of a smallest false clause, so the stuck case never arises.</p>
+
+  <p>The doubled literals are not a slip: the multiset convention accounts for the repetition, and the resolvent is still smaller than its premise because the maximal literal has gone. The lecture works with the single resolution rule throughout and adds no rule for collapsing repeated literals. The ordering on clauses is never defined <button type="button" class="slide-ref" data-slide="blanchette1:121" title="Open this slide">page 121</button>: the slide says only that it is tricky to state precisely and invites the question offline. What the argument uses is visible in the table, namely that deleting a maximal literal produces a smaller clause, and that the redundancy criterion below refers to the same order.</p>
+
+  <h3 id="mkb-order">Ordering the inferences</h3>
+
+  <p>Unrestricted ground resolution is complete and also hopeless. The demonstration is the clause set <em>a</em> ∨ <em>b</em> ∨ <em>c</em> ∨ <em>d</em> ∨ <em>e</em> together with the five units ¬<em>a</em>, ¬<em>b</em>, ¬<em>c</em>, ¬<em>d</em> and ¬<em>e</em> <button type="button" class="slide-ref" data-slide="blanchette1:66" title="Open this slide">pages 66-80</button>. Any literal of the long clause may be cancelled against its unit, in any order, so the prover generates all five four-literal clauses, then all ten three-literal ones, then all ten two-literal ones, then the units and finally ⊥: the entire powerset of the five atoms. A good run is five inferences <button type="button" class="slide-ref" data-slide="blanchette1:81" title="Open this slide">pages 81-91</button>, cancelling one literal at a time down a single chain. The difference is not which inferences exist but which ones the prover is permitted to make.</p>
+
+  <figure class="fig">
+    <svg viewBox="0 0 660 300" role="img" aria-label="Two panels. The left panel is a histogram of how many clauses unrestricted resolution generates at each clause length, widening from one clause of five literals to ten clauses of three literals and ten of two, then narrowing back to five units and the empty clause. The right panel is a single vertical chain of six clauses, each one literal shorter than the last, connected by arrows labelled with the unit each is resolved against.">
+      <defs>
+        <marker id="mkb-arw2" markerWidth="9" markerHeight="8" refX="8" refY="4" orient="auto" markerUnits="userSpaceOnUse">
+          <path d="M0,0 L9,4 L0,8 z" fill="var(--muted)"></path>
+        </marker>
+      </defs>
+
+      <text x="20" y="24" font-size="13" fill="var(--muted)">Unrestricted: the whole powerset</text>
+      <text x="20" y="56" font-size="11.5" fill="var(--ink-2)">5 literals</text>
+      <rect x="110" y="44" width="15" height="16" rx="3" fill="var(--accent)" fill-opacity="0.55"></rect>
+      <text x="133" y="56" font-size="11.5" fill="var(--muted)">1</text>
+      <text x="20" y="92" font-size="11.5" fill="var(--ink-2)">4 literals</text>
+      <rect x="110" y="80" width="75" height="16" rx="3" fill="var(--accent)" fill-opacity="0.55"></rect>
+      <text x="193" y="92" font-size="11.5" fill="var(--muted)">5</text>
+      <text x="20" y="128" font-size="11.5" fill="var(--ink-2)">3 literals</text>
+      <rect x="110" y="116" width="150" height="16" rx="3" fill="var(--accent)" fill-opacity="0.55"></rect>
+      <text x="268" y="128" font-size="11.5" fill="var(--muted)">10</text>
+      <text x="20" y="164" font-size="11.5" fill="var(--ink-2)">2 literals</text>
+      <rect x="110" y="152" width="150" height="16" rx="3" fill="var(--accent)" fill-opacity="0.55"></rect>
+      <text x="268" y="164" font-size="11.5" fill="var(--muted)">10</text>
+      <text x="20" y="200" font-size="11.5" fill="var(--ink-2)">1 literal</text>
+      <rect x="110" y="188" width="75" height="16" rx="3" fill="var(--accent)" fill-opacity="0.55"></rect>
+      <text x="193" y="200" font-size="11.5" fill="var(--muted)">5</text>
+      <text x="20" y="236" font-size="11.5" fill="var(--ink-2)">empty</text>
+      <rect x="110" y="224" width="15" height="16" rx="3" fill="var(--crit)" fill-opacity="0.65"></rect>
+      <text x="133" y="236" font-size="11.5" fill="var(--muted)">1</text>
+
+      <line x1="320" y1="36" x2="320" y2="262" stroke="var(--hairline)" stroke-width="1"></line>
+
+      <text x="350" y="24" font-size="13" fill="var(--muted)">Ordered: one chain</text>
+      <text x="440" y="56" text-anchor="middle" font-size="12" fill="var(--ink)">a ∨ b ∨ c ∨ d ∨ e</text>
+      <line x1="440" y1="64" x2="440" y2="82" stroke="var(--muted)" stroke-width="1.5" marker-end="url(#mkb-arw2)"></line>
+      <text x="512" y="78" font-size="11.5" fill="var(--muted)">against ¬e</text>
+      <text x="440" y="102" text-anchor="middle" font-size="12" fill="var(--ink)">a ∨ b ∨ c ∨ d</text>
+      <line x1="440" y1="110" x2="440" y2="128" stroke="var(--muted)" stroke-width="1.5" marker-end="url(#mkb-arw2)"></line>
+      <text x="512" y="124" font-size="11.5" fill="var(--muted)">against ¬d</text>
+      <text x="440" y="148" text-anchor="middle" font-size="12" fill="var(--ink)">a ∨ b ∨ c</text>
+      <line x1="440" y1="156" x2="440" y2="174" stroke="var(--muted)" stroke-width="1.5" marker-end="url(#mkb-arw2)"></line>
+      <text x="512" y="170" font-size="11.5" fill="var(--muted)">against ¬c</text>
+      <text x="440" y="194" text-anchor="middle" font-size="12" fill="var(--ink)">a ∨ b</text>
+      <line x1="440" y1="202" x2="440" y2="220" stroke="var(--muted)" stroke-width="1.5" marker-end="url(#mkb-arw2)"></line>
+      <text x="512" y="216" font-size="11.5" fill="var(--muted)">against ¬b</text>
+      <text x="440" y="240" text-anchor="middle" font-size="12" fill="var(--ink)">a</text>
+      <line x1="440" y1="248" x2="440" y2="266" stroke="var(--muted)" stroke-width="1.5" marker-end="url(#mkb-arw2)"></line>
+      <text x="512" y="262" font-size="11.5" fill="var(--muted)">against ¬a</text>
+      <text x="440" y="286" text-anchor="middle" font-size="13" fill="var(--crit)">⊥</text>
+    </svg>
+    <figcaption>The same six clauses, resolved two ways. On the left, unrestricted resolution generates every subset of the five atoms before reaching the empty clause. On the right, the maximality restriction leaves exactly one permitted inference at each step.</figcaption>
+  </figure>
+
+  <div class="callout def">
+    <p><span class="co-tag">Rule</span> <strong>Ordered ground resolution.</strong> If <em>C</em> ∨ <em>A</em> and ¬<em>A</em> ∨ <em>D</em> are contained in <strong>F</strong>, and <em>A</em> is maximal in <em>C</em> ∨ <em>A</em>, and ¬<em>A</em> is maximal in ¬<em>A</em> ∨ <em>D</em>, then add <em>C</em> ∨ <em>D</em> to <strong>F</strong>.</p>
+  </div>
+
+  <p>That is the whole change <button type="button" class="slide-ref" data-slide="blanchette1:92" title="Open this slide">page 92</button>. With an ordering in which <em>e</em> is the largest atom, the only literal of the long clause that may be resolved away is <em>e</em>, so the good run is the only run. Soundness needs no new argument, the restricted rule being a special case of the unrestricted one <button type="button" class="slide-ref" data-slide="blanchette1:93" title="Open this slide">pages 93-94</button>, and completeness survives because the model construction already looked only at maximal literals <button type="button" class="slide-ref" data-slide="blanchette1:95" title="Open this slide">pages 95-97</button>. That is the payoff of proving completeness by building a model rather than by manipulating derivations.</p>
+
+  <div class="quiz">
+    <script type="application/json">
+    {"type":"mc","q":"On the deck's example, a ∨ b ∨ c ∨ d ∨ e together with ¬a through ¬e, what does the maximality restriction achieve?","options":["It makes the clause set satisfiable, so the prover can stop early","It removes the need to negate the conjecture before clausification","It cuts the search from every subset of the five atoms down to a single chain of five inferences","It lets the prover split into five independent cases and refute each one"],"answer":2,"explain":"Unrestricted resolution may cancel any literal of the long clause, so it enumerates the whole powerset. Requiring the resolved literal to be maximal in both premises leaves exactly one legal inference at each step, and the refutation takes five. Soundness is unaffected, and completeness survives because the model construction only ever inspected maximal literals in the first place."}
+    </script>
+  </div>
+
+  <h3 id="mkb-redcrit">Redundancy stated precisely, and subsumption</h3>
+
+  <p>The informal notion of a useless clause from the start of the lecture now gets a definition <button type="button" class="slide-ref" data-slide="blanchette1:98" title="Open this slide">pages 98-99</button>.</p>
+
+  <div class="callout def">
+    <p><span class="co-tag">Definition</span> <strong>Ground redundancy.</strong> A ground clause <em>C</em> is redundant with respect to a ground set <strong>F</strong> if there are clauses <em>C</em><sub>1</sub>, ..., <em>C</em><sub>n</sub> in <strong>F</strong> that are all smaller than <em>C</em> in the clause ordering and that together entail <em>C</em>.</p>
+  </div>
+
+  <p>Both halves matter: entailment alone would let the prover trade a clause for larger ones, and smallness alone says nothing. The two examples given are the unit clause <em>a</em>, which makes <em>a</em> ∨ <em>b</em> redundant, and the pair <em>b</em> ∨ <em>a</em> and ¬<em>a</em> ∨ <em>c</em>, which together make <em>b</em> ∨ <em>c</em> redundant. The first is <strong>subsumption</strong>, the case in which one clause is contained in another; the second shows the criterion is strictly more general. The deck then asks why completeness still goes through <button type="button" class="slide-ref" data-slide="blanchette1:100" title="Open this slide">page 100</button>. The answer is that the model construction turns on a smallest false clause, and a redundant clause cannot be one: the smaller clauses that entail it are all true at that point, and true premises cannot entail a false conclusion.</p>
+
+  <p>Redundancy alone rescues the bad scenario, with no ordering at all <button type="button" class="slide-ref" data-slide="blanchette1:102" title="Open this slide">pages 102-117</button>. Resolve the long clause with ¬<em>e</em> and the child <em>a</em> ∨ <em>b</em> ∨ <em>c</em> ∨ <em>d</em> subsumes its own parent, which is deleted; the next inference deletes the next parent, and so on. The set never grows, it shrinks by a literal per step until <em>a</em> and then ⊥ appear, at which point everything else is redundant with respect to ⊥. Ordering and redundancy attack the same blow-up from two directions, and a real prover uses both.</p>
+
+  <p>He also placed the calculus next to SAT solving <button type="button" class="slide-ref" data-slide="blanchette1:120" title="Open this slide">page 120</button>. Conflict-driven clause learning is orders of magnitude more efficient than ground resolution, so nobody would build a SAT solver this way. What ground resolution has, and CDCL does not, is a generalisation to clauses with variables that remains competitive, and that generalisation is the rest of the lecture.</p>
+
+  <h3 id="mkb-nonground">Variables, unification and the nonground rule</h3>
+
+  <p>The intended meaning of a clause <em>C</em>(<em>x</em>) with a variable in it is its <strong>grounding</strong> <button type="button" class="slide-ref" data-slide="blanchette1:122" title="Open this slide">page 122</button>, the set ground(<em>C</em>(<em>x</em>)) of all its variable-free instances: given function symbols <em>a</em>, <em>b</em> and <em>f</em>, that is <em>C</em>(<em>a</em>), <em>C</em>(<em>b</em>), <em>C</em>(<em>f</em>(<em>a</em>)), <em>C</em>(<em>f</em>(<em>b</em>)), <em>C</em>(<em>f</em>(<em>f</em>(<em>a</em>))) and so on without end. A prover cannot enumerate that, and the point of the nonground calculus is to do in one inference what the ground calculus would need infinitely many for.</p>
+
+  <div class="callout def">
+    <p><span class="co-tag">Rule</span> <strong>Nonground resolution.</strong> If <em>C</em> ∨ <em>A</em> and ¬<em>A</em>' ∨ <em>D</em> are contained in <strong>F</strong>, and the substitution &sigma; is the most general unifier of the atoms <em>A</em> and <em>A</em>', then add &sigma;(<em>C</em> ∨ <em>D</em>) to <strong>F</strong>.</p>
+  </div>
+
+  <p>The two atoms no longer have to be identical <button type="button" class="slide-ref" data-slide="blanchette1:123" title="Open this slide">page 123</button>. They have to be unifiable, which means only that some substitution makes them equal, and the substitution applied to the conclusion is the most general such one, of which every other unifier is an instance. Using the most general unifier is what keeps the step from committing to anything the problem did not force.</p>
+
+  <p>The worked example is the one on the deck's title page, spelled out <button type="button" class="slide-ref" data-slide="blanchette1:124" title="Open this slide">pages 124-128</button>. Take <em>C</em>(<em>y</em>) ∨ <em>p</em>(<em>a</em>, <em>y</em>) and ¬<em>p</em>(<em>x</em>, <em>b</em>) ∨ <em>D</em>(<em>x</em>). The two atoms differ, but &sigma; = {<em>x</em> &#8614; <em>a</em>, <em>y</em> &#8614; <em>b</em>} unifies them at <em>p</em>(<em>a</em>, <em>b</em>), so under &sigma; the premises read <em>C</em>(<em>b</em>) ∨ <em>p</em>(<em>a</em>, <em>b</em>) and ¬<em>p</em>(<em>a</em>, <em>b</em>) ∨ <em>D</em>(<em>a</em>), and the conclusion is &sigma;(<em>C</em>(<em>y</em>) ∨ <em>D</em>(<em>x</em>)), that is <em>C</em>(<em>b</em>) ∨ <em>D</em>(<em>a</em>). The premises deliberately use different variable names, since each clause quantifies its own variables and the two must be renamed apart before unification. The syllogism is then redone on the nonground clauses, just as it stands <button type="button" class="slide-ref" data-slide="blanchette1:129" title="Open this slide">pages 129-134</button>: human(<em>x</em>) unifies with human(anne) under {<em>x</em> &#8614; anne}, giving mortal(anne), and one more step gives ⊥. No instance had to be guessed in advance.</p>
+
+  <div class="quiz">
+    <script type="application/json">
+    {"type":"fill","q":"In the nonground resolution rule, the two premises are resolved on atoms A and A' that need not be identical. What kind of substitution is applied to the conclusion? Give the three-word name.","accept":["most general unifier","mgu","the most general unifier","most general unifiers"],"explain":"The rule requires σ to be the most general unifier of A and A', and the conclusion is σ(C ∨ D). Any other unifier of the two atoms is an instance of the most general one, so using it commits the prover to nothing the problem has not already forced. In the deck's example, p(a, y) and p(x, b) unify under σ = {x ↦ a, y ↦ b}, so the conclusion is C(b) ∨ D(a)."}
+    </script>
+  </div>
+
+  <h3 id="mkb-lifting">Lifting the theory</h3>
+
+  <p>Every ground result now has to be recovered, and the deck does it uniformly by pushing each statement through the grounding map. A nonground clause <em>C</em> is redundant with respect to <strong>F</strong> when every clause in ground(<em>C</em>) is redundant with respect to ground(<strong>F</strong>) <button type="button" class="slide-ref" data-slide="blanchette1:135" title="Open this slide">pages 135-136</button>, and subsumption can be seen at the general level: <em>a</em>(<em>x</em>) makes <em>a</em>(<em>x</em>) ∨ <em>b</em>(<em>x</em>) redundant. Soundness is phrased the same way <button type="button" class="slide-ref" data-slide="blanchette1:137" title="Open this slide">page 137</button>, completeness keeps its two-move shape <button type="button" class="slide-ref" data-slide="blanchette1:138" title="Open this slide">pages 138-139</button>, and static completeness is reduced to the ground case <button type="button" class="slide-ref" data-slide="blanchette1:140" title="Open this slide">pages 140-141</button>: show that ground(<strong>F</strong>) is saturated whenever <strong>F</strong> is, apply the ground result to put ⊥ into ground(<strong>F</strong>), and conclude that ⊥ is in <strong>F</strong>, since the only clause whose grounding contains ⊥ is ⊥ itself.</p>
+
+  <p>The step that needs care is that ground(<strong>F</strong>) really is saturated <button type="button" class="slide-ref" data-slide="blanchette1:142" title="Open this slide">pages 142-146</button>. The illustration takes <strong>F</strong> to be <em>p</em>(<em>x</em>) ∨ <em>q</em>(<em>x</em>) and ¬<em>q</em>(<em>y</em>). One nonground inference produces <em>p</em>(<em>x</em>), after which <strong>F</strong> is saturated. The grounding contains <em>p</em>(<em>a</em>) ∨ <em>q</em>(<em>a</em>) with ¬<em>q</em>(<em>a</em>) and so on for every ground term, and those ground resolvents are <em>p</em>(<em>a</em>), <em>p</em>(<em>b</em>), <em>p</em>(<em>c</em>), each an instance of <em>p</em>(<em>x</em>). The single nonground conclusion covers the whole infinite family: nonground inferences over-approximate ground ones, and that is what the reduction needs.</p>
+
+  <h3 id="mkb-reading">Where the material comes from</h3>
+
+  <p>The deck closes on three references <button type="button" class="slide-ref" data-slide="blanchette1:147" title="Open this slide">page 147</button>: Bachmair and Ganzinger's chapter "Resolution Theorem Proving" in the Handbook of Automated Reasoning, the standard account of ordered resolution with redundancy and the source of the argument above; Nonnengart and Weidenbach's "Computing Small Clause Normal Forms", in the same handbook, on clausification as it is really implemented; and "A Comprehensive Framework for Saturation Theorem Proving" by Uwe Waldmann, Sophie Tourret, Simon Robillard and Blanchette, in the Journal of Automated Reasoning in 2022, the general form of the fairness plus static completeness separation that the later lectures reuse.</p>
+</section>
